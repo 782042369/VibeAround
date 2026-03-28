@@ -89,14 +89,14 @@ VibeAround 把聊天工具接入抽象成 channel plugin。
 
 ## 当前支持的智能体
 
-VibeAround 当前支持：
+VibeAround 当前支持四个智能体，均已实现真实的 `StdioAcpProvider`：
 
-- Claude Code
-- Gemini CLI
-- OpenCode
-- Codex
+- **Claude Code** — `npx @agentclientprotocol/claude-agent-acp`
+- **Gemini CLI** — `gemini --experimental-acp`
+- **OpenCode** — `opencode acp`
+- **Codex** — `npx codex-acp`
 
-启用哪些 agent、默认 agent 是什么，均在 onboarding 中配置，并写入 `~/.vibearound/settings.json`。
+所有智能体均通过 [ACP（Agent Client Protocol）](https://agentclientprotocol.com/) 经 stdio 通信，宿主端使用 [ACP Rust SDK](https://github.com/agentclientprotocol/rust-sdk)。启用哪些 agent、默认 agent 是什么，均在 onboarding 中配置，并写入 `~/.vibearound/settings.json`。
 
 ## 快速开始
 

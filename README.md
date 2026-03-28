@@ -87,14 +87,14 @@ This keeps the model practical:
 
 ## Supported agents
 
-VibeAround currently supports:
+VibeAround currently supports four agents, all with working `StdioAcpProvider` implementations:
 
-- Claude Code
-- Gemini CLI
-- OpenCode
-- Codex
+- **Claude Code** — `npx @agentclientprotocol/claude-agent-acp`
+- **Gemini CLI** — `gemini --experimental-acp`
+- **OpenCode** — `opencode acp`
+- **Codex** — `npx codex-acp`
 
-Agent enablement and the default agent are configured during onboarding and stored in `~/.vibearound/settings.json`.
+All agents communicate via [ACP (Agent Client Protocol)](https://agentclientprotocol.com/) over stdio, using the [ACP Rust SDK](https://github.com/agentclientprotocol/rust-sdk) on the host side. Agent enablement and the default agent are configured during onboarding and stored in `~/.vibearound/settings.json`.
 
 ## Quick start
 
