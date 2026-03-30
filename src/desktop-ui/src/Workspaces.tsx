@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, Plus, Star, Trash2, RefreshCw } from "lucide-react";
 
+const API_BASE = "http://127.0.0.1:12358";
+
 interface WorkspaceItem {
   path: string;
   is_default: boolean;
@@ -23,7 +25,7 @@ export function Workspaces() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/workspaces");
+      const res = await fetch(`${API_BASE}/api/workspaces`);
       if (!res.ok) throw new Error(await res.text());
       setData(await res.json());
     } catch (e) {
@@ -41,7 +43,7 @@ export function Workspaces() {
     if (!newPath.trim()) return;
     setAdding(true);
     try {
-      const res = await fetch("/api/workspaces", {
+      const res = await fetch(`${API_BASE}/api/workspaces`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: newPath.trim() }),
@@ -58,7 +60,7 @@ export function Workspaces() {
 
   const removeWorkspace = async (path: string) => {
     try {
-      const res = await fetch("/api/workspaces/remove", {
+      const res = await fetch(`${API_BASE}/api/workspaces/remove`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
@@ -72,7 +74,7 @@ export function Workspaces() {
 
   const setDefault = async (path: string) => {
     try {
-      const res = await fetch("/api/workspaces/default", {
+      const res = await fetch(`${API_BASE}/api/workspaces/default`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
