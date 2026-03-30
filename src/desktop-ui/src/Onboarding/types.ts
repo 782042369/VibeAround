@@ -66,24 +66,6 @@ export interface WechatQrWaitResponse {
   message: string;
 }
 
-export interface WhatsappPairStartResponse {
-  pairingCode: string | null;
-  message: string;
-  alreadyConnected: boolean;
-}
-
-export interface WhatsappPairWaitResponse {
-  connected: boolean;
-  message: string;
-}
-
-export type WhatsappPairStatus =
-  | "idle"
-  | "generating"
-  | "waiting"
-  | "connected"
-  | "error";
-
 export type WechatQrStatus =
   | "idle"
   | "generating"

@@ -282,31 +282,6 @@ pub struct WechatQrCancelRequest {
     pub keep_credentials: Option<bool>,
 }
 
-// ---------------------------------------------------------------------------
-// WhatsApp QR Auth
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WhatsappPairStartRequest {
-    pub phone_number: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WhatsappPairStartResponse {
-    pub pairing_code: Option<String>,
-    pub message: String,
-    pub already_connected: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WhatsappPairWaitResponse {
-    pub connected: bool,
-    pub message: String,
-}
-
 pub fn needs_onboarding() -> bool {
     let val = read_settings_value();
     !val.get("onboarded")
@@ -395,64 +370,6 @@ pub async fn wechat_qr_cancel(
     let _ = request.keep_credentials;
     let mut sessions = state.plugin_sessions.lock().await;
     if let Some(mut session) = sessions.remove("weixin-openclaw-bridge") {
-        shutdown_plugin_session(&mut session).await;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn whatsapp_qr_start(
-    state: State<'_, OnboardingSessions>,
-    request: WhatsappPairStartRequest,
-) -> Result<WhatsappPairStartResponse, String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    if let Some(mut existing) = sessions.remove("whatsapp") {
-        shutdown_plugin_session(&mut existing).await;
-    }
-
-    let mut session = spawn_auth_session("whatsapp", serde_json::json!({})).await?;
-
-    // Start pairing code auth
-    let result: WhatsappPairStartResponse = plugin_request(
-        &mut session,
-        "login_pair_start",
-        serde_json::json!({ "phoneNumber": request.phone_number }),
-    ).await?;
-
-    sessions.insert("whatsapp".to_string(), session);
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn whatsapp_qr_wait(
-    state: State<'_, OnboardingSessions>,
-) -> Result<WhatsappPairWaitResponse, String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    let session = sessions
-        .get_mut("whatsapp")
-        .ok_or_else(|| "whatsapp onboarding session is not started".to_string())?;
-
-    let result: WhatsappPairWaitResponse = plugin_request(
-        session,
-        "login_pair_wait",
-        serde_json::json!({ "timeoutMs": 120000 }),
-    ).await?;
-
-    if result.connected {
-        if let Some(mut session) = sessions.remove("whatsapp") {
-            shutdown_plugin_session(&mut session).await;
-        }
-    }
-
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn whatsapp_qr_cancel(
-    state: State<'_, OnboardingSessions>,
-) -> Result<(), String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    if let Some(mut session) = sessions.remove("whatsapp") {
         shutdown_plugin_session(&mut session).await;
     }
     Ok(())
