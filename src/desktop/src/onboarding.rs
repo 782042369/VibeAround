@@ -89,47 +89,54 @@ async fn spawn_plugin_session(name: &str, config_value: Value) -> Result<PluginS
         });
     }
 
-    let init_req = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "config": config_value,
-            "hostVersion": env!("CARGO_PKG_VERSION"),
-        }
-    });
-    let line = serde_json::to_string(&init_req).map_err(|e| e.to_string())? + "\n";
-    stdin
-        .write_all(line.as_bytes())
-        .await
-        .map_err(|e| format!("failed to initialize plugin '{}': {}", name, e))?;
-    stdin.flush().await.map_err(|e| e.to_string())?;
-
+    // ACP handshake: the SDK-based plugin sends its initialize request first,
+    // then we respond with config in _meta (acting as ACP host).
     let mut stdout = BufReader::new(stdout);
+
+    // 1. Read the plugin's ACP initialize request
+    let client_init_id: Value;
     loop {
         let mut line = String::new();
         let bytes = stdout.read_line(&mut line).await.map_err(|e| e.to_string())?;
         if bytes == 0 {
-            return Err(format!("plugin '{}' exited before initialize completed", name));
+            return Err(format!("plugin '{}' exited before sending initialize", name));
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
         let msg: Value = serde_json::from_str(trimmed).map_err(|e| e.to_string())?;
-        let id = msg.get("id").and_then(|v| v.as_u64());
-        if id != Some(1) {
-            continue;
+        let method = msg.get("method").and_then(|v| v.as_str());
+        if method == Some("initialize") {
+            client_init_id = msg.get("id").cloned().unwrap_or(Value::Null);
+            break;
         }
-        if let Some(error) = msg.get("error") {
-            let message = error
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown plugin error");
-            return Err(message.to_string());
-        }
-        break;
     }
+
+    // 2. Respond with ACP initialize result including _meta.config
+    let cache_dir = config::data_dir().join(".cache");
+    let init_response = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": client_init_id,
+        "result": {
+            "protocolVersion": "2025-03-26",
+            "agentInfo": {
+                "name": "vibearound-onboarding",
+                "version": env!("CARGO_PKG_VERSION"),
+            },
+            "_meta": {
+                "config": config_value,
+                "cacheDir": cache_dir.to_string_lossy(),
+                "channelKind": name,
+            }
+        }
+    });
+    let line = serde_json::to_string(&init_response).map_err(|e| e.to_string())? + "\n";
+    stdin
+        .write_all(line.as_bytes())
+        .await
+        .map_err(|e| format!("failed to respond to plugin '{}' initialize: {}", name, e))?;
+    stdin.flush().await.map_err(|e| e.to_string())?;
 
     Ok(PluginSession {
         child,
