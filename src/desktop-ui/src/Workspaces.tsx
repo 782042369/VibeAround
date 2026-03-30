@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, Plus, Star, Trash2, RefreshCw } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 const API_BASE = "http://127.0.0.1:12358";
 
@@ -18,7 +19,6 @@ export function Workspaces() {
   const [data, setData] = useState<WorkspacesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [newPath, setNewPath] = useState("");
   const [adding, setAdding] = useState(false);
 
   const fetchWorkspaces = useCallback(async () => {
@@ -40,16 +40,18 @@ export function Workspaces() {
   }, [fetchWorkspaces]);
 
   const addWorkspace = async () => {
-    if (!newPath.trim()) return;
     setAdding(true);
     try {
+      const selected = await open({ directory: true, multiple: false, title: "Select Workspace Folder" });
+      if (!selected) { setAdding(false); return; }
+      const path = typeof selected === "string" ? selected : selected[0];
+      if (!path) { setAdding(false); return; }
       const res = await fetch(`${API_BASE}/api/workspaces`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: newPath.trim() }),
+        body: JSON.stringify({ path }),
       });
       if (!res.ok) throw new Error(await res.text());
-      setNewPath("");
       fetchWorkspaces();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -171,26 +173,14 @@ export function Workspaces() {
       </div>
 
       {/* Add workspace */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            value={newPath}
-            onChange={(e) => setNewPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addWorkspace()}
-            placeholder="/path/to/your/project"
-            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
-          />
-        </div>
-        <button
-          onClick={addWorkspace}
-          disabled={adding || !newPath.trim()}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add
-        </button>
-      </div>
+      <button
+        onClick={addWorkspace}
+        disabled={adding}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        {adding ? "Selecting…" : "Add Workspace Folder"}
+      </button>
     </div>
   );
 }
