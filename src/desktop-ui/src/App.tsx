@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import {
-  Globe, Bot, MessageSquare, Terminal, X, RefreshCw, ExternalLink, Server, Wifi, WifiOff,
+  Globe, Bot, MessageSquare, Terminal, X, RefreshCw, ExternalLink, Server, Wifi, WifiOff, FolderOpen,
 } from "lucide-react";
 import { useServices, type ServiceInfo } from "./hooks/useServices";
 import Onboarding from "./Onboarding";
+import { Workspaces } from "./Workspaces";
 
 function formatUptime(secs: number): string {
   if (secs < 60) return `${secs}s`;
@@ -126,7 +127,10 @@ function App() {
   return <Dashboard />;
 }
 
+type DashboardPage = "services" | "workspaces";
+
 function Dashboard() {
+  const [page, setPage] = useState<DashboardPage>("services");
   const { data, error, loading, connected, refresh, killService } = useServices();
 
   if (loading && !data) {
@@ -157,9 +161,30 @@ function Dashboard() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
-          <Server className="w-4 h-4 text-primary" />
-          <span className="font-semibold text-sm">VibeAround</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-primary" />
+            <span className="font-semibold text-sm">VibeAround</span>
+          </div>
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            <button
+              onClick={() => setPage("services")}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                page === "services" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Services
+            </button>
+            <button
+              onClick={() => setPage("workspaces")}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                page === "workspaces" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FolderOpen className="w-3 h-3" />
+              Workspaces
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -199,6 +224,11 @@ function Dashboard() {
       )}
 
       {/* Content */}
+      {page === "workspaces" ? (
+        <div className="flex-1 overflow-y-auto">
+          <Workspaces />
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {/* Tunnel */}
         <Section
@@ -284,6 +314,7 @@ function Dashboard() {
           </div>
         </Section>
       </div>
+      )}
     </div>
   );
 }

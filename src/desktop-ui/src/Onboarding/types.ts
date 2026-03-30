@@ -2,7 +2,8 @@ import type { AgentId, TunnelProvider } from "./constants";
 
 export interface Settings {
   onboarded?: boolean;
-  working_dir?: string;
+  workspaces?: string[];
+  default_workspace?: string;
   default_agent?: string;
   enabled_agents?: string[];
   tunnel?: {
