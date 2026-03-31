@@ -2,7 +2,7 @@
 
 # VibeAround
 
-**在浏览器和聊天软件里使用真正的 coding agents。**
+**在浏览器、桌面端和聊天应用中使用真正的 coding agents。**
 
 [English](README.md) | [简体中文](README_CN.md) | [Wiki](https://github.com/jazzenchen/VibeAround/wiki)
 
@@ -11,92 +11,56 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Bun-1.3+-000?style=flat-square&logo=bun&logoColor=fff" alt="Bun" />
-  <img src="https://img.shields.io/badge/Rust-1.78+-000?style=flat-square&logo=rust&logoColor=fff" alt="Rust" />
-  <img src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=fff" alt="Vite" />
+  <img src="https://img.shields.io/badge/Rust-1.82+-000?style=flat-square&logo=rust&logoColor=fff" alt="Rust" />
+  <img src="https://img.shields.io/badge/Tauri-2.10-24C8DB?style=flat-square&logo=tauri&logoColor=fff" alt="Tauri" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=000" alt="React" />
+  <img src="https://img.shields.io/badge/ACP-Rust_SDK-000?style=flat-square" alt="ACP" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT" />
 </p>
 
 </div>
 
-VibeAround 想做的事情很直接：把真正的 coding agents 带进你本来就在用的工具里。
+VibeAround 将真正的 coding agents — Claude Code、Gemini CLI、Codex、OpenCode — 带入你日常使用的工具：桌面应用、浏览器、以及 Telegram、飞书、Discord、微信等即时通讯平台。
 
-它让你可以从桌面、浏览器、terminal，甚至 Telegram、飞书、微信这类聊天工具里访问 `Claude Code`、`Gemini CLI`、`Codex`、`OpenCode`，但又不会让产品看起来只是某一个 agent 的附属工具。
+这不是一个套壳产品。它是一个统一的运行时，每个接入面都能原生地访问同一个 agent 系统，完整支持流式输出、工具调用和思考过程展示。
 
-最酷的地方也在这里：
-
-- 用的是真正的 coding agent，不是模拟助手
-- 聊天软件不再只是通知入口，也可以变成 agent 的操作入口
-- 同一套产品里同时拥有 terminal、Web chat 和 IM channel access
-- channel 通过插件接入，可以按不同平台能力做配置与扩展
-- 让 coding agent 从“某个窗口里的工具”变成“你日常工作流的一部分”
-
-## 界面截图
+## 截图
 
 | 桌面端 | 移动端 |
-|--------|--------|
-| <img src="https://pub-806a1b8456464ce7a6c110f84946697e.r2.dev/screenshots/pc.webp" width="720" alt="VibeAround 桌面端 Web 控制台" /> | <img src="https://pub-806a1b8456464ce7a6c110f84946697e.r2.dev/screenshots/mobile-claude.webp" width="200" alt="VibeAround 移动端 Web 控制台" /> |
+|---------|--------|
+| <img src="https://pub-806a1b8456464ce7a6c110f84946697e.r2.dev/screenshots/pc.webp" width="720" alt="VibeAround 网页控制台" /> | <img src="https://pub-806a1b8456464ce7a6c110f84946697e.r2.dev/screenshots/mobile-claude.webp" width="200" alt="VibeAround 移动端" /> |
 
-## 为什么它会让人眼前一亮
+## 功能概览
 
-很多 AI coding 产品只给你一个固定入口。
+- **网页控制台** — 终端、tmux 会话和 agent 对话，访问 `localhost:12358`
+- **桌面应用** — 引导向导、服务监控、工作空间管理、托盘操作
+- **IM 频道** — 在 Telegram、飞书、Discord 或微信中与 agent 对话
+- **Agent 切换** — 在 Claude Code、Gemini CLI、Codex 和 OpenCode 之间随时切换
+- **多工作空间** — 管理项目文件夹、设置默认路径、通过桌面 UI 添加自定义目录
+- **隧道访问** — 通过 Cloudflare Tunnel、Ngrok 或 Localtunnel 远程访问
 
-而 VibeAround 更想做的是一件非常酷、也非常实用的事：把真正的 coding agent 带进你每天都在用的工具里。
+## 支持的 Agents
 
-这意味着你可以想象这样的使用方式：
+所有 agent 通过 [ACP (Agent Client Protocol)](https://agentclientprotocol.com/) 经由 stdio 通信。
 
-- 在浏览器 chat 里直接驱动 `Claude Code`
-- 在手机上随时查看和操作 agent
-- 用 Telegram、飞书、微信这类 IM 工具真正接入 coding agent
-- 保留 terminal-heavy workflow，但不必把一切都锁死在 terminal 界面里
-
-## 当前可以做什么
-
-- 打开 Web dashboard 管理 terminals、tmux sessions 和 chat
-- 启动或附加到持久化 PTY sessions
-- 在 Web chat 中与支持的 coding agents 交互
-- 通过 Telegram、飞书、微信等 IM channels 访问同一套 agent 系统
-- 在 onboarding 中发现可用 channel plugins，并按插件能力完成接入
-- 对支持的平台使用对应配置方式，例如 bot token、app credentials 或二维码登录
-- 在 desktop app 中查看运行中的 agents、channels、tunnels 和 sessions
-- 在 onboarding 中选择启用哪些 agents，以及默认 agent
-
-## 产品入口
-
-| 入口 | 作用 |
+| Agent | 状态 |
 |---|---|
-| Desktop app | 首次配置、运行状态可视化、tray actions、本地控制 |
-| Web dashboard | 日常主工作区，用于 terminals、tmux sessions 和 chat |
-| IM channels | 通过插件接入的轻量远程入口，不同平台可有不同鉴权与消息能力 |
+| **Claude Code** | 可用 |
+| **Gemini CLI** | 可用 |
+| **OpenCode** | 可用 |
+| **Codex** | 可用 |
 
-## Channel plugins
+## 频道插件
 
-VibeAround 把聊天工具接入抽象成 channel plugin。
+每个频道都是独立的 Node.js 插件，基于 [@vibearound/plugin-channel-sdk](https://www.npmjs.com/package/@vibearound/plugin-channel-sdk) 构建。
 
-当前仓库里已经包含多种 channel 形态，例如：
-
-- Telegram：基于 bot token 接入
-- 飞书 / Lark：基于 app credentials 接入
-- 微信桥接 channel：基于 provider base URL，并可由插件声明二维码登录能力
-
-这意味着：
-
-- 平台差异被保留，而不是被强行抹平
-- onboarding 可以根据插件声明的配置模型展示不同输入项
-- 某些 channel 支持 richer messaging 能力，某些 channel 则更偏向轻量接入
-- 你可以把 channel 看成“远程操作入口”，而不是单纯通知机器人
-
-## 当前支持的智能体
-
-VibeAround 当前支持四个智能体，均已实现真实的 `StdioAcpProvider`：
-
-- **Claude Code** — `npx @agentclientprotocol/claude-agent-acp`
-- **Gemini CLI** — `gemini --experimental-acp`
-- **OpenCode** — `opencode acp`
-- **Codex** — `npx codex-acp`
-
-所有智能体均通过 [ACP（Agent Client Protocol）](https://agentclientprotocol.com/) 经 stdio 通信，宿主端使用 [ACP Rust SDK](https://github.com/agentclientprotocol/rust-sdk)。启用哪些 agent、默认 agent 是什么，均在 onboarding 中配置，并写入 `~/.vibearound/settings.json`。
+| 频道 | 认证方式 | 消息编辑 | 状态 |
+|---|---|---|---|
+| **Telegram** | Bot Token | 支持（流式编辑） | 可用 |
+| **飞书 / Lark** | 应用凭证 | 支持（互动卡片） | 可用 |
+| **Discord** | Bot Token | 支持（流式编辑） | 可用 |
+| **微信** | 二维码登录 | 不支持（仅发送） | 可用 |
+| **WhatsApp** | 配对码 | 不支持（仅发送） | 被 [Baileys 上游问题](https://github.com/WhiskeySockets/Baileys/issues/2422)阻塞 |
 
 ## 快速开始
 
@@ -107,56 +71,94 @@ bun run prebuild
 bun run dev
 ```
 
-启动后：
+1. 首次运行时桌面应用会打开引导向导
+2. 选择 agents，配置频道和隧道
+3. 网页控制台地址：`http://127.0.0.1:12358`
+4. 通过终端、对话或已连接的频道开始工作
 
-1. 打开 desktop app
-2. 首次运行时完成 onboarding
-3. 选择启用的 agents 和默认 agent
-4. 如有需要，配置 tunnel 与 IM channels
-5. 从托盘或 desktop UI 打开 Web dashboard
-6. 通过 terminals、tmux sessions、Web chat 或已接入的 channel 开始工作
+## 架构
 
-## 配置位置
+```
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│   桌面端    │  │  网页控制台  │  │  IM 频道    │
+│  (Tauri)    │  │  Dashboard  │  │   插件      │
+└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+       │                │                │
+       └────────────────┼────────────────┘
+                        │
+              ┌─────────┴─────────┐
+              │   Rust 运行时     │
+              │  ┌─────────────┐  │
+              │  │  ACP Hub    │  │   ← 将 prompt 路由到 agent
+              │  │ (按路由分配  │  │
+              │  │   ACPPod)   │  │
+              │  └──────┬──────┘  │
+              │         │         │
+              │  ┌──────┴──────┐  │
+              │  │ Agent 工厂  │  │   ← 启动 Claude/Gemini/Codex/OpenCode
+              │  └─────────────┘  │
+              │                   │
+              │  ┌─────────────┐  │
+              │  │ PTY 管理器  │  │   ← 终端会话 + tmux
+              │  └─────────────┘  │
+              └───────────────────┘
+```
 
-运行时配置文件：
+## 配置
 
-- `~/.vibearound/settings.json`
+所有配置位于 `~/.vibearound/settings.json`：
 
-Channel plugin 构建产物：
+```json
+{
+  "default_agent": "claude",
+  "enabled_agents": ["claude", "gemini", "opencode", "codex"],
+  "workspaces": ["/path/to/your/project"],
+  "default_workspace": "",
+  "channels": {
+    "telegram": { "bot_token": "..." },
+    "feishu": { "app_id": "...", "app_secret": "..." },
+    "discord": { "bot_token": "..." }
+  },
+  "tunnel": {
+    "provider": "cloudflare",
+    "cloudflare": { "tunnel_token": "...", "hostname": "..." }
+  }
+}
+```
 
-- `~/.vibearound/plugins/<channel>/dist/main.js`
+## 已知问题
 
-常见 channel 配置项可能包括：
+- **WhatsApp 插件** — Baileys v7 设备链接功能上游损坏；插件代码已就绪，等待修复
+- **隧道认证** — 通过隧道暴露的控制台没有身份验证层
+- **插件发现** — 频道插件目前是打包的；尚不支持动态下载安装
+- **没有发行包** — 目前需要从源码构建
+- **工作空间切换** — 工作空间设置已保存，但 `/workspaces` 聊天命令尚未实现
+- **会话持久化** — agent 会话仅存在于内存中；重启后丢失
+- **系统命令** — 目前 slash 命令支持有限（`/help`）；更多命令正在规划中
 
-- `bot_token`
-- `app_id` / `app_secret`
-- `base_url`
-- `account_id`
-- `verbose.show_thinking`
-- `verbose.show_tool_use`
+## 插件 SDK
 
-## 文档入口
+使用 SDK 构建自己的频道插件：
 
-README 只保留项目介绍与快速上手；更完整的技术说明与使用文档请查看 wiki。
+```bash
+npm install @vibearound/plugin-channel-sdk
+```
 
-建议优先阅读：
+详见 [SDK README](https://github.com/jazzenchen/vibearound-plugin-channel-sdk)。
+
+## 文档
 
 - [Wiki 首页](https://github.com/jazzenchen/VibeAround/wiki)
-- [安装与运行指南](https://github.com/jazzenchen/VibeAround/wiki/Setup-Guide-CN)
-- [产品入口说明](https://github.com/jazzenchen/VibeAround/wiki/Product-Surfaces-CN)
-- [Channel Plugins](https://github.com/jazzenchen/VibeAround/wiki/Channel-Plugins-CN)
-- [架构说明](https://github.com/jazzenchen/VibeAround/wiki/Architecture-CN)
-- [配置模型](https://github.com/jazzenchen/VibeAround/wiki/Configuration-Model-CN)
-- [支持的智能体](https://github.com/jazzenchen/VibeAround/wiki/Supported-Agents-CN)
-- [运行语义](https://github.com/jazzenchen/VibeAround/wiki/Operational-Semantics-CN)
-- [构建与打包](https://github.com/jazzenchen/VibeAround/wiki/Build-and-Packaging-CN)
+- [安装指南](https://github.com/jazzenchen/VibeAround/wiki/Setup-Guide)
+- [频道插件](https://github.com/jazzenchen/VibeAround/wiki/Channel-Plugins)
+- [架构](https://github.com/jazzenchen/VibeAround/wiki/Architecture)
+- [配置模型](https://github.com/jazzenchen/VibeAround/wiki/Configuration-Model)
+- [FAQ 和故障排除](https://github.com/jazzenchen/VibeAround/wiki/FAQ-and-Troubleshooting)
 
 ## 项目状态
 
-VibeAround 仍在持续演进中。当前版本已经可以使用，体验与文档也在继续完善。
+VibeAround 正在积极迭代。当前版本已可用于日常工作。暂不接受 PR 和功能请求。
 
-本仓库公开的主要目的是透明、学习和分享。当前阶段暂不接受 Pull Request 和 feature request。
+## 许可证
 
-## 开源协议
-
-本项目基于 [MIT License](LICENSE) 开源。
+[MIT](LICENSE)
