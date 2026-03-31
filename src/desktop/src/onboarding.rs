@@ -243,43 +243,175 @@ async fn shutdown_plugin_session(session: &mut PluginSession) {
     let _ = session.child.kill().await;
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WechatQrStartRequest {
-    pub base_url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WechatQrStartResponse {
-    pub qrcode_url: Option<String>,
-    pub message: String,
-    pub session_key: String,
-}
+// ---------------------------------------------------------------------------
+// Plugin install
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WechatQrWaitRequest {
-    pub base_url: String,
-    pub session_key: String,
-    pub timeout_ms: Option<u64>,
+pub struct InstallPluginRequest {
+    pub plugin_id: String,
+    pub github_url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WechatQrWaitResponse {
-    pub connected: bool,
-    pub bot_token: Option<String>,
-    pub account_id: Option<String>,
-    pub base_url: Option<String>,
-    pub user_id: Option<String>,
+pub struct InstallPluginResponse {
+    pub success: bool,
     pub message: String,
 }
 
+#[tauri::command]
+pub async fn install_plugin(request: InstallPluginRequest) -> Result<InstallPluginResponse, String> {
+    let plugins_dir = config::data_dir().join("plugins");
+    let target_dir = plugins_dir.join(&request.plugin_id);
+
+    // Create plugins dir if needed
+    std::fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
+
+    // Clone if not already present
+    if !target_dir.exists() {
+        eprintln!("[install_plugin] cloning {} → {:?}", request.github_url, target_dir);
+        let output = tokio::process::Command::new("git")
+            .args(["clone", "--depth", "1", &request.github_url, &target_dir.to_string_lossy()])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| format!("git clone failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("git clone failed: {}", stderr));
+        }
+    } else {
+        eprintln!("[install_plugin] {} already exists, skipping clone", request.plugin_id);
+    }
+
+    // npm install
+    eprintln!("[install_plugin] running npm install in {:?}", target_dir);
+    let output = tokio::process::Command::new("npm")
+        .args(["install"])
+        .current_dir(&target_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("npm install failed: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("npm install failed: {}", stderr));
+    }
+
+    // npm run build
+    eprintln!("[install_plugin] running npm run build in {:?}", target_dir);
+    let output = tokio::process::Command::new("npm")
+        .args(["run", "build"])
+        .current_dir(&target_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("npm run build failed: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("npm run build failed: {}", stderr));
+    }
+
+    eprintln!("[install_plugin] {} installed successfully", request.plugin_id);
+    Ok(InstallPluginResponse {
+        success: true,
+        message: format!("Plugin '{}' installed successfully", request.plugin_id),
+    })
+}
+
+#[tauri::command]
+pub fn check_plugin_status(plugin_id: String) -> String {
+    let target_dir = config::data_dir().join("plugins").join(&plugin_id);
+    if !target_dir.join("plugin.json").exists() {
+        return "not_installed".to_string();
+    }
+    if !target_dir.join("dist").join("main.js").exists() {
+        return "installed_not_built".to_string();
+    }
+    "ready".to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Generic plugin auth (QR login / pairing code)
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WechatQrCancelRequest {
-    pub keep_credentials: Option<bool>,
+pub struct PluginAuthStartRequest {
+    pub plugin_id: String,
+    pub config: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginAuthWaitRequest {
+    pub plugin_id: String,
+    pub params: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginAuthCancelRequest {
+    pub plugin_id: String,
+}
+
+#[tauri::command]
+pub async fn plugin_auth_start(
+    state: State<'_, OnboardingSessions>,
+    request: PluginAuthStartRequest,
+) -> Result<Value, String> {
+    let mut sessions = state.plugin_sessions.lock().await;
+    if let Some(mut existing) = sessions.remove(&request.plugin_id) {
+        shutdown_plugin_session(&mut existing).await;
+    }
+
+    let mut session = spawn_auth_session(&request.plugin_id, request.config.clone()).await?;
+
+    // The auth script's start method name depends on the plugin
+    let method = "login_qr_start";
+    let result: Value = plugin_request(&mut session, method, request.config).await?;
+
+    sessions.insert(request.plugin_id, session);
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn plugin_auth_wait(
+    state: State<'_, OnboardingSessions>,
+    request: PluginAuthWaitRequest,
+) -> Result<Value, String> {
+    let mut sessions = state.plugin_sessions.lock().await;
+    let session = sessions
+        .get_mut(&request.plugin_id)
+        .ok_or_else(|| format!("auth session for '{}' not started", request.plugin_id))?;
+
+    let result: Value = plugin_request(session, "login_qr_wait", request.params).await?;
+
+    // Shutdown on success
+    if result.get("connected").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if let Some(mut session) = sessions.remove(&request.plugin_id) {
+            shutdown_plugin_session(&mut session).await;
+        }
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn plugin_auth_cancel(
+    state: State<'_, OnboardingSessions>,
+    request: PluginAuthCancelRequest,
+) -> Result<(), String> {
+    let mut sessions = state.plugin_sessions.lock().await;
+    if let Some(mut session) = sessions.remove(&request.plugin_id) {
+        shutdown_plugin_session(&mut session).await;
+    }
+    Ok(())
 }
 
 pub fn needs_onboarding() -> bool {
@@ -302,77 +434,6 @@ pub fn list_channel_plugins() -> Result<Vec<plugins::DiscoveredPluginSummary>, S
 #[tauri::command]
 pub fn save_settings(settings: Value) -> Result<(), String> {
     write_settings_value(&settings)
-}
-
-#[tauri::command]
-pub async fn wechat_qr_start(
-    state: State<'_, OnboardingSessions>,
-    request: WechatQrStartRequest,
-) -> Result<WechatQrStartResponse, String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    if let Some(mut existing) = sessions.remove("weixin-openclaw-bridge") {
-        shutdown_plugin_session(&mut existing).await;
-    }
-
-    let config_value = serde_json::json!({
-        "base_url": request.base_url,
-    });
-    let mut session = spawn_auth_session("weixin-openclaw-bridge", config_value).await?;
-
-    let result: WechatQrStartResponse = plugin_request(
-        &mut session,
-        "login_qr_start",
-        serde_json::json!({
-            "baseUrl": request.base_url,
-        }),
-    )
-    .await?;
-
-    sessions.insert("weixin-openclaw-bridge".to_string(), session);
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn wechat_qr_wait(
-    state: State<'_, OnboardingSessions>,
-    request: WechatQrWaitRequest,
-) -> Result<WechatQrWaitResponse, String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    let session = sessions
-        .get_mut("weixin-openclaw-bridge")
-        .ok_or_else(|| "wechat onboarding session is not started".to_string())?;
-
-    let result: WechatQrWaitResponse = plugin_request(
-        session,
-        "login_qr_wait",
-        serde_json::json!({
-            "baseUrl": request.base_url,
-            "sessionKey": request.session_key,
-            "timeoutMs": request.timeout_ms,
-        }),
-    )
-    .await?;
-
-    if result.connected {
-        if let Some(mut session) = sessions.remove("weixin-openclaw-bridge") {
-            shutdown_plugin_session(&mut session).await;
-        }
-    }
-
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn wechat_qr_cancel(
-    state: State<'_, OnboardingSessions>,
-    request: WechatQrCancelRequest,
-) -> Result<(), String> {
-    let _ = request.keep_credentials;
-    let mut sessions = state.plugin_sessions.lock().await;
-    if let Some(mut session) = sessions.remove("weixin-openclaw-bridge") {
-        shutdown_plugin_session(&mut session).await;
-    }
-    Ok(())
 }
 
 #[tauri::command]

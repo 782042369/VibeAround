@@ -1,26 +1,24 @@
 import { Rocket } from "lucide-react";
 
 import { AGENT_LABELS, TUNNEL_LABELS } from "../constants";
+import { PLUGIN_REGISTRY } from "../plugin-registry";
 import type { StepConfirmProps } from "../types";
 
 export function StepConfirm({
   enabledAgents,
   defaultAgent,
   tunnelProvider,
-  hasTelegram,
-  hasFeishu,
-  hasDiscord,
-  hasWechat,
+  enabledChannels,
 }: StepConfirmProps) {
   const agents = Array.from(enabledAgents)
     .map((id) => `${AGENT_LABELS[id]}${id === defaultAgent ? " ★" : ""}`)
     .join(", ");
 
-  const channels: string[] = [];
-  if (hasTelegram) channels.push("Telegram");
-  if (hasFeishu) channels.push("Feishu");
-  if (hasDiscord) channels.push("Discord");
-  if (hasWechat) channels.push("WeChat");
+  const channelNames = Array.from(enabledChannels)
+    .map((id) => {
+      const registry = PLUGIN_REGISTRY.find((p) => p.id === id);
+      return registry?.name ?? id;
+    });
 
   return (
     <div className="space-y-4">
@@ -39,7 +37,7 @@ export function StepConfirm({
         <SummaryRow label="Agents" value={agents} />
         <SummaryRow
           label="Channels"
-          value={channels.length > 0 ? channels.join(", ") : "None configured"}
+          value={channelNames.length > 0 ? channelNames.join(", ") : "None configured"}
         />
         <SummaryRow label="Tunnel" value={TUNNEL_LABELS[tunnelProvider]} />
       </div>

@@ -124,9 +124,11 @@ fn main() {
             onboarding::get_settings,
             onboarding::list_channel_plugins,
             onboarding::save_settings,
-            onboarding::wechat_qr_start,
-            onboarding::wechat_qr_wait,
-            onboarding::wechat_qr_cancel,
+            onboarding::install_plugin,
+            onboarding::check_plugin_status,
+            onboarding::plugin_auth_start,
+            onboarding::plugin_auth_wait,
+            onboarding::plugin_auth_cancel,
             onboarding::finish_onboarding,
         ])
         .setup(move |app| {

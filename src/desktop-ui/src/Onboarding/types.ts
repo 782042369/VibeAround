@@ -11,18 +11,7 @@ export interface Settings {
     ngrok?: { auth_token?: string; domain?: string };
     cloudflare?: { tunnel_token?: string; hostname?: string };
   };
-  channels?: Record<
-    string,
-    {
-      bot_token?: string;
-      app_id?: string;
-      app_secret?: string;
-      base_url?: string;
-      account_id?: string;
-      verbose?: { show_thinking?: boolean; show_tool_use?: boolean };
-      [key: string]: unknown;
-    }
-  >;
+  channels?: Record<string, Record<string, unknown>>;
   [key: string]: unknown;
 }
 
@@ -39,6 +28,19 @@ export interface PluginCapabilities {
   auth?: PluginAuthCapabilities;
 }
 
+export interface ConfigSchemaProperty {
+  type?: string;
+  description?: string;
+  default?: string;
+  hidden?: boolean;
+}
+
+export interface ConfigSchema {
+  type?: string;
+  properties?: Record<string, ConfigSchemaProperty>;
+  required?: string[];
+}
+
 export interface DiscoveredChannelPlugin {
   id: string;
   name: string;
@@ -48,31 +50,21 @@ export interface DiscoveredChannelPlugin {
   entry: string;
   source: "user" | "project";
   supportsQrcodeLogin: boolean;
-  configSchema?: unknown;
+  configSchema?: ConfigSchema;
   capabilities: PluginCapabilities;
 }
 
-export interface WechatQrStartResponse {
-  qrcodeUrl?: string;
-  message: string;
-  sessionKey: string;
-}
+export type PluginInstallStatus = "not_installed" | "installing" | "installed_not_built" | "ready";
 
-export interface WechatQrWaitResponse {
-  connected: boolean;
-  botToken?: string;
-  accountId?: string;
-  baseUrl?: string;
-  userId?: string;
-  message: string;
-}
+export type AuthFlowStatus = "idle" | "generating" | "waiting" | "connected" | "error";
 
-export type WechatQrStatus =
-  | "idle"
-  | "generating"
-  | "waiting"
-  | "connected"
-  | "error";
+export interface AuthFlowState {
+  status: AuthFlowStatus;
+  message: string;
+  qrCodeUrl?: string;
+  sessionKey?: string;
+  resultData?: Record<string, unknown>;
+}
 
 export interface StepAgentsProps {
   enabled: Set<AgentId>;
@@ -83,30 +75,15 @@ export interface StepAgentsProps {
 
 export interface StepChannelsProps {
   discoveredPlugins: DiscoveredChannelPlugin[];
-  telegramEnabled: boolean;
-  onTelegramEnabledChange: (enabled: boolean) => void;
-  tgToken: string;
-  onTgToken: (value: string) => void;
-  feishuEnabled: boolean;
-  onFeishuEnabledChange: (enabled: boolean) => void;
-  feishuAppId: string;
-  onFeishuAppId: (value: string) => void;
-  feishuAppSecret: string;
-  onFeishuAppSecret: (value: string) => void;
-  discordEnabled: boolean;
-  onDiscordEnabledChange: (enabled: boolean) => void;
-  discordToken: string;
-  onDiscordToken: (value: string) => void;
-  wechatEnabled: boolean;
-  onWechatEnabledChange: (enabled: boolean) => void;
-  wechatQrStatus: WechatQrStatus;
-  wechatQrCodeUrl: string;
-  wechatQrMessage: string;
-  wechatAccountId: string;
-  wechatBotToken: string;
-  wechatQrSessionKey: string;
-  onStartWechatQrLogin: () => void;
-  onCancelWechatQrLogin: () => void;
+  enabledChannels: Set<string>;
+  channelConfigs: Record<string, Record<string, string>>;
+  installingPlugins: Set<string>;
+  authStates: Record<string, AuthFlowState>;
+  onToggleChannel: (pluginId: string, enabled: boolean) => void;
+  onConfigChange: (pluginId: string, key: string, value: string) => void;
+  onInstallPlugin: (pluginId: string, githubUrl: string) => void;
+  onStartAuth: (pluginId: string) => void;
+  onCancelAuth: (pluginId: string) => void;
 }
 
 export interface StepTunnelProps {
@@ -126,8 +103,6 @@ export interface StepConfirmProps {
   enabledAgents: Set<AgentId>;
   defaultAgent: AgentId;
   tunnelProvider: TunnelProvider;
-  hasTelegram: boolean;
-  hasFeishu: boolean;
-  hasDiscord: boolean;
-  hasWechat: boolean;
+  enabledChannels: Set<string>;
+  discoveredPlugins: DiscoveredChannelPlugin[];
 }

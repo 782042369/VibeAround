@@ -1,22 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronLeft, ChevronRight, Rocket } from "lucide-react";
 
-import {
-  ALL_AGENTS,
-  STEPS,
-} from "./constants";
+import { ALL_AGENTS, STEPS } from "./constants";
 import { StepAgents } from "./components/StepAgents";
 import { StepChannels } from "./components/StepChannels";
 import { StepConfirm } from "./components/StepConfirm";
 import { StepTunnel } from "./components/StepTunnel";
 import { StepWelcome } from "./components/StepWelcome";
 import type {
+  AuthFlowState,
   DiscoveredChannelPlugin,
   Settings,
-  WechatQrStartResponse,
-  WechatQrStatus,
-  WechatQrWaitResponse,
 } from "./types";
 import type { AgentId, OnboardingStep, TunnelProvider } from "./constants";
 
@@ -26,32 +21,17 @@ export default function Onboarding() {
   const [discoveredPlugins, setDiscoveredPlugins] = useState<DiscoveredChannelPlugin[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const [enabledAgents, setEnabledAgents] = useState<Set<AgentId>>(
-    new Set(ALL_AGENTS)
-  );
+  // Agents
+  const [enabledAgents, setEnabledAgents] = useState<Set<AgentId>>(new Set(ALL_AGENTS));
   const [defaultAgent, setDefaultAgent] = useState<AgentId>("claude");
 
-  const [telegramEnabled, setTelegramEnabled] = useState(false);
-  const [tgToken, setTgToken] = useState("");
+  // Channels — generic state for all plugins
+  const [enabledChannels, setEnabledChannels] = useState<Set<string>>(new Set());
+  const [channelConfigs, setChannelConfigs] = useState<Record<string, Record<string, string>>>({});
+  const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(new Set());
+  const [authStates, setAuthStates] = useState<Record<string, AuthFlowState>>({});
 
-  const [feishuEnabled, setFeishuEnabled] = useState(false);
-  const [feishuAppId, setFeishuAppId] = useState("");
-  const [feishuAppSecret, setFeishuAppSecret] = useState("");
-
-  const [discordEnabled, setDiscordEnabled] = useState(false);
-  const [discordToken, setDiscordToken] = useState("");
-
-  const [wechatEnabled, setWechatEnabled] = useState(false);
-  // WeChat base URL is a fixed internal value — not user-configurable.
-  // TODO: should come from the plugin's config schema defaults, not hardcoded here.
-  const wechatBaseUrl = "https://ilinkai.weixin.qq.com";
-  const [wechatBotToken, setWechatBotToken] = useState("");
-  const [wechatAccountId, setWechatAccountId] = useState("");
-  const [wechatQrStatus, setWechatQrStatus] = useState<WechatQrStatus>("idle");
-  const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState("");
-  const [wechatQrSessionKey, setWechatQrSessionKey] = useState("");
-  const [wechatQrMessage, setWechatQrMessage] = useState("");
-
+  // Tunnel
   const [tunnelProvider, setTunnelProvider] = useState<TunnelProvider>("none");
   const [ngrokToken, setNgrokToken] = useState("");
   const [ngrokDomain, setNgrokDomain] = useState("");
@@ -59,39 +39,8 @@ export default function Onboarding() {
   const [cfHostname, setCfHostname] = useState("");
 
   const [finishing, setFinishing] = useState(false);
-  const waitingForWechatRef = useRef(false);
 
-  const resetWechatQrState = useCallback((message = "") => {
-    setWechatQrStatus("idle");
-    setWechatQrCodeUrl("");
-    setWechatQrSessionKey("");
-    setWechatQrMessage(message);
-    waitingForWechatRef.current = false;
-  }, []);
-
-  const cancelWechatSession = useCallback(
-    async (options?: { keepMessage?: boolean; nextMessage?: string }) => {
-      try {
-        await invoke("wechat_qr_cancel", {
-          request: {
-            keepCredentials: true,
-          },
-        });
-      } catch {
-        // Ignore cancellation failures during teardown.
-      } finally {
-        if (options?.keepMessage) {
-          setWechatQrCodeUrl("");
-          setWechatQrSessionKey("");
-          waitingForWechatRef.current = false;
-        } else {
-          resetWechatQrState(options?.nextMessage ?? "");
-        }
-      }
-    },
-    [resetWechatQrState]
-  );
-
+  // ---- Load existing settings ----
   useEffect(() => {
     Promise.all([
       invoke<Settings>("get_settings"),
@@ -100,6 +49,8 @@ export default function Onboarding() {
       .then(([loadedSettings, plugins]) => {
         setSettings(loadedSettings);
         setDiscoveredPlugins(plugins);
+
+        // Agents
         if (loadedSettings.enabled_agents?.length) {
           setEnabledAgents(new Set(loadedSettings.enabled_agents as AgentId[]));
         }
@@ -107,151 +58,184 @@ export default function Onboarding() {
           setDefaultAgent(loadedSettings.default_agent as AgentId);
         }
 
-        const telegramToken = loadedSettings.channels?.telegram?.bot_token ?? "";
-        setTgToken(telegramToken);
-        setTelegramEnabled(Boolean(telegramToken));
-
-        const loadedFeishuAppId = loadedSettings.channels?.feishu?.app_id ?? "";
-        const loadedFeishuAppSecret =
-          loadedSettings.channels?.feishu?.app_secret ?? "";
-        setFeishuAppId(loadedFeishuAppId);
-        setFeishuAppSecret(loadedFeishuAppSecret);
-        setFeishuEnabled(Boolean(loadedFeishuAppId || loadedFeishuAppSecret));
-
-        const discordBotToken = loadedSettings.channels?.discord?.bot_token ?? "";
-        setDiscordToken(discordBotToken);
-        setDiscordEnabled(Boolean(discordBotToken));
-
-        const wechatConfig = loadedSettings.channels?.["weixin-openclaw-bridge"];
-        if (wechatConfig?.bot_token) {
-          setWechatBotToken(String(wechatConfig.bot_token));
-          setWechatQrStatus("connected");
-          setWechatQrMessage("WeChat is already connected.");
-          setWechatEnabled(true);
+        // Channels — load from existing settings
+        const channels = loadedSettings.channels ?? {};
+        const enabled = new Set<string>();
+        const configs: Record<string, Record<string, string>> = {};
+        for (const [id, channelConfig] of Object.entries(channels)) {
+          enabled.add(id);
+          const configMap: Record<string, string> = {};
+          for (const [key, value] of Object.entries(channelConfig)) {
+            if (key !== "verbose" && typeof value === "string") {
+              configMap[key] = value;
+            }
+          }
+          configs[id] = configMap;
         }
-        if (wechatConfig?.account_id) {
-          setWechatAccountId(String(wechatConfig.account_id));
-          setWechatEnabled(true);
-        }
-        if (wechatConfig?.base_url && !wechatConfig?.bot_token && !wechatConfig?.account_id) {
-          setWechatEnabled(true);
-        }
+        setEnabledChannels(enabled);
+        setChannelConfigs(configs);
 
+        // Tunnel
         const provider = loadedSettings.tunnel?.provider;
         if (provider === "cloudflare" || provider === "ngrok" || provider === "localtunnel") {
           setTunnelProvider(provider);
         }
-        if (loadedSettings.tunnel?.ngrok?.auth_token) {
-          setNgrokToken(loadedSettings.tunnel.ngrok.auth_token);
-        }
-        if (loadedSettings.tunnel?.ngrok?.domain) {
-          setNgrokDomain(loadedSettings.tunnel.ngrok.domain);
-        }
-        if (loadedSettings.tunnel?.cloudflare?.tunnel_token) {
-          setCfToken(loadedSettings.tunnel.cloudflare.tunnel_token);
-        }
-        if (loadedSettings.tunnel?.cloudflare?.hostname) {
-          setCfHostname(loadedSettings.tunnel.cloudflare.hostname);
-        }
+        if (loadedSettings.tunnel?.ngrok?.auth_token) setNgrokToken(loadedSettings.tunnel.ngrok.auth_token);
+        if (loadedSettings.tunnel?.ngrok?.domain) setNgrokDomain(loadedSettings.tunnel.ngrok.domain);
+        if (loadedSettings.tunnel?.cloudflare?.tunnel_token) setCfToken(loadedSettings.tunnel.cloudflare.tunnel_token);
+        if (loadedSettings.tunnel?.cloudflare?.hostname) setCfHostname(loadedSettings.tunnel.cloudflare.hostname);
 
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
   }, []);
 
-  const waitForWechatConfirmation = useCallback(
-    async (sessionKey: string, baseUrl: string) => {
-      waitingForWechatRef.current = true;
+  // ---- Channel handlers ----
+  const toggleChannel = useCallback((pluginId: string, enabled: boolean) => {
+    setEnabledChannels((prev) => {
+      const next = new Set(prev);
+      if (enabled) next.add(pluginId);
+      else next.delete(pluginId);
+      return next;
+    });
+  }, []);
 
-      try {
-        const result = await invoke<WechatQrWaitResponse>("wechat_qr_wait", {
-          request: {
-            baseUrl,
-            sessionKey,
-            timeoutMs: 480000,
-          },
-        });
+  const updateChannelConfig = useCallback((pluginId: string, key: string, value: string) => {
+    setChannelConfigs((prev) => ({
+      ...prev,
+      [pluginId]: { ...(prev[pluginId] ?? {}), [key]: value },
+    }));
+  }, []);
 
-        if (result.connected && result.botToken) {
-          setWechatBotToken(result.botToken);
-          setWechatAccountId(result.accountId ?? "");
-          setWechatQrStatus("connected");
-          setWechatQrCodeUrl("");
-          setWechatQrSessionKey("");
-          setWechatQrMessage(result.message || "WeChat connected successfully.");
-          waitingForWechatRef.current = false;
-        } else {
-          resetWechatQrState(
-            result.message || "WeChat login was not confirmed."
-          );
-        }
-      } catch (error) {
-        resetWechatQrState(
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    },
-    [resetWechatQrState]
-  );
+  const installPlugin = useCallback(async (pluginId: string, githubUrl: string) => {
+    setInstallingPlugins((prev) => new Set(prev).add(pluginId));
+    try {
+      await invoke("install_plugin", {
+        request: { pluginId, githubUrl },
+      });
+      // Refresh discovered plugins
+      const plugins = await invoke<DiscoveredChannelPlugin[]>("list_channel_plugins");
+      setDiscoveredPlugins(plugins);
+    } catch (error) {
+      console.error(`Failed to install plugin ${pluginId}:`, error);
+    } finally {
+      setInstallingPlugins((prev) => {
+        const next = new Set(prev);
+        next.delete(pluginId);
+        return next;
+      });
+    }
+  }, []);
 
-  const startWechatQrLogin = useCallback(async () => {
-    setWechatQrStatus("generating");
-    setWechatQrMessage("Generating QR code…");
-    setWechatQrCodeUrl("");
-    setWechatQrSessionKey("");
+  // ---- Auth flow (generic for any plugin with QR login) ----
+  const startAuth = useCallback(async (pluginId: string) => {
+    setAuthStates((prev) => ({
+      ...prev,
+      [pluginId]: { status: "generating", message: "Connecting…" },
+    }));
 
     try {
-      const baseUrl = wechatBaseUrl;
-      const result = await invoke<WechatQrStartResponse>("wechat_qr_start", {
-        request: {
-          baseUrl,
-        },
+      // Build config from current channel config + schema defaults
+      const discovered = discoveredPlugins.find((p) => p.id === pluginId);
+      const schemaProps = discovered?.configSchema?.properties ?? {};
+      const configForAuth: Record<string, string> = {};
+      for (const [key, prop] of Object.entries(schemaProps)) {
+        configForAuth[key] = channelConfigs[pluginId]?.[key] ?? prop.default ?? "";
+      }
+
+      const result = await invoke<Record<string, unknown>>("plugin_auth_start", {
+        request: { pluginId, config: configForAuth },
       });
 
-      if (!result.qrcodeUrl) {
-        resetWechatQrState(result.message || "Failed to generate QR code.");
+      if (result.alreadyConnected) {
+        setAuthStates((prev) => ({
+          ...prev,
+          [pluginId]: { status: "connected", message: String(result.message ?? "Already authenticated.") },
+        }));
+        // Store auth result data back into channel config
+        if (result.botToken) updateChannelConfig(pluginId, "bot_token", String(result.botToken));
+        if (result.accountId) updateChannelConfig(pluginId, "account_id", String(result.accountId));
         return;
       }
 
-      setWechatQrCodeUrl(result.qrcodeUrl);
-      setWechatQrSessionKey(result.sessionKey);
-      setWechatQrStatus("waiting");
-      setWechatQrMessage(result.message || "Scan the QR code with WeChat.");
-      void waitForWechatConfirmation(result.sessionKey, baseUrl);
-    } catch (error) {
-      resetWechatQrState(
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  }, [resetWechatQrState, waitForWechatConfirmation]);
+      const qrUrl = result.qrcodeUrl as string | undefined;
+      setAuthStates((prev) => ({
+        ...prev,
+        [pluginId]: {
+          status: qrUrl ? "waiting" : "error",
+          message: String(result.message ?? "Scan the QR code."),
+          qrCodeUrl: qrUrl,
+          sessionKey: result.sessionKey as string | undefined,
+        },
+      }));
 
+      if (!qrUrl) return;
+
+      // Wait for auth completion
+      try {
+        const waitResult = await invoke<Record<string, unknown>>("plugin_auth_wait", {
+          request: {
+            pluginId,
+            params: {
+              baseUrl: configForAuth.base_url,
+              sessionKey: result.sessionKey,
+              timeoutMs: 480000,
+            },
+          },
+        });
+
+        if (waitResult.connected) {
+          setAuthStates((prev) => ({
+            ...prev,
+            [pluginId]: { status: "connected", message: String(waitResult.message ?? "Connected successfully.") },
+          }));
+          if (waitResult.botToken) updateChannelConfig(pluginId, "bot_token", String(waitResult.botToken));
+          if (waitResult.accountId) updateChannelConfig(pluginId, "account_id", String(waitResult.accountId));
+        } else {
+          setAuthStates((prev) => ({
+            ...prev,
+            [pluginId]: { status: "idle", message: String(waitResult.message ?? "Not confirmed.") },
+          }));
+        }
+      } catch {
+        setAuthStates((prev) => ({
+          ...prev,
+          [pluginId]: { status: "error", message: "Connection lost. Try again." },
+        }));
+      }
+    } catch (error) {
+      setAuthStates((prev) => ({
+        ...prev,
+        [pluginId]: { status: "error", message: error instanceof Error ? error.message : String(error) },
+      }));
+    }
+  }, [discoveredPlugins, channelConfigs, updateChannelConfig]);
+
+  const cancelAuth = useCallback(async (pluginId: string) => {
+    setAuthStates((prev) => ({
+      ...prev,
+      [pluginId]: { status: "idle", message: "Cancelled." },
+    }));
+    try {
+      await invoke("plugin_auth_cancel", { request: { pluginId } });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // ---- Cancel active auth when leaving Channels step ----
   useEffect(() => {
     const currentStep = STEPS[step] as OnboardingStep;
     if (currentStep !== "Channels") {
-      if (wechatQrSessionKey || waitingForWechatRef.current) {
-        void cancelWechatSession({ nextMessage: "" });
+      for (const [pluginId, state] of Object.entries(authStates)) {
+        if (state.status === "generating" || state.status === "waiting") {
+          void invoke("plugin_auth_cancel", { request: { pluginId } }).catch(() => {});
+        }
       }
     }
-  }, [cancelWechatSession, step, wechatQrSessionKey]);
+  }, [step, authStates]);
 
-  useEffect(() => {
-    if (!wechatEnabled && (wechatQrSessionKey || waitingForWechatRef.current)) {
-      void cancelWechatSession({ nextMessage: "" });
-    }
-  }, [cancelWechatSession, wechatEnabled, wechatQrSessionKey]);
-
-  useEffect(() => {
-    return () => {
-      if (wechatQrSessionKey || waitingForWechatRef.current) {
-        void invoke("wechat_qr_cancel", {
-          request: {
-            keepCredentials: true,
-          },
-        }).catch(() => undefined);
-      }
-    };
-  }, [wechatQrSessionKey]);
-
+  // ---- Build settings ----
   const buildSettings = useCallback((): Settings => {
     const result: Settings = {
       ...settings,
@@ -259,48 +243,32 @@ export default function Onboarding() {
       default_agent: defaultAgent,
     };
 
-    const channels: Settings["channels"] = {};
+    // Channels
+    const channels: Record<string, Record<string, unknown>> = {};
+    for (const id of enabledChannels) {
+      const config: Record<string, unknown> = {};
+      const userConfig = channelConfigs[id] ?? {};
 
-    if (telegramEnabled && tgToken.trim()) {
-      channels.telegram = {
-        bot_token: tgToken.trim(),
-        verbose: settings.channels?.telegram?.verbose ?? {
-          show_thinking: false,
-          show_tool_use: false,
-        },
-      };
-    }
+      // Merge user config
+      for (const [key, value] of Object.entries(userConfig)) {
+        if (value) config[key] = value;
+      }
 
-    if (feishuEnabled && feishuAppId.trim() && feishuAppSecret.trim()) {
-      channels.feishu = {
-        app_id: feishuAppId.trim(),
-        app_secret: feishuAppSecret.trim(),
-        verbose: settings.channels?.feishu?.verbose ?? {
-          show_thinking: false,
-          show_tool_use: false,
-        },
-      };
-    }
+      // Fill defaults from schema for hidden fields
+      const discovered = discoveredPlugins.find((p) => p.id === id);
+      if (discovered?.configSchema?.properties) {
+        for (const [key, prop] of Object.entries(discovered.configSchema.properties)) {
+          if (prop.hidden && prop.default && !config[key]) {
+            config[key] = prop.default;
+          }
+        }
+      }
 
-    if (discordEnabled && discordToken.trim()) {
-      channels.discord = {
-        bot_token: discordToken.trim(),
-        verbose: settings.channels?.discord?.verbose ?? {
-          show_thinking: false,
-          show_tool_use: false,
-        },
-      };
-    }
+      // Preserve verbose settings
+      const existingVerbose = (settings.channels as Record<string, Record<string, unknown>> | undefined)?.[id]?.verbose;
+      config.verbose = existingVerbose ?? { show_thinking: false, show_tool_use: false };
 
-    if (wechatEnabled) {
-      channels["weixin-openclaw-bridge"] = {
-        bot_token: wechatBotToken.trim() || undefined,
-        account_id: wechatAccountId.trim() || undefined,
-        verbose: settings.channels?.["weixin-openclaw-bridge"]?.verbose ?? {
-          show_thinking: false,
-          show_tool_use: false,
-        },
-      };
+      channels[id] = config;
     }
 
     if (Object.keys(channels).length > 0) {
@@ -309,6 +277,7 @@ export default function Onboarding() {
       delete result.channels;
     }
 
+    // Tunnel
     if (tunnelProvider !== "none") {
       const tunnel: Settings["tunnel"] = { provider: tunnelProvider };
       // localtunnel has no config fields
@@ -332,16 +301,9 @@ export default function Onboarding() {
     settings,
     enabledAgents,
     defaultAgent,
-    telegramEnabled,
-    tgToken,
-    feishuEnabled,
-    feishuAppId,
-    feishuAppSecret,
-    discordEnabled,
-    discordToken,
-    wechatEnabled,
-    wechatBotToken,
-    wechatAccountId,
+    enabledChannels,
+    channelConfigs,
+    discoveredPlugins,
     tunnelProvider,
     ngrokToken,
     ngrokDomain,
@@ -379,9 +341,7 @@ export default function Onboarding() {
   if (!loaded) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="text-sm text-muted-foreground animate-pulse">
-          Loading…
-        </span>
+        <span className="text-sm text-muted-foreground animate-pulse">Loading…</span>
       </div>
     );
   }
@@ -389,11 +349,6 @@ export default function Onboarding() {
   const currentStep = STEPS[step];
   const isLast = step === STEPS.length - 1;
   const canNext = currentStep !== "Agents" || enabledAgents.size > 0;
-  const hasTelegram = telegramEnabled && Boolean(tgToken.trim());
-  const hasFeishu =
-    feishuEnabled && Boolean(feishuAppId.trim() && feishuAppSecret.trim());
-  const hasDiscord = discordEnabled && Boolean(discordToken.trim());
-  const hasWechat = wechatEnabled && Boolean(wechatBotToken.trim());
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -427,32 +382,15 @@ export default function Onboarding() {
         {currentStep === "Channels" && (
           <StepChannels
             discoveredPlugins={discoveredPlugins}
-            telegramEnabled={telegramEnabled}
-            onTelegramEnabledChange={setTelegramEnabled}
-            tgToken={tgToken}
-            onTgToken={setTgToken}
-            feishuEnabled={feishuEnabled}
-            onFeishuEnabledChange={setFeishuEnabled}
-            feishuAppId={feishuAppId}
-            onFeishuAppId={setFeishuAppId}
-            feishuAppSecret={feishuAppSecret}
-            onFeishuAppSecret={setFeishuAppSecret}
-            discordEnabled={discordEnabled}
-            onDiscordEnabledChange={setDiscordEnabled}
-            discordToken={discordToken}
-            onDiscordToken={setDiscordToken}
-            wechatEnabled={wechatEnabled}
-            onWechatEnabledChange={setWechatEnabled}
-            wechatQrStatus={wechatQrStatus}
-            wechatQrCodeUrl={wechatQrCodeUrl}
-            wechatQrMessage={wechatQrMessage}
-            wechatAccountId={wechatAccountId}
-            wechatBotToken={wechatBotToken}
-            wechatQrSessionKey={wechatQrSessionKey}
-            onStartWechatQrLogin={startWechatQrLogin}
-            onCancelWechatQrLogin={() => {
-              void cancelWechatSession({ nextMessage: "WeChat login cancelled." });
-            }}
+            enabledChannels={enabledChannels}
+            channelConfigs={channelConfigs}
+            installingPlugins={installingPlugins}
+            authStates={authStates}
+            onToggleChannel={toggleChannel}
+            onConfigChange={updateChannelConfig}
+            onInstallPlugin={installPlugin}
+            onStartAuth={startAuth}
+            onCancelAuth={cancelAuth}
           />
         )}
         {currentStep === "Tunnel" && (
@@ -474,17 +412,15 @@ export default function Onboarding() {
             enabledAgents={enabledAgents}
             defaultAgent={defaultAgent}
             tunnelProvider={tunnelProvider}
-            hasTelegram={hasTelegram}
-            hasFeishu={hasFeishu}
-            hasDiscord={hasDiscord}
-            hasWechat={hasWechat}
+            enabledChannels={enabledChannels}
+            discoveredPlugins={discoveredPlugins}
           />
         )}
       </div>
 
       <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
         <button
-          onClick={() => setStep((value) => Math.max(0, value - 1))}
+          onClick={() => setStep((v) => Math.max(0, v - 1))}
           disabled={step === 0}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
@@ -508,7 +444,7 @@ export default function Onboarding() {
           </button>
         ) : (
           <button
-            onClick={() => setStep((value) => Math.min(STEPS.length - 1, value + 1))}
+            onClick={() => setStep((v) => Math.min(STEPS.length - 1, v + 1))}
             disabled={!canNext}
             className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
