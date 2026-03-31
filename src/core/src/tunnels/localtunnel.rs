@@ -1,5 +1,5 @@
 //! Localtunnel: expose the web dashboard (and xterm) over the internet via a public URL.
-//! Spawns `npx localtunnel --port 5182` (or bunx), parses the public URL from stdout, keeps process alive.
+//! Spawns `npx localtunnel --port <DEFAULT_PORT>` (or bunx), parses the public URL from stdout, keeps process alive.
 //! Tunnel password: loca.lt uses the tunnel initiator's public IP as the "password" (anti-abuse).
 //! There is no SDK to get it; the only way is to GET https://loca.lt/mytunnelpassword from the same
 //! machine running the tunnel — we do that and parse the IP from the response.
@@ -8,7 +8,7 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-const PORT: u16 = 5182;
+const PORT: u16 = crate::config::DEFAULT_PORT;
 
 /// Try to extract public URL from a line of localtunnel stdout (e.g. "your url is: https://xxx.loca.lt").
 fn parse_url_from_line(line: &str) -> Option<String> {

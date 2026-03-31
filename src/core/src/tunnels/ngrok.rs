@@ -1,11 +1,11 @@
 //! Ngrok: expose the web dashboard via the ngrok Rust SDK.
-//! Token from global config (loaded from .env as NGROK_AUTH_TOKEN); forwards to localhost:5182.
+//! Token from global config; forwards to localhost:<DEFAULT_PORT>.
 
 use ngrok::config::ForwarderBuilder;
 use ngrok::tunnel::EndpointInfo;
 use url::Url;
 
-const PORT: u16 = 5182;
+const PORT: u16 = crate::config::DEFAULT_PORT;
 
 /// Start ngrok tunnel using the Rust SDK. Returns (guard, public URL).
 /// Uses the given config for auth token and optional static domain.
