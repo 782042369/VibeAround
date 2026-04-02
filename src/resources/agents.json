@@ -58,9 +58,8 @@
     "description": "OpenAI Codex CLI",
     "aliases": ["codex", "openai-codex"],
     "acp": {
-      "program": "node",
-      "npm_package": "codex-acp",
-      "bin_name": "codex-acp"
+      "program": "codex",
+      "args": ["--acp"]
     },
     "pty": {
       "command": "codex"
