@@ -22,11 +22,7 @@ The VibeAround MCP server must be connected (server name: `vibearound`). If not 
 
 ### 1. Resolve the session ID
 
-Read the last line in `~/.claude/history.jsonl` whose `project` field matches the current working directory, and extract the `sessionId` value.
-
-```bash
-tac ~/.claude/history.jsonl | grep -m1 "\"project\":\"$(pwd)\"" | sed 's/.*"sessionId":"\([^"]*\)".*/\1/'
-```
+Read `~/.claude/history.jsonl` (one JSON object per line). Find the last entry whose `project` field matches the current working directory, and extract its `sessionId` value.
 
 If no match is found, inform the user that no session was found for this project.
 
