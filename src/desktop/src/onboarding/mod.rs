@@ -266,6 +266,9 @@ pub async fn finish_onboarding<R: Runtime>(
         eprintln!("[onboarding] agent integration install failed (non-fatal): {:#}", e);
     }
 
+    // Pre-install npm-based ACP agent packages (non-fatal)
+    agent_integrations::install_acp_agents(&val).await;
+
     let _ = app.emit("onboarding-complete", ());
 
     if let Some(active) = app.try_state::<OnboardingActive>() {

@@ -5,6 +5,7 @@ pub mod acp_hub;
 pub mod agent_factory;
 pub mod channel_manager;
 pub mod config;
+pub mod env;
 pub mod plugins;
 pub mod pty;
 pub mod resources;

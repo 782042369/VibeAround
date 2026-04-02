@@ -5,8 +5,9 @@
     "description": "Anthropic Claude Code",
     "aliases": ["claude", "claude-code"],
     "acp": {
-      "program": "npx",
-      "args": ["@agentclientprotocol/claude-agent-acp"]
+      "program": "node",
+      "npm_package": "@agentclientprotocol/claude-agent-acp",
+      "bin_name": "claude-agent-acp"
     },
     "pty": {
       "command": "claude code --permission-mode acceptEdits"
@@ -57,8 +58,9 @@
     "description": "OpenAI Codex CLI",
     "aliases": ["codex", "openai-codex"],
     "acp": {
-      "program": "npx",
-      "args": ["codex-acp"]
+      "program": "node",
+      "npm_package": "codex-acp",
+      "bin_name": "codex-acp"
     },
     "pty": {
       "command": "codex"

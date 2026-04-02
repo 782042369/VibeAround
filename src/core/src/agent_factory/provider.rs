@@ -121,9 +121,21 @@ impl AgentProvider for StdioAcpProvider {
     ) -> anyhow::Result<ProviderConnection> {
         let agent_def = crate::resources::agent_by_id(&self.agent_kind.to_string())
             .ok_or_else(|| anyhow!("No resource definition for agent '{}'", self.agent_kind))?;
-        let args: Vec<&str> = agent_def.acp.args.iter().map(|s| s.as_str()).collect();
+
+        // Resolve program + args: npm-based agents run via `node <resolved_entry>`,
+        // native agents (gemini, opencode) use their program + args directly.
+        let (program, resolved_args) = if let Some(npm_pkg) = &agent_def.acp.npm_package {
+            let bin_name = agent_def.acp.bin_name.as_deref().unwrap_or(npm_pkg);
+            let entry = crate::env::resolve_acp_agent_bin(bin_name)
+                .with_context(|| format!("Resolving ACP agent '{}' (npm: {})", self.agent_kind, npm_pkg))?;
+            ("node".to_string(), vec![entry.to_string_lossy().to_string()])
+        } else {
+            (agent_def.acp.program.clone(), agent_def.acp.args.clone())
+        };
+
+        let args_refs: Vec<&str> = resolved_args.iter().map(|s| s.as_str()).collect();
         let (read_stream, write_stream) =
-            spawn_stdio_acp(self.agent_kind, &agent_def.acp.program, &args, workspace)?;
+            spawn_stdio_acp(self.agent_kind, &program, &args_refs, workspace)?;
         Ok(ProviderConnection {
             read_stream,
             write_stream,
@@ -143,7 +155,7 @@ fn spawn_stdio_acp(
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     eprintln!("[{}-acp] spawning {} {} in {:?}", kind, program, args.join(" "), cwd);
-    let mut child = tokio::process::Command::new(program)
+    let mut child = crate::env::command(program)
         .args(args)
         .current_dir(cwd)
         .stdin(std::process::Stdio::piped())

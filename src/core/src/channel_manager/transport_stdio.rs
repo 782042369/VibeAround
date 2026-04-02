@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use serde_json::value::RawValue;
 use tokio::io::AsyncBufReadExt;
-use tokio::process::Command;
+
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
@@ -67,7 +67,7 @@ impl StdioPluginRuntime {
             ));
         }
 
-        let mut child = Command::new("node")
+        let mut child = crate::env::command("node")
             .arg(&manifest.entry_path)
             .current_dir(&manifest.plugin_dir)
             .stdin(std::process::Stdio::piped())

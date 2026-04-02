@@ -6,7 +6,7 @@
 
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
+
 
 const PORT: u16 = crate::config::DEFAULT_PORT;
 
@@ -47,7 +47,7 @@ pub async fn start(port: u16) -> Result<(super::TunnelGuard, String), Box<dyn st
         .map(|a| a.iter().map(|s| s.as_str()).collect())
         .unwrap_or_else(|| vec!["localtunnel", "--port"]);
 
-    let mut cmd = Command::new(program);
+    let mut cmd = crate::env::command(program);
     cmd.args(&base_args)
         .arg(port.to_string())
         .stdout(Stdio::piped())

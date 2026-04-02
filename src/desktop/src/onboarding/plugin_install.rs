@@ -26,8 +26,8 @@ pub struct InstallPluginResponse {
 /// On Windows, `npm` is a `.cmd` batch script that `Command::new("npm")` cannot
 /// spawn directly. Locating npm-cli.js next to `node` and calling it via node
 /// works cross-platform without any PATH or shell workarounds.
-async fn npm_command(args: &[&str], cwd: &std::path::Path) -> std::io::Result<std::process::Output> {
-    let node_info = tokio::process::Command::new("node")
+pub(super) async fn npm_command(args: &[&str], cwd: &std::path::Path) -> std::io::Result<std::process::Output> {
+    let node_info = common::env::command("node")
         .args(["-p", "process.execPath"])
         .output()
         .await?;
@@ -51,7 +51,7 @@ async fn npm_command(args: &[&str], cwd: &std::path::Path) -> std::io::Result<st
     node_args.extend(args.iter().map(|s| s.to_string()));
 
     eprintln!("[npm_command] node {} {}", npm_cli.display(), args.join(" "));
-    tokio::process::Command::new("node")
+    common::env::command("node")
         .args(&node_args)
         .current_dir(cwd)
         .stdout(std::process::Stdio::piped())

@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tauri::async_runtime;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{Child, ChildStdin, ChildStdout};
 
 use common::{config, plugins};
 
@@ -85,7 +85,7 @@ pub(super) async fn spawn_plugin_session(name: &str, config_value: Value) -> any
 
 /// Spawn a Node.js script, wire stderr logging, and perform a raw JSON-RPC initialize handshake.
 async fn spawn_node_session(name: &str, entry_point: &Path, plugin_dir: &Path) -> anyhow::Result<PluginSession> {
-    let mut child = Command::new("node")
+    let mut child = common::env::command("node")
         .arg(entry_point)
         .current_dir(plugin_dir)
         .stdin(std::process::Stdio::piped())

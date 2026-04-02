@@ -49,6 +49,69 @@ pub(super) fn install_agent_integrations(settings: &serde_json::Value) -> anyhow
     Ok(())
 }
 
+/// Pre-install npm-based ACP agent packages (e.g. claude-agent-acp, codex-acp)
+/// into `~/.vibearound/acp-agents/` so they can be run with `node` at runtime
+/// instead of relying on `npx`.
+pub(super) async fn install_acp_agents(settings: &serde_json::Value) {
+    let all_agents = common::resources::agent_ids();
+    let enabled_agents: Vec<String> = settings
+        .get("enabled_agents")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_else(|| all_agents.iter().map(|s| s.to_string()).collect());
+
+    // Collect npm packages to install
+    let mut packages: Vec<String> = Vec::new();
+    for agent_id in &enabled_agents {
+        if let Some(agent_def) = common::resources::agent_by_id(agent_id) {
+            if let Some(npm_pkg) = &agent_def.acp.npm_package {
+                packages.push(npm_pkg.clone());
+            }
+        }
+    }
+
+    if packages.is_empty() {
+        return;
+    }
+
+    let agents_dir = common::env::acp_agents_dir();
+    if let Err(e) = std::fs::create_dir_all(&agents_dir) {
+        eprintln!("[onboarding] failed to create acp-agents dir: {}", e);
+        return;
+    }
+
+    // Initialize package.json if it doesn't exist
+    let pkg_json = agents_dir.join("package.json");
+    if !pkg_json.exists() {
+        let init = serde_json::json!({ "name": "vibearound-acp-agents", "private": true });
+        if let Err(e) = std::fs::write(&pkg_json, serde_json::to_string_pretty(&init).unwrap()) {
+            eprintln!("[onboarding] failed to create package.json: {}", e);
+            return;
+        }
+    }
+
+    for pkg in &packages {
+        eprintln!("[onboarding] installing ACP agent: {}", pkg);
+        match super::plugin_install::npm_command(&["install", pkg], &agents_dir).await {
+            Ok(output) => {
+                if output.status.success() {
+                    eprintln!("[onboarding] installed ACP agent: {}", pkg);
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("[onboarding] npm install {} failed: {}", pkg, stderr.trim());
+                }
+            }
+            Err(e) => {
+                eprintln!("[onboarding] npm install {} error: {}", pkg, e);
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
