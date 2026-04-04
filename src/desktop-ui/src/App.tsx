@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Globe, Bot, MessageSquare, Terminal, X, RefreshCw, ExternalLink, Server, Wifi, WifiOff, FolderOpen,
 } from "lucide-react";
 import { useServices, type ServiceInfo } from "./hooks/useServices";
+import { Splash } from "./Splash";
 import Onboarding from "./Onboarding";
 import { Workspaces } from "./Workspaces";
 
@@ -34,84 +35,48 @@ function ServiceRow({
   onKill: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-accent/50 transition-colors group">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <StatusDot status={service.status} />
-        <span className="text-sm font-medium truncate">{service.name}</span>
-        {service.url && (
-          <a
-            href={service.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline flex items-center gap-0.5 shrink-0"
-          >
-            {service.url.replace(/^https?:\/\//, "")}
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-        {service.role && (
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-            {service.role}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <span className="text-xs text-muted-foreground capitalize">
-          {service.status}
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-accent/50 transition-colors group">
+      <StatusDot status={service.status} />
+      <span className="text-xs font-medium flex-1 truncate">
+        {service.name}
+      </span>
+      {service.provider && (
+        <span className="text-[10px] text-muted-foreground/70 truncate max-w-[100px]">
+          {service.provider}
         </span>
-        {service.status === "running" && (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {formatUptime(service.uptime_secs)}
-          </span>
-        )}
-        {service.status_detail && service.status !== "running" && (
-          <span className="text-xs text-destructive truncate max-w-[120px]" title={service.status_detail}>
-            {service.status_detail}
-          </span>
-        )}
-        {service.status === "running" && (
-          <button
-            onClick={onKill}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-destructive"
-            title="Kill"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+      )}
+      {service.status === "running" && service.uptime_secs > 0 && (
+        <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+          {formatUptime(service.uptime_secs)}
+        </span>
+      )}
+      {service.url && (
+        <a
+          href={service.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground/50 hover:text-primary"
+          title={service.url}
+        >
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+      {service.status === "running" && (
+        <button
+          onClick={onKill}
+          className="text-muted-foreground/30 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Stop"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
     </div>
   );
 }
 
-function Section({
-  icon,
-  title,
-  children,
-  badge,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-  badge?: string | number;
-}) {
-  return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
-        {icon}
-        <span className="text-sm font-semibold">{title}</span>
-        {badge !== undefined && (
-          <span className="ml-auto text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full tabular-nums">
-            {badge}
-          </span>
-        )}
-      </div>
-      <div className="divide-y divide-border/50">{children}</div>
-    </div>
-  );
-}
+
 
 function App() {
-  // Route: if path is /onboarding, show the wizard; otherwise show dashboard.
   const [route, setRoute] = useState(() => window.location.pathname);
 
   useEffect(() => {
@@ -131,22 +96,44 @@ type DashboardPage = "services" | "workspaces";
 
 function Dashboard() {
   const [page, setPage] = useState<DashboardPage>("services");
-  const { data, error, loading, connected, refresh, killService } = useServices();
+  const { data, error, connected, refresh, killService } = useServices();
+  const everHadData = useRef(false);
+  const [startTime] = useState(() => Date.now());
+  const [timedOut, setTimedOut] = useState(false);
 
-  if (loading && !data) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+  if (data) everHadData.current = true;
+
+  // Auto-retry while waiting for server, timeout after 30s
+  useEffect(() => {
+    if (data || everHadData.current) return;
+    if (timedOut) return;
+
+    const elapsed = Date.now() - startTime;
+    if (elapsed > 30_000) {
+      setTimedOut(true);
+      return;
+    }
+
+    if (error) {
+      const timer = setTimeout(refresh, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [data, error, timedOut, startTime, refresh]);
+
+  // Show splash while waiting for first data (cold start)
+  const showSplash = !everHadData.current && !data && !timedOut;
+
+  if (showSplash) {
+    return <Splash visible />;
   }
 
-  if (error && !data) {
+  // Server failed after timeout
+  if (timedOut && !data) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-sm text-destructive">Server failed to start</p>
         <button
-          onClick={refresh}
+          onClick={() => { setTimedOut(false); refresh(); }}
           className="text-xs text-primary hover:underline flex items-center gap-1"
         >
           <RefreshCw className="w-3 h-3" /> Retry
@@ -310,6 +297,33 @@ function Dashboard() {
         </Section>
       </div>
       )}
+    </div>
+  );
+}
+
+function Section({
+  icon,
+  title,
+  children,
+  badge,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  badge?: string | number;
+}) {
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+        {icon}
+        <span className="text-sm font-semibold">{title}</span>
+        {badge !== undefined && (
+          <span className="ml-auto text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full tabular-nums">
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-border/50">{children}</div>
     </div>
   );
 }

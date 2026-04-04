@@ -4,8 +4,44 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VibeAround</title>
+    <style>
+      #splash {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        background: #ffffff;
+        font-family: 'SF Mono','Cascadia Code','Fira Code','JetBrains Mono',monospace;
+        transition: opacity 0.4s ease-out;
+      }
+      #splash.hidden { opacity: 0; pointer-events: none; }
+      #splash pre {
+        font-size: 10px; line-height: 1.1; letter-spacing: 0;
+        color: oklch(0.55 0.18 180);
+        user-select: none;
+      }
+      #splash .tagline {
+        margin-top: 24px; font-size: 12px; color: #999;
+        letter-spacing: 4px; text-transform: uppercase;
+      }
+      #splash .spinner {
+        margin-top: 32px; width: 20px; height: 20px;
+        border: 2px solid #e0e0e0; border-top-color: oklch(0.55 0.18 180);
+        border-radius: 50%; animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
+    <div id="splash">
+      <pre> ██╗   ██╗ ██╗ ██████╗  ███████╗  █████╗  ██████╗   ██████╗  ██╗   ██╗ ███╗   ██╗ ██████╗
+ ██║   ██║ ██║ ██╔══██╗ ██╔════╝ ██╔══██╗ ██╔══██╗ ██╔═══██╗ ██║   ██║ ████╗  ██║ ██╔══██╗
+ ██║   ██║ ██║ ██████╔╝ █████╗   ███████║ ██████╔╝ ██║   ██║ ██║   ██║ ██╔██╗ ██║ ██║  ██║
+ ╚██╗ ██╔╝ ██║ ██╔══██╗ ██╔══╝   ██╔══██║ ██╔══██╗ ██║   ██║ ██║   ██║ ██║╚██╗██║ ██║  ██║
+  ╚████╔╝  ██║ ██████╔╝ ███████╗ ██║  ██║ ██║  ██║ ╚██████╔╝ ╚██████╔╝ ██║ ╚████║ ██████╔╝
+   ╚═══╝   ╚═╝ ╚═════╝  ╚══════╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝  ╚═════╝   ╚═════╝  ╚═╝  ╚═══╝ ╚═════╝</pre>
+      <div class="tagline">unified runtime for ai coding agents</div>
+      <div class="spinner"></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

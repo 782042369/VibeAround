@@ -51,6 +51,9 @@ impl RunningDaemon {
         self.web_dispatch_handle.abort();
         self.web_handle.abort();
         self.tunnel_handle.abort();
+
+        // Clear service status so stale entries don't persist across restarts
+        self.services.clear();
     }
 }
 

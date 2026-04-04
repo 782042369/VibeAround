@@ -3,7 +3,6 @@
 //! settings.json `tunnel.cloudflare.hostname` instead of parsing stdout.
 
 use std::process::Stdio;
-use tokio::process::Command;
 
 /// Start Cloudflare tunnel. Returns (guard, public URL).
 /// Token from config; hostname (public URL) from config since Cloudflare Named Tunnels have a fixed URL.
@@ -31,12 +30,13 @@ pub async fn start_web_tunnel(
         .map(|a| a.iter().map(|s| s.as_str()).collect())
         .unwrap_or_else(|| vec!["tunnel", "run", "--token"]);
 
-    let mut cmd = Command::new(program);
+    let mut cmd = crate::env::command(program);
     cmd.args(&base_args)
         .arg(token)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit());
 
+    cmd.kill_on_drop(true);
     let error_hint = crate::resources::tunnel_spawn_error_hint(tunnel_def)
         .unwrap_or("is it installed?");
     let child = cmd.spawn().map_err(|e| {

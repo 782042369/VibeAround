@@ -149,6 +149,16 @@ impl ServiceStatusManager {
         }
     }
 
+    /// Clear all service entries. Called on daemon stop to prevent stale
+    /// entries from persisting across restarts.
+    pub fn clear(&self) {
+        self.channels.clear();
+        self.tunnels.clear();
+        self.pty.clear();
+        *self.runtime_status.write().unwrap() = None;
+        self.notify_change();
+    }
+
     // -----------------------------------------------------------------------
     // Change notification
     // -----------------------------------------------------------------------
