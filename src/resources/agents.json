@@ -75,5 +75,69 @@
       "mcp_entry": { "url": "{mcp_url}" },
       "skill_dir": ".codex/skills/vibearound"
     }
+  },
+  {
+    "id": "cursor",
+    "display_name": "Cursor",
+    "description": "Cursor AI IDE",
+    "aliases": ["cursor"],
+    "acp": {
+      "program": "cursor-agent",
+      "args": ["acp"],
+      "install_cmd": "curl -fsSL https://cursor.com/install | bash"
+    },
+    "pty": {
+      "command": "cursor-agent"
+    },
+    "resume_template": "cd {cwd} && cursor-agent --resume {session_id}",
+    "global_config": {
+      "settings_path": ".cursor/mcp.json",
+      "mcp_key": "mcpServers",
+      "mcp_entry": { "url": "{mcp_url}" },
+      "skill_dir": ".cursor/rules",
+      "skill_filename": "vibearound.mdc"
+    }
+  },
+  {
+    "id": "kiro",
+    "display_name": "Kiro",
+    "description": "Amazon Kiro AI IDE",
+    "aliases": ["kiro", "kiro-cli"],
+    "acp": {
+      "program": "kiro-cli",
+      "args": ["acp"],
+      "install_cmd": "curl -fsSL https://cli.kiro.dev/install | bash"
+    },
+    "pty": {
+      "command": "kiro-cli"
+    },
+    "resume_template": "cd {cwd} && kiro-cli --resume {session_id}",
+    "global_config": {
+      "settings_path": ".kiro/settings/mcp.json",
+      "mcp_key": "mcpServers",
+      "mcp_entry": { "url": "{mcp_url}" },
+      "skill_dir": ".kiro/steering",
+      "skill_filename": "vibearound.md"
+    }
+  },
+  {
+    "id": "qwen-code",
+    "display_name": "Qwen Code",
+    "description": "Alibaba Qwen Code",
+    "aliases": ["qwen-code", "qwen"],
+    "acp": {
+      "program": "qwen",
+      "args": ["--acp"]
+    },
+    "pty": {
+      "command": "qwen"
+    },
+    "resume_template": "cd {cwd} && qwen --resume {session_id}",
+    "global_config": {
+      "settings_path": ".qwen/settings.json",
+      "mcp_key": "mcpServers",
+      "mcp_entry": { "httpUrl": "{mcp_url}" },
+      "skill_dir": ".qwen/skills/vibearound"
+    }
   }
 ]

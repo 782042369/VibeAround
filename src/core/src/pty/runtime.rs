@@ -46,6 +46,9 @@ fn tool_exec_argv(tool: PtyTool, tmux_session: Option<&str>) -> String {
         PtyTool::Gemini => "gemini",
         PtyTool::Codex => "codex",
         PtyTool::OpenCode => "opencode",
+        PtyTool::Cursor => "cursor",
+        PtyTool::Kiro => "kiro",
+        PtyTool::QwenCode => "qwen-code",
     };
     crate::resources::agent_by_id(agent_id)
         .map(|a| a.pty.command.clone())
@@ -112,6 +115,9 @@ fn command_for_tool(
         PtyTool::Gemini => CommandBuilder::new("gemini"),
         PtyTool::Codex => CommandBuilder::new("codex"),
         PtyTool::OpenCode => CommandBuilder::new("opencode"),
+        PtyTool::Cursor => CommandBuilder::new("cursor"),
+        PtyTool::Kiro => CommandBuilder::new("kiro-cli"),
+        PtyTool::QwenCode => CommandBuilder::new("qwen"),
     };
     set_pty_env(&mut c, theme);
     c
@@ -132,6 +138,10 @@ pub enum PtyTool {
     Codex,
     Gemini,
     OpenCode,
+    Cursor,
+    Kiro,
+    #[serde(rename = "qwen-code")]
+    QwenCode,
 }
 
 pub struct PtyBridge {

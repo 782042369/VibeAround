@@ -52,6 +52,7 @@ pub fn acp_agents_dir() -> std::path::PathBuf {
     crate::config::data_dir().join("plugins")
 }
 
+
 /// Resolve the JS entry point for a pre-installed npm ACP agent binary.
 ///
 /// Looks up `~/.vibearound/plugins/node_modules/.bin/<bin_name>`.
@@ -128,10 +129,10 @@ fn probe_enriched_env() -> HashMap<String, String> {
         if let Some(shell_env) = probe_unix_login_shell_env() {
             // Shell env takes precedence (has user's full setup)
             env.extend(shell_env);
-            return env;
+        } else {
+            // Fallback: at least enrich PATH with well-known directories
+            enrich_unix_path_fallback(&mut env);
         }
-        // Fallback: at least enrich PATH with well-known directories
-        enrich_unix_path_fallback(&mut env);
     }
 
     #[cfg(windows)]
@@ -143,6 +144,7 @@ fn probe_enriched_env() -> HashMap<String, String> {
 
     env
 }
+
 
 /// Probe the user's login shell for their full environment.
 #[cfg(unix)]

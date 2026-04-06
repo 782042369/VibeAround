@@ -23,6 +23,9 @@ pub enum AgentKind {
     Gemini,
     OpenCode,
     Codex,
+    Cursor,
+    Kiro,
+    QwenCode,
 }
 
 impl std::fmt::Display for AgentKind {
@@ -32,6 +35,9 @@ impl std::fmt::Display for AgentKind {
             Self::Gemini => write!(f, "gemini"),
             Self::OpenCode => write!(f, "opencode"),
             Self::Codex => write!(f, "codex"),
+            Self::Cursor => write!(f, "cursor"),
+            Self::Kiro => write!(f, "kiro"),
+            Self::QwenCode => write!(f, "qwen-code"),
         }
     }
 }
@@ -50,12 +56,15 @@ impl AgentKind {
             "gemini" => Some(Self::Gemini),
             "opencode" => Some(Self::OpenCode),
             "codex" => Some(Self::Codex),
+            "cursor" => Some(Self::Cursor),
+            "kiro" => Some(Self::Kiro),
+            "qwen-code" => Some(Self::QwenCode),
             _ => None,
         }
     }
 
     pub fn all() -> &'static [AgentKind] {
-        &[Self::Claude, Self::Gemini, Self::OpenCode, Self::Codex]
+        &[Self::Claude, Self::Gemini, Self::OpenCode, Self::Codex, Self::Cursor, Self::Kiro, Self::QwenCode]
     }
 
     pub fn enabled() -> Vec<AgentKind> {
@@ -122,11 +131,12 @@ impl AgentProvider for StdioAcpProvider {
         let agent_def = crate::resources::agent_by_id(&self.agent_kind.to_string())
             .ok_or_else(|| anyhow!("No resource definition for agent '{}'", self.agent_kind))?;
 
-        // Resolve program + args: npm-based agents run via `node <resolved_entry>`,
-        // native agents (gemini, opencode) use their program + args directly.
+        // Resolve program + args based on install method:
+        // 1. npm-based agents → `node <resolved_entry>` (Claude ACP, Codex ACP)
+        // 2. binary-download agents → binary from ~/.vibearound/bin/ (Cursor, Kiro)
+        // 3. native agents → program + args from PATH (Gemini, OpenCode)
         let (program, resolved_args) = if let Some(npm_pkg) = &agent_def.acp.npm_package {
             let bin_name = agent_def.acp.bin_name.as_deref().unwrap_or(npm_pkg);
-            // Auto-install if not present (first use after upgrade or fresh install)
             if crate::env::resolve_acp_agent_bin(bin_name).is_err() {
                 eprintln!("[{}-acp] auto-installing {} ...", self.agent_kind, npm_pkg);
                 crate::agent_integrations::auto_install_npm_agent(npm_pkg).await?;
@@ -134,6 +144,12 @@ impl AgentProvider for StdioAcpProvider {
             let entry = crate::env::resolve_acp_agent_bin(bin_name)
                 .with_context(|| format!("Resolving ACP agent '{}' (npm: {})", self.agent_kind, npm_pkg))?;
             ("node".to_string(), vec![entry.to_string_lossy().to_string()])
+        } else if let Some(install_cmd) = &agent_def.acp.install_cmd {
+            if !crate::agent_integrations::is_program_available(&agent_def.acp.program) {
+                eprintln!("[{}-acp] auto-installing via install cmd ...", self.agent_kind);
+                crate::agent_integrations::auto_install_agent_cmd(install_cmd, &self.agent_kind.to_string()).await?;
+            }
+            (agent_def.acp.program.clone(), agent_def.acp.args.clone())
         } else {
             (agent_def.acp.program.clone(), agent_def.acp.args.clone())
         };

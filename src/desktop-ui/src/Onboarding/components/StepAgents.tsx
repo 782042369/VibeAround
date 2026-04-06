@@ -1,14 +1,9 @@
-import { Bot, Check, Settings } from "lucide-react";
+import { Bot, Check } from "lucide-react";
 
 import type { StepAgentsProps } from "../types";
 
-/** What gets installed per agent when enabled. */
-const AGENT_INTEGRATION_NOTES: Record<string, string[]> = {
-  claude: ["MCP server config", "Skill file (session handover)"],
-  gemini: ["MCP server config", "Skill file (session handover)"],
-  codex: ["MCP server config (TOML)", "Skill file (session handover)"],
-  opencode: ["No session handover (archived project)"],
-};
+/** Agents that do not support session handover. */
+const NO_HANDOVER_AGENTS = new Set(["opencode"]);
 
 export function StepAgents({
   agents,
@@ -32,7 +27,7 @@ export function StepAgents({
         {agents.map((agent) => {
           const isEnabled = enabled.has(agent.id);
           const isDefault = defaultAgent === agent.id;
-          const notes = AGENT_INTEGRATION_NOTES[agent.id];
+          const noHandover = NO_HANDOVER_AGENTS.has(agent.id);
           return (
             <div
               key={agent.id}
@@ -45,11 +40,16 @@ export function StepAgents({
             >
               <div className="flex items-center justify-between">
                 <span
-                  className={`text-sm font-medium ${
+                  className={`text-sm font-medium flex items-center gap-1.5 ${
                     isEnabled ? "text-foreground" : "text-muted-foreground"
                   }`}
                 >
                   {agent.display_name}
+                  {noHandover && (
+                    <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-muted text-muted-foreground/60 leading-none">
+                      no session handover
+                    </span>
+                  )}
                 </span>
                 <div
                   className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
@@ -77,19 +77,6 @@ export function StepAgents({
                 >
                   {isDefault ? "★ default" : "set default"}
                 </button>
-              )}
-              {isEnabled && notes && (
-                <div className="flex flex-col gap-0.5 mt-0.5">
-                  {notes.map((note) => (
-                    <span
-                      key={note}
-                      className="text-[10px] text-muted-foreground/70 flex items-center gap-1"
-                    >
-                      <Settings className="w-2.5 h-2.5 shrink-0" />
-                      {note}
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
           );

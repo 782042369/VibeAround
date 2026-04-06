@@ -75,22 +75,67 @@ pub async fn auto_install_npm_agent(npm_package: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Pre-install all npm-based ACP agent packages for enabled agents.
+/// Install a native agent CLI by running its official install command.
+pub async fn auto_install_agent_cmd(install_cmd: &str, agent: &str) -> anyhow::Result<()> {
+    eprintln!("[integrations] running install for {}: {}", agent, install_cmd);
+
+    let output = crate::env::command("sh")
+        .args(["-c", install_cmd])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .with_context(|| format!("running install cmd for {}", agent))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("install {} failed: {}", agent, stderr.trim());
+    }
+
+    eprintln!("[integrations] installed {}", agent);
+    Ok(())
+}
+
+/// Check if a program is available in PATH.
+pub fn is_program_available(program: &str) -> bool {
+    crate::env::std_command("which")
+        .arg(program)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Pre-install all ACP agent packages (npm or binary) for enabled agents.
 pub async fn install_acp_agents(settings: &serde_json::Value) {
     let all_agents = resources::agent_ids();
     let enabled_agents = resolve_enabled_agents(settings, &all_agents);
 
     for agent_id in &enabled_agents {
-        if let Some(agent_def) = resources::agent_by_id(agent_id) {
-            if let Some(npm_pkg) = &agent_def.acp.npm_package {
-                let bin_name = agent_def.acp.bin_name.as_deref().unwrap_or(npm_pkg);
-                if crate::env::resolve_acp_agent_bin(bin_name).is_ok() {
-                    continue;
-                }
-                eprintln!("[integrations] installing ACP agent: {}", npm_pkg);
-                if let Err(e) = auto_install_npm_agent(npm_pkg).await {
-                    eprintln!("[integrations] npm install {} error: {}", npm_pkg, e);
-                }
+        let agent_def = match resources::agent_by_id(agent_id) {
+            Some(def) => def,
+            None => continue,
+        };
+
+        // npm-based agents (Claude ACP, Codex ACP)
+        if let Some(npm_pkg) = &agent_def.acp.npm_package {
+            let bin_name = agent_def.acp.bin_name.as_deref().unwrap_or(npm_pkg);
+            if crate::env::resolve_acp_agent_bin(bin_name).is_ok() {
+                continue;
+            }
+            eprintln!("[integrations] installing ACP agent: {}", npm_pkg);
+            if let Err(e) = auto_install_npm_agent(npm_pkg).await {
+                eprintln!("[integrations] npm install {} error: {}", npm_pkg, e);
+            }
+        }
+        // Native binary agents with install command (Cursor, Kiro)
+        else if let Some(install_cmd) = &agent_def.acp.install_cmd {
+            if is_program_available(&agent_def.acp.program) {
+                continue;
+            }
+            if let Err(e) = auto_install_agent_cmd(install_cmd, agent_id).await {
+                eprintln!("[integrations] install {} error: {}", agent_id, e);
             }
         }
     }
@@ -365,6 +410,9 @@ fn agent_skill_content(agent: &str) -> &'static str {
         "claude" => include_str!("../../skills/claude/vibearound/SKILL.md"),
         "gemini" => include_str!("../../skills/gemini/vibearound/SKILL.md"),
         "codex" => include_str!("../../skills/codex/vibearound/SKILL.md"),
+        "cursor" => include_str!("../../skills/cursor/vibearound/SKILL.md"),
+        "kiro" => include_str!("../../skills/kiro/vibearound/SKILL.md"),
+        "qwen-code" => include_str!("../../skills/qwen-code/vibearound/SKILL.md"),
         _ => include_str!("../../skills/vibearound/SKILL.md"),
     }
 }
@@ -375,17 +423,19 @@ fn install_skill(agent: &str) -> anyhow::Result<()> {
         Some(def) => def,
         None => return Ok(()),
     };
-    let skill_dir_rel = match &agent_def.global_config {
-        Some(cfg) => match &cfg.skill_dir {
-            Some(dir) => dir,
-            None => return Ok(()),
-        },
+    let global_config = match &agent_def.global_config {
+        Some(cfg) => cfg,
+        None => return Ok(()),
+    };
+    let skill_dir_rel = match &global_config.skill_dir {
+        Some(dir) => dir,
         None => return Ok(()),
     };
 
     let home = home_dir()?;
     let skill_dir = home.join(skill_dir_rel);
-    let target = skill_dir.join("SKILL.md");
+    let filename = global_config.skill_filename.as_deref().unwrap_or("SKILL.md");
+    let target = skill_dir.join(filename);
 
     // Always replace (full replace on every startup)
     let _ = std::fs::create_dir_all(&skill_dir);
@@ -399,26 +449,40 @@ fn install_skill(agent: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Remove the vibearound skill directory for a given agent.
-/// Scans for any directories containing vibearound-managed SKILL.md files.
+/// Remove the vibearound skill for a given agent.
+/// If `skill_filename` is set, removes only the specific file (shared directories
+/// like `.cursor/rules/` may contain other user files).
+/// Otherwise, removes the entire skill directory.
 fn uninstall_skill(agent: &str) -> anyhow::Result<()> {
     let agent_def = match resources::agent_by_id(agent) {
         Some(def) => def,
         None => return Ok(()),
     };
-    let skill_dir_rel = match &agent_def.global_config {
-        Some(cfg) => match &cfg.skill_dir {
-            Some(dir) => dir,
-            None => return Ok(()),
-        },
+    let global_config = match &agent_def.global_config {
+        Some(cfg) => cfg,
+        None => return Ok(()),
+    };
+    let skill_dir_rel = match &global_config.skill_dir {
+        Some(dir) => dir,
         None => return Ok(()),
     };
 
     let home = home_dir()?;
     let skill_dir = home.join(skill_dir_rel);
-    if skill_dir.exists() {
-        let _ = std::fs::remove_dir_all(&skill_dir);
-        eprintln!("[integrations] Removed {} skill at {:?}", agent, skill_dir);
+
+    if let Some(filename) = &global_config.skill_filename {
+        // Remove only the specific file (shared directory like .cursor/rules/)
+        let target = skill_dir.join(filename);
+        if target.exists() {
+            let _ = std::fs::remove_file(&target);
+            eprintln!("[integrations] Removed {} skill at {:?}", agent, target);
+        }
+    } else {
+        // Remove the entire dedicated skill directory (e.g. .claude/skills/vibearound/)
+        if skill_dir.exists() {
+            let _ = std::fs::remove_dir_all(&skill_dir);
+            eprintln!("[integrations] Removed {} skill at {:?}", agent, skill_dir);
+        }
     }
     Ok(())
 }

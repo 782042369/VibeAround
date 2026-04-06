@@ -49,6 +49,10 @@ pub struct AgentAcpConfig {
     pub npm_package: Option<String>,
     /// Binary name inside `node_modules/.bin/` (defaults to last segment of npm_package).
     pub bin_name: Option<String>,
+    /// Shell command to install the agent binary (e.g. "curl ... | bash").
+    /// Run during onboarding when the user enables this agent.
+    #[serde(default)]
+    pub install_cmd: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -69,6 +73,10 @@ pub struct AgentGlobalConfig {
     pub mcp_entry: serde_json::Value,
     #[serde(default)]
     pub skill_dir: Option<String>,
+    /// Skill filename (default: "SKILL.md"). Override for agents using different
+    /// rule formats (e.g. "vibearound.mdc" for Cursor, "vibearound.md" for Kiro).
+    #[serde(default)]
+    pub skill_filename: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
