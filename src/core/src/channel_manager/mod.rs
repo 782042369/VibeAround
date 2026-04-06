@@ -341,7 +341,30 @@ fn parse_slash_command(text: &str) -> Option<SlashAction> {
         return None;
     }
 
-    // /agent <rest> — passthrough to agent CLI as a slash command
+    // /va <rest> and /vibearound <rest> — Slack-friendly aliases.
+    // Strip the prefix and re-parse the rest as if user typed /<rest>.
+    // e.g. "/va help" → "/help", "/va switch claude" → "/switch claude",
+    //      "/va agent status" → "/agent status" → agent passthrough.
+    for prefix in ["/va ", "/vibearound "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            let rest = rest.trim();
+            if rest.is_empty() {
+                return Some(SlashAction::ListAgentCommands);
+            }
+            let reparsed = if rest.starts_with('/') {
+                rest.to_string()
+            } else {
+                format!("/{}", rest)
+            };
+            return parse_slash_command(&reparsed);
+        }
+    }
+    if trimmed == "/va" || trimmed == "/vibearound" {
+        return Some(SlashAction::ListAgentCommands);
+    }
+
+    // /agent <rest> — passthrough to agent CLI as a slash command.
+    // Accepts: /agent status, /agent /status, /agent/status — all become "/status".
     if let Some(rest) = trimmed.strip_prefix("/agent/") {
         let rest = rest.trim();
         if !rest.is_empty() {
@@ -351,12 +374,9 @@ fn parse_slash_command(text: &str) -> Option<SlashAction> {
     if let Some(rest) = trimmed.strip_prefix("/agent ") {
         let rest = rest.trim();
         if !rest.is_empty() {
-            let cmd = if rest.starts_with('/') {
-                rest.to_string()
-            } else {
-                format!("/{}", rest)
-            };
-            return Some(SlashAction::AgentPassthrough(cmd));
+            // Strip leading slash if present — we always add one
+            let cmd = rest.strip_prefix('/').unwrap_or(rest);
+            return Some(SlashAction::AgentPassthrough(format!("/{}", cmd)));
         }
     }
     if trimmed == "/agent" {
