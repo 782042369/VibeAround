@@ -165,6 +165,12 @@ pub(super) async fn run_install_inner(request: InstallPluginRequest) -> anyhow::
 
 #[tauri::command]
 pub fn check_plugin_status(plugin_id: String) -> String {
+    // Check both user plugins dir (~/.vibearound/plugins/) and project plugins dir (src/plugins/)
+    // via the discovery system which searches both paths.
+    if plugins::find_plugin(&plugin_id).is_some() {
+        return "ready".to_string();
+    }
+
     let target_dir = config::data_dir().join("plugins").join(&plugin_id);
     if !target_dir.join("plugin.json").exists() {
         return "not_installed".to_string();
