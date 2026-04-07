@@ -54,5 +54,26 @@
     "description": "Use a Bot Framework app to chat via Microsoft Teams.",
     "github": "https://github.com/jazzenchen/vibearound-plugin-teams",
     "install_steps": ["git_clone", "npm_install", "npm_build"]
+  },
+  {
+    "id": "dingtalk",
+    "name": "DingTalk",
+    "description": "Connect DingTalk via Stream API (no public IP required).",
+    "github": "https://github.com/jazzenchen/vibearound-plugin-dingtalk",
+    "install_steps": ["git_clone", "npm_install", "npm_build"]
+  },
+  {
+    "id": "wecom",
+    "name": "WeCom",
+    "description": "Connect WeCom (企业微信) AI Bot via WebSocket persistent connection.",
+    "github": "https://github.com/jazzenchen/vibearound-plugin-wecom",
+    "install_steps": ["git_clone", "npm_install", "npm_build"]
+  },
+  {
+    "id": "qqbot",
+    "name": "QQ Bot",
+    "description": "Connect QQ Guild Bot via WebSocket gateway (no public IP required).",
+    "github": "https://github.com/jazzenchen/vibearound-plugin-qqbot",
+    "install_steps": ["git_clone", "npm_install", "npm_build"]
   }
 ]

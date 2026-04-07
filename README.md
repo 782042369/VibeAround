@@ -18,7 +18,7 @@
 
 </div>
 
-VibeAround is a unified runtime for AI coding agents. It connects real agents (Claude Code, Gemini CLI, Codex CLI, Cursor CLI, Kiro CLI, Qwen Code, OpenCode) to every surface you use: desktop, browser, Telegram, Feishu, Discord, Slack, and WeChat. Not a wrapper — a runtime with full streaming, tool use, and thinking display.
+VibeAround is a unified runtime for AI coding agents. It connects real agents (Claude Code, Gemini CLI, Codex CLI, Cursor CLI, Kiro CLI, Qwen Code, OpenCode) to every surface you use: desktop, browser, Telegram, Feishu, Discord, Slack, WeChat, DingTalk, WeCom, and QQ. Not a wrapper — a runtime with full streaming, tool use, and thinking display.
 
 Start a task with Claude Code on your Mac, hand it over to Telegram on your phone, continue the conversation with full context, and hand it back when you're at your desk.
 
@@ -28,7 +28,7 @@ Start a task with Claude Code on your Mac, hand it over to Telegram on your phon
 - **Session handover** — hand off a coding session from any agent to any IM channel and continue on your phone
 - **Agent switching** — `/switch claude`, `/switch codex`, `/switch cursor` mid-conversation from any channel
 - **Web dashboard** — terminals, tmux, and agent chat at `localhost:12358`
-- **IM channels** — Telegram, Feishu, Discord, Slack, WeChat — each a standalone plugin
+- **IM channels** — Telegram, Feishu, Discord, Slack, WeChat, DingTalk, WeCom, QQ Bot — each a standalone plugin
 - **Desktop app** — onboarding with install progress, service monitoring, workspace management, system tray
 - **Multi-workspace** — manage project folders, set defaults, switch contexts
 - **Tunnel access** — expose your dashboard via Cloudflare Tunnel, Ngrok, or Localtunnel
@@ -58,6 +58,9 @@ Each channel is a standalone Node.js plugin built with [@vibearound/plugin-chann
 | **Discord** | Bot token | Yes | Yes | Yes | `/command` | Working |
 | **Slack** | Bot + App token | Yes | Yes | Yes | `/va`, `/vibearound` | Working |
 | **WeChat** | QR code login | Yes | No | No | `/command` | Working |
+| **DingTalk** | AppKey + Secret | Yes | No | No | `/command` | Working |
+| **WeCom** (企业微信) | Bot ID + Secret | Yes | No | Yes (markdown) | `/command` | Working |
+| **QQ Bot** (QQ频道) | App ID + Token | Yes | No | No | `/command` | Working |
 
 ## Commands
 
@@ -214,8 +217,6 @@ VibeAround is actively evolving and usable for daily work.
 |---|---|
 | LINE | In development |
 | Microsoft Teams | In development |
-| DingTalk | Planned |
-| QQ | Planned |
 
 ### Workspace management
 
