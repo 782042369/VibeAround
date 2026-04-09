@@ -36,6 +36,8 @@ A Tauri-packaged desktop app walks you through setup with a one-click wizard. Ea
 - **Agent switching** — `/switch claude`, `/switch codex`, `/switch cursor` mid-conversation from any channel
 - **IM channels** — Telegram, Feishu, Discord, Slack, WeChat, DingTalk, WeCom, QQ Bot — each a standalone plugin
 - **Native IM experience** — Feishu interactive cards, Slack Block Kit, Discord embeds, WeCom markdown streaming — each channel uses the richest native formatting it supports
+- **Skills + MCP auto-integration** — on every startup VibeAround syncs its skill set and an MCP server endpoint into each enabled coding agent (Claude Code, Codex, Gemini, Cursor, Kiro, Qwen) so they discover VibeAround as a tool with zero manual config
+- **Loopback bearer-token auth** — daemon HTTP, WebSocket, and MCP endpoints are gated by a session token at `~/.vibearound/auth.json` (0600, rotated on every daemon start)
 - **Web terminal** — full PTY-based terminal in the browser with tmux integration, run shell sessions alongside agent chat
 - **Web dashboard** — terminals, tmux, and agent chat at `localhost:12358`
 - **Desktop app** — onboarding with install progress, service monitoring, workspace management, system tray
@@ -66,10 +68,10 @@ Each channel is a standalone Node.js plugin built with [@vibearound/plugin-chann
 | **Feishu / Lark** | App credentials | Yes | Yes | Yes (cards) | `/command` | Working |
 | **Discord** | Bot token | Yes | Yes | Yes | `/command` | Working |
 | **Slack** | Bot + App token | Yes | Yes | Yes | `/va`, `/vibearound` | Working |
-| **WeChat** | QR code login | Yes | No | No | `/command` | Working |
-| **DingTalk** | AppKey + Secret | Yes | No | No | `/command` | Working |
-| **WeCom** (企业微信) | Bot ID + Secret | Yes | No | Yes (markdown) | `/command` | Working |
-| **QQ Bot** (QQ频道) | App ID + Token | Yes | No | No | `/command` | Working |
+| **WeChat** | QR code login | Yes | Yes | No | `/command` | Working |
+| **DingTalk** | AppKey + Secret | Yes | Yes | Yes (markdown) | `/command` | Working |
+| **WeCom** (企业微信) | Bot ID + Secret | Yes | Yes | Yes (markdown) | `/command` | Working |
+| **QQ Bot** (QQ频道) | App ID + Token | Yes | Yes | No | `/command` | Working |
 
 ## Commands
 
@@ -226,9 +228,9 @@ VibeAround is actively evolving and usable for daily work.
 
 | Channel | Status |
 |---|---|
-| WhatsApp | In development |
-| LINE | In development |
-| Microsoft Teams | In development |
+| WhatsApp | Planned |
+| LINE | Planned |
+| Microsoft Teams | Planned |
 
 ### Live preview
 
