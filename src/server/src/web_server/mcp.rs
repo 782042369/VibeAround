@@ -110,7 +110,7 @@ async fn mcp_tools_call(
     match tool_name {
         "prepare_handover" => mcp_prepare_handover(id, arguments).await,
         "register_workspace" => mcp_register_workspace(id, arguments).await,
-        "preview_start" => mcp_preview_start(id, arguments, state).await,
+        "preview" => mcp_preview_start(id, arguments, state).await,
         "md_preview" => mcp_md_preview(id, arguments, state).await,
         "dispatch_task" => mcp_dispatch_task(id, arguments, state).await,
         _ => jsonrpc_err(id, -32602, &format!("Unknown tool: {}", tool_name)),

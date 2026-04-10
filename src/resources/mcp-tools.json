@@ -40,7 +40,7 @@
     }
   },
   {
-    "name": "preview_start",
+    "name": "preview",
     "description": "Start a live preview for a running local server. Returns a shareable URL that displays the app in an iframe wrapper. The URL expires in 5 minutes.",
     "inputSchema": {
       "type": "object",

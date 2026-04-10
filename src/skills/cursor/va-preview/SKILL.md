@@ -14,6 +14,8 @@ After you finish building a web application, HTML page, or any browsable artifac
 - The user asked to "show me", "preview", or "let me see it"
 - Only when the VibeAround MCP server is connected
 
+**Proactive behavior**: After starting a dev server or creating a web artifact, proactively ask the user if they'd like a preview link (e.g. "Want me to generate a preview link so you can see it on your phone?"). If the user confirms, call `preview`. Do NOT call the tool without asking first.
+
 ## Prerequisites
 
 The VibeAround MCP server must be connected (server name: `vibearound`). If not available, tell the user to start the VibeAround desktop app.
@@ -27,10 +29,10 @@ Before calling preview, make sure:
 - The server is actually listening (wait for "Listening on..." or similar in the output)
 - Use `--host 0.0.0.0` when available for broader compatibility
 
-### 2. Call preview_start
+### 2. Call preview
 
 ```
-Tool: preview_start
+Tool: preview
 Server: vibearound
 Arguments:
   port: <the port your server is running on>

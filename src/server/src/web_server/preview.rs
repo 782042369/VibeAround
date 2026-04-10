@@ -33,12 +33,21 @@ pub async fn wrapper_handler(
     let entry = common::preview_entries::lookup(&slug)
         .ok_or_else(|| (StatusCode::NOT_FOUND, "Preview not found or expired.".to_string()))?;
 
+    let port = match &entry.kind {
+        PreviewKind::Server { port } => *port,
+        PreviewKind::File { .. } => {
+            return Err((StatusCode::BAD_REQUEST, "This preview serves a file, not a server.".to_string()));
+        }
+    };
+
     let remaining_ms = remaining_millis(&entry);
     let title = escape_html(&entry.title);
+    let subtitle = format!(":{}", port);
     let proxy_src = format!("/preview/{}/proxy/", slug);
 
     let toolbar = toolbar_and_timer(
         &title,
+        &subtitle,
         remaining_ms,
         r#"<button onclick="document.querySelector('iframe').src=document.querySelector('iframe').src">Refresh</button>"#,
     );
@@ -182,6 +191,17 @@ pub async fn md_preview_handler(
     let remaining_ms = remaining_millis(&entry);
     let title = escape_html(&entry.title);
 
+    // Build subtitle: workspace_name / relative_path (or just filename)
+    let ws_name = entry.workspace
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    let subtitle = if let Ok(rel) = file_path.strip_prefix(&entry.workspace) {
+        format!("{} / {}", escape_html(ws_name), escape_html(&rel.display().to_string()))
+    } else {
+        escape_html(ws_name).to_string()
+    };
+
     // Escape the markdown for embedding in a JS template literal.
     let escaped_md = content
         .replace('\\', "\\\\")
@@ -189,7 +209,7 @@ pub async fn md_preview_handler(
         .replace("${", "\\${")
         .replace("</script>", "<\\/script>");
 
-    let toolbar = toolbar_and_timer(&title, remaining_ms, "");
+    let toolbar = toolbar_and_timer(&title, &subtitle, remaining_ms, "");
     let html = format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -286,10 +306,16 @@ fn html_response(html: String) -> Response {
 }
 
 /// Toolbar HTML + countdown timer script.
-fn toolbar_and_timer(title: &str, remaining_ms: u128, extra_buttons: &str) -> String {
+fn toolbar_and_timer(title: &str, subtitle: &str, remaining_ms: u128, extra_buttons: &str) -> String {
+    let subtitle_html = if subtitle.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<span class="subtitle">{}</span>"#, subtitle)
+    };
     format!(
         r#"<div class="toolbar">
   <span class="title">{title}</span>
+  {subtitle_html}
   <span class="badge" id="timer">5:00</span>
   <span class="spacer"></span>
   {extra_buttons}
@@ -312,6 +338,7 @@ fn toolbar_and_timer(title: &str, remaining_ms: u128, extra_buttons: &str) -> St
 }})();
 </script>"#,
         title = title,
+        subtitle_html = subtitle_html,
         remaining_ms = remaining_ms,
         extra_buttons = extra_buttons,
     )
@@ -338,6 +365,13 @@ const TOOLBAR_CSS: &str = r#"
   .toolbar .title {
     font-weight: 600;
     color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar .subtitle {
+    color: #999;
+    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

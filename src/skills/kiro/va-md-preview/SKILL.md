@@ -14,6 +14,8 @@ After you create or update a markdown document, generate a styled preview so the
 - The user asks to "show me the doc", "preview the README", or "let me see it"
 - Only when the VibeAround MCP server is connected
 
+**Proactive behavior**: After creating or updating any markdown file, proactively ask the user if they'd like to preview it (e.g. "Want me to generate a preview link so you can see it?"). If the user confirms, call `md_preview`. Do NOT call the tool without asking first.
+
 ## Prerequisites
 
 The VibeAround MCP server must be connected (server name: `vibearound`). If not available, tell the user to start the VibeAround desktop app.
