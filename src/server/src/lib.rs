@@ -205,9 +205,10 @@ impl ServerDaemon {
         let web_channel_hub = Arc::clone(&channel_hub);
         let web_channel_manager = Arc::clone(&web_channel);
         let web_auth_token = Arc::clone(&self.auth_token);
+        let daemon_port = self.port;
         let web_handle = tokio::spawn(async move {
             run_web_server(
-                common::config::DEFAULT_PORT,
+                daemon_port,
                 dist_path,
                 web_services,
                 web_channel_hub,
