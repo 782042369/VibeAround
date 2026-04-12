@@ -310,7 +310,9 @@ enum SlashAction {
     SwitchProfile(String),
     /// /close — close route
     Close,
-    /// /help or /commands — list available agent commands
+    /// /help or /commands — show system command menu
+    ShowCommandMenu,
+    /// /agent (no args) — list available agent commands
     ListAgentCommands,
     /// /pickup <agent_kind> <session_id> [cwd] — import a session from a coding agent (Direction 1)
     Pickup { agent_kind: String, session_id: String, cwd: Option<String> },
@@ -355,7 +357,7 @@ fn parse_slash_command(text: &str) -> Option<SlashAction> {
         if let Some(rest) = trimmed.strip_prefix(prefix) {
             let rest = rest.trim();
             if rest.is_empty() {
-                return Some(SlashAction::ListAgentCommands);
+                return Some(SlashAction::ShowCommandMenu);
             }
             let reparsed = if rest.starts_with('/') {
                 rest.to_string()
@@ -366,7 +368,7 @@ fn parse_slash_command(text: &str) -> Option<SlashAction> {
         }
     }
     if trimmed == "/va" || trimmed == "/vibearound" {
-        return Some(SlashAction::ListAgentCommands);
+        return Some(SlashAction::ShowCommandMenu);
     }
 
     // /agent <rest> — passthrough to agent CLI as a slash command.
@@ -386,7 +388,7 @@ fn parse_slash_command(text: &str) -> Option<SlashAction> {
         }
     }
     if trimmed == "/agent" {
-        return Some(SlashAction::AgentPassthrough("/agent".to_string()));
+        return Some(SlashAction::ListAgentCommands);
     }
 
     let parts: Vec<&str> = trimmed.splitn(2, ' ').collect();
@@ -404,7 +406,7 @@ fn parse_slash_command(text: &str) -> Option<SlashAction> {
             _ => Some(SlashAction::Unknown(trimmed.to_string())),
         },
         "/close" => Some(SlashAction::Close),
-        "/help" | "/commands" | "/list_agent_commands" => Some(SlashAction::ListAgentCommands),
+        "/help" | "/commands" => Some(SlashAction::ShowCommandMenu),
         "/pickup" => {
             // /pickup <CODE>  — short code (looked up server-side)
             // /pickup <agent_kind> <session_id> [cwd]  — legacy full command
@@ -559,14 +561,24 @@ pub(crate) async fn handle_prompt(
                 send_system_text(plugin_host, &route, "Conversation closed.").await;
                 return Ok(acp::PromptResponse::new(acp::StopReason::EndTurn));
             }
-            SlashAction::ListAgentCommands => {
-                let agent_commands = acp_hub.list_agent_commands(&route).await;
+            SlashAction::ShowCommandMenu => {
                 let system_commands = serde_json::to_value(&crate::resources::COMMANDS.system_commands)
                     .unwrap_or(serde_json::json!([]));
                 plugin_host
                     .send_output(ChannelOutput::CommandMenu {
                         route: route.clone(),
                         system_commands,
+                        agent_commands: serde_json::json!([]),
+                    })
+                    .await;
+                return Ok(acp::PromptResponse::new(acp::StopReason::EndTurn));
+            }
+            SlashAction::ListAgentCommands => {
+                let agent_commands = acp_hub.list_agent_commands(&route).await;
+                plugin_host
+                    .send_output(ChannelOutput::CommandMenu {
+                        route: route.clone(),
+                        system_commands: serde_json::json!([]),
                         agent_commands,
                     })
                     .await;
