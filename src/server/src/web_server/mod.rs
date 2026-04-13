@@ -168,7 +168,7 @@ pub async fn run_web_server(
             require_auth,
         ));
 
-    // --- Open routes: the SPA shell, static assets, and live previews. ------
+    // --- Open routes: SPA shell, static assets, and preview routes. ---------
     //
     // The SPA shell + static assets are intentionally un-authed so the initial
     // page load can boot and read the `?token=` parameter from its own URL.
@@ -176,23 +176,22 @@ pub async fn run_web_server(
     // Preview routes are also un-authed — the 8-char slug itself acts as a
     // short-lived authentication token (5-min TTL, cryptographically random).
     let public = Router::new()
-        .route("/preview/{slug}", get(preview::wrapper_handler))
-        .route("/preview/{slug}/proxy/", get(preview::proxy_root_handler))
-        .route("/preview/{slug}/proxy/{*path}", get(preview::proxy_handler))
+        // Preview iframe pages: set cookie + render iframe with src="/".
+        // /u = owner, /s = share — same handler, permissions differ later.
+        .route("/preview/u/{slug}", get(preview::iframe_preview_handler))
+        .route("/preview/s/{slug}", get(preview::iframe_preview_handler))
         .route("/md-preview/{slug}", get(preview::md_preview_handler))
         .nest_service("/assets", ServeDir::new(assets_dir))
         .fallback(any(spa_fallback_handler));
 
-    // All dashboard routes live under `/_va_/` so the root `/` namespace
-    // stays free for the cookie-based dev-server preview proxy.
+    // ALL VibeAround routes live under `/_va_/` — the root `/` namespace is
+    // reserved exclusively for the cookie-based dev-server preview proxy.
     let dashboard = Router::new().merge(protected).merge(public);
 
     let app = Router::new()
         .nest("/_va_", dashboard)
-        // Bare `/` with no preview cookie → redirect to the dashboard.
-        .fallback(|| async {
-            axum::response::Redirect::permanent("/_va_/")
-        })
+        // Root fallback: cookie → proxy to dev server, else → /_va_/.
+        .fallback(any(preview::cookie_proxy_fallback))
         .with_state(state)
         .layer(build_cors_layer(port));
 

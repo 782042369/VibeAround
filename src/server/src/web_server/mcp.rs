@@ -285,13 +285,15 @@ async fn mcp_preview_start(
 
     let title = derive_title(arguments, &cwd_path);
     let slug = common::preview_entries::store_server(port, cwd_path, title);
-    let preview_url = build_preview_url(state, "preview", &slug);
+    let owner_url = build_preview_url(state, "preview/u", &slug);
+    let share_url = build_preview_url(state, "preview/s", &slug);
 
     mcp_text(id, &format!(
         "Preview ready.\n\n\
-         URL: {}\n\n\
-         The link expires in 5 minutes. Share it with the user so they can see the live preview.",
-        preview_url
+         Owner preview: `{}`\n\
+         Share preview: `{}`\n\n\
+         The links expire in 5 minutes. Share either with the user to see the live preview.",
+        owner_url, share_url
     ))
 }
 
@@ -399,12 +401,13 @@ fn derive_title(arguments: &serde_json::Value, cwd_path: &std::path::Path) -> St
 }
 
 /// Build a full preview URL from the tunnel (or localhost fallback).
+/// All preview routes live under `/_va_/` to avoid conflicts with dev servers.
 fn build_preview_url(state: &AppState, route: &str, slug: &str) -> String {
     let base = state
         .services
         .get_tunnel_url()
         .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.services.port));
-    format!("{}/{}/{}", base.trim_end_matches('/'), route, slug)
+    format!("{}/_va_/{}/{}", base.trim_end_matches('/'), route, slug)
 }
 
 // ---------------------------------------------------------------------------

@@ -88,7 +88,8 @@ pub fn setup<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Error>>
             "open_tunnel" => {
                 if let Some(state) = app.try_state::<AppServiceManager>() {
                     if let Some(url) = state.0.get_tunnel_url() {
-                        let _ = open::that(tunnel_url_with_token(&url));
+                        let dashboard_url = format!("{}/_va_", url.trim_end_matches('/'));
+                        let _ = open::that(tunnel_url_with_token(&dashboard_url));
                     }
                 }
             }
