@@ -108,12 +108,44 @@ async fn mcp_tools_call(
     };
 
     match tool_name {
+        "get_session_id" => mcp_get_session_id(id, arguments, state).await,
         "prepare_handover" => mcp_prepare_handover(id, arguments).await,
         "register_workspace" => mcp_register_workspace(id, arguments).await,
         "preview" => mcp_preview_start(id, arguments, state).await,
         "md_preview" => mcp_md_preview(id, arguments, state).await,
-        // dispatch_task: removed — stub was misleading MCP clients.
         _ => jsonrpc_err(id, -32602, &format!("Unknown tool: {}", tool_name)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// get_session_id — resolve the current ACP session ID from route info
+// ---------------------------------------------------------------------------
+
+async fn mcp_get_session_id(
+    id: Option<serde_json::Value>,
+    arguments: &serde_json::Value,
+    state: &AppState,
+) -> Json<serde_json::Value> {
+    let channel_kind = match arguments.get("channel_kind").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => return jsonrpc_err(id, -32602, "Missing required argument: channel_kind"),
+    };
+    let chat_id = match arguments.get("chat_id").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => return jsonrpc_err(id, -32602, "Missing required argument: chat_id"),
+    };
+
+    let route = common::acp::routing::RouteKey::new(channel_kind, chat_id);
+    let acp_hub = state.channel_hub.acp_hub();
+
+    match acp_hub.snapshot(&route).await {
+        Some(snap) if snap.session_id.is_some() => {
+            let sid = snap.session_id.unwrap();
+            mcp_text(id, &sid)
+        }
+        _ => {
+            mcp_error_text(id, "No active session found for this route. The agent session may not have started yet.")
+        }
     }
 }
 

@@ -355,6 +355,7 @@ impl ACPPod {
 
         let ready = match crate::agent_factory::spawn_bridge(
             &self.route.channel_kind,
+            &self.route.chat_id,
             &cli_kind,
             &workspace,
             resume_session_id.clone(),
