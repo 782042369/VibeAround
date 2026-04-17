@@ -33,7 +33,8 @@ use agent_client_protocol as acp;
 
 use super::manifest::ChannelPluginManifest;
 use super::plugin_host::PluginHost;
-use super::{handle_prompt, ChannelEnvelope, ChannelInput, ChannelOutput};
+use super::prompt::handle_prompt;
+use super::{ChannelEnvelope, ChannelInput, ChannelOutput};
 use crate::acp::routing::RouteKey;
 use crate::acp_hub::ACPHub;
 use crate::child_registry::{ChildKind, ChildRegistry};
@@ -220,6 +221,7 @@ async fn run_acp_plugin_bridge(
             // Forward ChannelOutput → ACP Client methods.
             // Spawn so it runs concurrently with handle_io below.
             let fwd_channel = channel_kind.clone();
+            let monitor_notify_host = Arc::clone(&fwd_plugin_host);
             let forwarder = tokio::task::spawn_local(async move {
                 eprintln!("[{}] output forwarder started", fwd_channel);
                 while let Some(output) = output_rx.recv().await {
@@ -232,10 +234,27 @@ async fn run_acp_plugin_bridge(
             // its stdin/stdout close, `handle_io` returns, and the LocalSet
             // exits — letting the block_on runtime drop, the std::thread
             // exit, and the bridge thread's resources release cleanly.
-            if let Err(error) = handle_io.await {
-                eprintln!("[{}] ACP plugin IO terminated: {}", channel_kind, error);
-            }
+            let exit_reason = match handle_io.await {
+                Err(error) => {
+                    eprintln!("[{}] ACP plugin IO terminated: {}", channel_kind, error);
+                    format!("io terminated: {}", error)
+                }
+                Ok(()) => {
+                    eprintln!("[{}] ACP plugin bridge exited cleanly", channel_kind);
+                    "bridge exited".to_string()
+                }
+            };
             forwarder.abort();
+
+            // Notify the monitor so it can transition the channel out of
+            // Running and schedule a respawn (unless the monitor observed a
+            // user Stop intent, in which case it transitions to Stopped
+            // instead). See `ChannelMonitor::mark_crashed`.
+            super::monitor::mark_crashed_weak(
+                &monitor_notify_host.monitor_weak(),
+                &channel_kind,
+                &exit_reason,
+            );
         })
         .await;
 }
@@ -522,6 +541,12 @@ impl acp::Agent for PluginAgentHandler {
         let params_obj = params.as_object().cloned().unwrap_or_default();
 
         match method.as_str() {
+            "va/heartbeat" => {
+                super::monitor::touch_weak(
+                    &self.plugin_host.monitor_weak(),
+                    &self.channel_kind,
+                );
+            }
             "va/callback" => {
                 // Accept both chatId (new) and channelId (legacy, "kind:chatId") for compat.
                 let chat_id = params_obj

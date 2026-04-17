@@ -9,13 +9,15 @@
 //! - `tunnel`: tunnel process (at most one entry)
 //! - `pty`: PTY sessions (reuses existing SessionContext)
 
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use serde::Serialize;
 use tokio::sync::broadcast;
 use tokio::task::AbortHandle;
+
+use crate::channel_manager::monitor::{ChannelMonitor, ChannelRunStatus};
 
 // parking_lot locks used throughout this module are fast, uncontended, and
 // cover very short critical sections. They are _blocking_ locks, so the
@@ -118,8 +120,15 @@ pub struct TunnelEntry {
 pub struct ServiceStatusManager {
     /// Runtime status store (event-driven, from ACPHub HubEvent stream).
     runtime_status: RwLock<Option<Arc<RuntimeStatusStore>>>,
-    /// Channel plugin status (keyed by channel kind).
+    /// Channel plugin status (keyed by channel kind). Legacy store — the
+    /// authoritative source once the monitor is installed is `channel_monitor`.
+    /// Kept as a no-op compat layer for the tiny window before the monitor is
+    /// registered.
     channels: DashMap<String, ChannelEntry>,
+    /// ChannelMonitor back-ref (Weak to avoid cycle with ChannelManager).
+    /// Set once at daemon boot via `set_channel_monitor`. When present,
+    /// `snapshot()` and `kill_service("channels", ...)` route through it.
+    channel_monitor: RwLock<Weak<ChannelMonitor>>,
     /// Tunnel status (at most one).
     tunnels: DashMap<String, TunnelEntry>,
     /// PTY sessions (reuses existing Registry).
@@ -148,6 +157,7 @@ impl ServiceStatusManager {
         Self {
             runtime_status: RwLock::new(None),
             channels: DashMap::new(),
+            channel_monitor: RwLock::new(Weak::new()),
             tunnels: DashMap::new(),
             pty: Arc::new(DashMap::new()),
             server_meta: ServerMeta {
@@ -157,6 +167,18 @@ impl ServiceStatusManager {
             port,
             change_tx,
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Channel monitor (set once at daemon boot)
+    // -----------------------------------------------------------------------
+
+    pub fn set_channel_monitor(&self, monitor: Weak<ChannelMonitor>) {
+        *self.channel_monitor.write() = monitor;
+    }
+
+    pub fn channel_monitor(&self) -> Option<Arc<ChannelMonitor>> {
+        self.channel_monitor.read().upgrade()
     }
 
     /// Clear all service entries. Called on daemon stop to prevent stale
@@ -243,6 +265,19 @@ impl ServiceStatusManager {
     pub fn kill_service(&self, category: &str, key: &str) -> bool {
         match category {
             "channels" => {
+                // Prefer the monitor: it distinguishes user-initiated stops
+                // from involuntary crashes. Spawn an async task because
+                // force_stop is async (needs to await runtime.shutdown).
+                if let Some(monitor) = self.channel_monitor() {
+                    let key = key.to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = monitor.force_stop(&key).await {
+                            eprintln!("[ServiceStatus] force_stop({}) failed: {}", key, e);
+                        }
+                    });
+                    self.notify_change();
+                    return true;
+                }
                 if let Some(entry) = self.channels.get(key) {
                     entry.meta.kill();
                     self.notify_change();
@@ -302,7 +337,56 @@ impl ServiceStatusManager {
                 }
             }).collect(),
             agents,
-            channels: self.channels.iter().map(|entry| {
+            channels: self.channel_snapshot(),
+            pty_session_count: pty_count,
+        }
+    }
+
+    /// Build the per-channel ServiceInfo list. Prefers the `ChannelMonitor`
+    /// when registered (rich status: running / spawning / crashed / stopped
+    /// with reason + crash_count + last_seen_age + restart_in_secs). Falls
+    /// back to the legacy `channels` DashMap for the narrow window before
+    /// the monitor is installed.
+    fn channel_snapshot(&self) -> Vec<ServiceInfo> {
+        if let Some(monitor) = self.channel_monitor() {
+            return monitor
+                .snapshot()
+                .into_iter()
+                .map(|s| {
+                    let mut extra = serde_json::Map::new();
+                    extra.insert("reason".into(), s.reason.into());
+                    extra.insert(
+                        "crash_count".into(),
+                        serde_json::Value::from(s.crash_count),
+                    );
+                    extra.insert(
+                        "last_seen_age_secs".into(),
+                        serde_json::Value::from(s.last_seen_age_secs),
+                    );
+                    extra.insert(
+                        "restart_in_secs".into(),
+                        serde_json::Value::from(s.restart_in_secs),
+                    );
+                    let status_str = match s.status {
+                        ChannelRunStatus::Running => "running".to_string(),
+                        ChannelRunStatus::NotStarted => "not_started".to_string(),
+                        ChannelRunStatus::Spawning => "spawning".to_string(),
+                        ChannelRunStatus::Stopped => "stopped".to_string(),
+                        ChannelRunStatus::Crashed => "crashed".to_string(),
+                    };
+                    ServiceInfo {
+                        id: s.kind.clone(),
+                        name: capitalize(&s.kind),
+                        status: status_str,
+                        uptime_secs: s.last_seen_age_secs, // best-effort
+                        extra,
+                    }
+                })
+                .collect();
+        }
+        self.channels
+            .iter()
+            .map(|entry| {
                 let key = entry.key().clone();
                 ServiceInfo {
                     id: key.clone(),
@@ -311,9 +395,8 @@ impl ServiceStatusManager {
                     uptime_secs: entry.meta.uptime_secs(),
                     extra: serde_json::Map::new(),
                 }
-            }).collect(),
-            pty_session_count: pty_count,
-        }
+            })
+            .collect()
     }
 }
 
