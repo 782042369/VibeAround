@@ -57,6 +57,7 @@ demo*/
 .specstory/
 .docs/
 .cursorindexingignore
+.superpowers/
 
 # Plugins (managed separately, not committed to main repo)
 src/plugins/
