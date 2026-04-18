@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use anyhow::Context;
 
-pub mod agents;
 pub mod provider;
 pub mod runtime;
 
