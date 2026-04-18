@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@va/generated": path.resolve(__dirname, "../shared/client-ts/generated"),
+      "@va/client": path.resolve(__dirname, "../shared/client-ts/src/index.ts"),
     },
   },
   server: {

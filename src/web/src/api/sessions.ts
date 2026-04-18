@@ -2,14 +2,7 @@
  * Sessions API: list, create, delete. Base URL follows current page (works with tunnel).
  */
 
-/** All dashboard routes live under /va/ to keep the root namespace free for
- *  cookie-based dev-server preview proxying. */
-const VA_PREFIX = "/va";
-
-function getBaseUrl(): string {
-  if (typeof window === "undefined") return `http://127.0.0.1:12358${VA_PREFIX}`;
-  return `${window.location.origin}${VA_PREFIX}`;
-}
+import { browserBaseUrl } from "@va/client";
 
 export interface SessionListItem {
   session_id: string;
@@ -45,13 +38,13 @@ export interface TmuxSessionsResponse {
 }
 
 export async function getSessions(): Promise<SessionListItem[]> {
-  const res = await fetch(`${getBaseUrl()}/api/sessions`);
+  const res = await fetch(`${browserBaseUrl()}/api/sessions`);
   if (!res.ok) throw new Error(`GET /api/sessions: ${res.status}`);
   return res.json();
 }
 
 export async function createSession(body: CreateSessionBody): Promise<CreateSessionResponse> {
-  const res = await fetch(`${getBaseUrl()}/api/sessions`, {
+  const res = await fetch(`${browserBaseUrl()}/api/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -64,12 +57,12 @@ export async function createSession(body: CreateSessionBody): Promise<CreateSess
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  const res = await fetch(`${getBaseUrl()}/api/sessions/${sessionId}`, { method: "DELETE" });
+  const res = await fetch(`${browserBaseUrl()}/api/sessions/${sessionId}`, { method: "DELETE" });
   if (!res.ok && res.status !== 204) throw new Error(`DELETE /api/sessions: ${res.status}`);
 }
 
 export async function getTmuxSessions(): Promise<TmuxSessionsResponse> {
-  const res = await fetch(`${getBaseUrl()}/api/tmux/sessions`);
+  const res = await fetch(`${browserBaseUrl()}/api/tmux/sessions`);
   if (!res.ok) throw new Error(`GET /api/tmux/sessions: ${res.status}`);
   return res.json();
 }
