@@ -30,22 +30,24 @@
 /// Managers that expose a list of entries and notify when the list
 /// changes. See module docs for the intended usage pattern.
 pub trait StateSource {
-    /// Snapshot entry type. Usually `#[derive(Clone, Serialize)]` so
-    /// HTTP shells can turn it into JSON, but this trait does not
-    /// require `Serialize` — TUI / CLI shells may read `Entry`
-    /// without serializing.
+    /// Entry type — typically `Arc<SomeRuntimeObject>` for long-lived
+    /// entities whose fields are read live (pods, PTY sessions, tunnels)
+    /// or a computed value struct for derived views (channel status with
+    /// relative timestamps).
     type Entry;
 
-    /// Current state. Must be fast — called at polling cadence.
-    ///
-    /// Returns a fresh `Vec`; callers are free to keep, filter, or
-    /// transform the result.
-    fn list(&self) -> Vec<Self::Entry>;
+    /// Current state. `async` because most managers hold their entries
+    /// behind `tokio::sync::Mutex` / `RwLock` / `ArcSwap`; implementers
+    /// that don't need to await (e.g. the channel monitor which reads
+    /// from sync atomics) just return immediately — the runtime cost is
+    /// nil.
+    async fn list(&self) -> Vec<Self::Entry>;
 
     /// Subscribe to change notifications. Each `()` means "call
     /// `list()` again to see the new state". No payload: the trait
     /// refuses to accrete a second schema.
     ///
+    /// Subscription itself is a cheap atomic op, so this stays sync.
     /// Lagged receivers should not treat lag as an error — the next
     /// `list()` is always authoritative. See the `tokio::sync::broadcast`
     /// docs for `RecvError::Lagged` handling.

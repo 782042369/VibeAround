@@ -528,7 +528,7 @@ impl ChannelMonitor {
 impl crate::state::StateSource for ChannelMonitor {
     type Entry = ChannelStatusSnapshot;
 
-    fn list(&self) -> Vec<Self::Entry> {
+    async fn list(&self) -> Vec<Self::Entry> {
         self.snapshot()
     }
 
