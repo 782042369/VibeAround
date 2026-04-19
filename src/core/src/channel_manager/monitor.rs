@@ -525,6 +525,18 @@ impl ChannelMonitor {
     }
 }
 
+impl crate::state::StateSource for ChannelMonitor {
+    type Entry = ChannelStatusSnapshot;
+
+    fn list(&self) -> Vec<Self::Entry> {
+        self.snapshot()
+    }
+
+    fn subscribe_changes(&self) -> tokio::sync::broadcast::Receiver<()> {
+        self.change_tx.subscribe()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Public API from PluginHost weak-ref
 // ---------------------------------------------------------------------------

@@ -17,5 +17,6 @@ pub mod resources;
 pub mod runtime_status;
 pub mod service;
 pub mod session_manager;
+pub mod state;
 pub mod tunnels;
 pub mod workspace;
