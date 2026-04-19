@@ -33,7 +33,7 @@ use super::event::SystemEvent;
 use bridge_handler::SessionBridgeHandler;
 use media::relocate_cached_media;
 
-pub use snapshot::PodSnapshot;
+pub use snapshot::{PodSnapshot, PodState};
 
 // ---------------------------------------------------------------------------
 // ACPPod
@@ -285,19 +285,50 @@ impl ACPPod {
         self.agent_commands.lock().await.clone()
     }
 
-    /// Get a serializable snapshot of pod state.
-    pub async fn snapshot(&self) -> PodSnapshot {
-        PodSnapshot {
-            route: self.route.clone(),
-            bot_identity: self.bot_identity.clone(),
-            session_id: self.session_id.lock().await.clone(),
+    /// Read the pod's mutable runtime fields as a consistent-enough
+    /// snapshot. Immutable fields (`route`, `started_at`,
+    /// `bot_identity`) are exposed directly on the pod via their
+    /// own getters (`route()`, `started_at()`); this method only
+    /// covers the fields that can change after construction.
+    ///
+    /// Internally takes several short mutex locks in sequence; since
+    /// mutations of pod state typically batch (e.g. `ensure_bridge`
+    /// updates cli_kind/profile/initialize/failed together under the
+    /// same async call chain), callers at dashboard polling cadence
+    /// see a coherent view in practice.
+    pub async fn state(&self) -> PodState {
+        PodState {
             cli_kind: self.cli_kind.lock().await.clone(),
             profile: self.profile.lock().await.clone(),
+            session_id: self.session_id.lock().await.clone(),
             workspace: self.workspace.lock().await.clone(),
             busy: *self.busy.lock().await,
             failed: self.failed.lock().await.clone(),
-            started_at: self.started_at,
             initialize: self.initialize.lock().await.clone(),
+        }
+    }
+
+    /// Immutable fields exposed as direct getters. `route` is already a
+    /// `pub` field and callers should read it directly.
+    pub fn started_at(&self) -> u64 { self.started_at }
+    pub fn bot_identity(&self) -> Option<&str> { self.bot_identity.as_deref() }
+
+    /// Get a serializable snapshot of pod state. Kept for the legacy
+    /// `SystemEvent::SnapshotChanged` event payload consumed by
+    /// `runtime_status` — both will be removed in the next commit.
+    pub async fn snapshot(&self) -> PodSnapshot {
+        let st = self.state().await;
+        PodSnapshot {
+            route: self.route.clone(),
+            bot_identity: self.bot_identity.clone(),
+            session_id: st.session_id,
+            cli_kind: st.cli_kind,
+            profile: st.profile,
+            workspace: st.workspace,
+            busy: st.busy,
+            failed: st.failed,
+            started_at: self.started_at,
+            initialize: st.initialize,
         }
     }
 

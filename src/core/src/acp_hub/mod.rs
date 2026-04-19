@@ -39,6 +39,17 @@ impl ACPHub {
         self.event_tx.subscribe()
     }
 
+    /// List every currently-held pod. Consumers can read live state from
+    /// each via `pod.state().await`, plus the immutable getters on the
+    /// pod itself (`route`, `started_at()`, `bot_identity()`).
+    ///
+    /// Returns `Arc<ACPPod>` handles rather than cloned snapshots so
+    /// readers can inspect individual pods without forcing a
+    /// whole-field copy up front.
+    pub fn list(&self) -> Vec<Arc<ACPPod>> {
+        self.pods.iter().map(|e| Arc::clone(e.value())).collect()
+    }
+
     // -----------------------------------------------------------------------
     // Conversation lifecycle — direct methods, no command enums
     // -----------------------------------------------------------------------
