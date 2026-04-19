@@ -278,19 +278,17 @@ impl ChannelMonitor {
             TransitionIntent::Stop => {
                 state.set_status(ChannelRunStatus::Stopped);
                 state.restart_at.store(0, Ordering::Relaxed);
-                eprintln!(
-                    "[monitor] {} → Stopped (user stop): {}",
-                    state.kind, reason
-                );
+                tracing::info!(channel = %state.kind, reason = %reason, "channel → Stopped (user stop)");
             }
             TransitionIntent::Restart => {
                 state.set_status(ChannelRunStatus::Crashed);
                 state
                     .restart_at
                     .store(unix_now_secs(), Ordering::Relaxed);
-                eprintln!(
-                    "[monitor] {} → Crashed (user restart, respawning immediately): {}",
-                    state.kind, reason
+                tracing::info!(
+                    channel = %state.kind,
+                    reason = %reason,
+                    "channel → Crashed (user restart, respawning immediately)"
                 );
             }
             TransitionIntent::None => {
@@ -299,9 +297,11 @@ impl ChannelMonitor {
                 state
                     .restart_at
                     .store(unix_now_secs() + RESTART_BACKOFF_SECS, Ordering::Relaxed);
-                eprintln!(
-                    "[monitor] {} → Crashed (auto-respawn in {}s): {}",
-                    state.kind, RESTART_BACKOFF_SECS, reason
+                tracing::warn!(
+                    channel = %state.kind,
+                    reason = %reason,
+                    respawn_in_secs = RESTART_BACKOFF_SECS,
+                    "channel → Crashed (auto-respawn)"
                 );
             }
         }
@@ -462,7 +462,7 @@ impl ChannelMonitor {
                 state
                     .last_seen_ts
                     .store(unix_now_secs(), Ordering::Relaxed);
-                eprintln!("[monitor] {} → Running", state.kind);
+                tracing::info!(channel = %state.kind, "channel → Running");
                 self.notify_change();
             }
             Err(e) => {
@@ -472,9 +472,11 @@ impl ChannelMonitor {
                     .restart_at
                     .store(unix_now_secs() + RESTART_BACKOFF_SECS, Ordering::Relaxed);
                 state.crash_count.fetch_add(1, Ordering::Relaxed);
-                eprintln!(
-                    "[monitor] {} → Crashed (spawn error, retry in {}s): {}",
-                    state.kind, RESTART_BACKOFF_SECS, e
+                tracing::error!(
+                    channel = %state.kind,
+                    error = %e,
+                    retry_in_secs = RESTART_BACKOFF_SECS,
+                    "channel → Crashed (spawn error)"
                 );
                 self.notify_change();
             }
@@ -570,12 +572,12 @@ pub async fn run_monitor_loop(
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     ticker.tick().await; // consume the first immediate tick
 
-    eprintln!("[monitor] run_monitor_loop started (tick every {}s)", TICK_INTERVAL.as_secs());
+    tracing::info!(tick_secs = TICK_INTERVAL.as_secs(), "channel monitor loop started");
     loop {
         tokio::select! {
             _ = ticker.tick() => monitor.tick().await,
             _ = shutdown_rx.recv() => {
-                eprintln!("[monitor] run_monitor_loop shutting down");
+                tracing::info!("channel monitor loop shutting down");
                 break;
             }
         }

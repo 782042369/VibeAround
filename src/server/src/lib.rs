@@ -130,9 +130,9 @@ impl ServerDaemon {
         // read it without a separate IPC channel. Overwrites any stale file
         // from a previous run — older tokens are invalidated immediately.
         if let Err(e) = auth::write_token_file(self.port, &self.auth_token) {
-            eprintln!(
-                "[VibeAround][daemon] Failed to write auth token file: {} (the dashboard will reject requests without it)",
-                e
+            tracing::warn!(
+                error = %e,
+                "failed to write auth token file — dashboard will reject requests without it"
             );
         }
 
@@ -189,7 +189,7 @@ impl ServerDaemon {
         let discovered_plugins = plugins::discover_channel_plugins();
         for name in cfg.channel_names() {
             let Some(plugin) = discovered_plugins.get(&name) else {
-                eprintln!("[VibeAround][daemon] no plugin found for channel '{}', skipping", name);
+                tracing::warn!(channel = %name, "no plugin found, skipping");
                 continue;
             };
             channel_hub.register_plugin(&name, plugin);
@@ -218,25 +218,25 @@ impl ServerDaemon {
 
         // 5. Tunnel (skip when provider is "none")
         let tunnel_provider = cfg.tunnel_provider;
-        eprintln!("[VibeAround][daemon] Tunnel ({})", tunnel_provider.as_str());
+        tracing::info!(provider = %tunnel_provider.as_str(), "tunnel configured");
         let tunnel_handle = if tunnel_provider.is_enabled() {
             let tunnel_manager = Arc::clone(&tunnels);
             let handle = tokio::spawn(async move {
                 match tunnels::start_web_tunnel_with_provider(tunnel_provider, &cfg).await {
                     Ok((guard, url)) => {
-                        eprintln!("[VibeAround][daemon] Tunnel URL: {}", url);
+                        tracing::info!(url = %url, "tunnel connected");
                         tunnel_manager.set_url(tunnel_provider.as_str(), &url);
                         guard.wait().await;
                     }
                     Err(e) => {
-                        eprintln!("[VibeAround][daemon] Tunnel failed: {}", e);
+                        tracing::error!(error = %e, "tunnel failed");
                     }
                 }
             });
             tunnels.register(tunnel_provider, handle.abort_handle());
             handle
         } else {
-            eprintln!("[VibeAround][daemon] Tunnel disabled (none)");
+            tracing::debug!("tunnel disabled (provider=none)");
             tokio::spawn(async { /* no-op: keep the JoinHandle type consistent */ })
         };
 
@@ -258,14 +258,14 @@ impl ServerDaemon {
         tokio::select! {
             result = &mut running.web_handle => {
                 match result {
-                    Ok(Ok(())) => eprintln!("[VibeAround][daemon] web server stopped"),
-                    Ok(Err(e)) => eprintln!("[VibeAround][daemon] web server error: {}", e),
-                    Err(e) => eprintln!("[VibeAround][daemon] web server panic: {}", e),
+                    Ok(Ok(())) => tracing::info!("web server stopped"),
+                    Ok(Err(e)) => tracing::error!(error = %e, "web server error"),
+                    Err(e) => tracing::error!(error = %e, "web server panic"),
                 }
                 running.tunnel_handle.abort();
             }
             _ = tokio::signal::ctrl_c() => {
-                eprintln!("\n[VibeAround][daemon] shutting down...");
+                tracing::info!("shutting down");
                 running.stop().await;
             }
         }

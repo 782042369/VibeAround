@@ -9,6 +9,7 @@ pub mod channel_manager;
 pub mod child_registry;
 pub mod config;
 pub mod env;
+pub mod logging;
 pub mod pickup_codes;
 pub mod preview_entries;
 pub mod plugins;

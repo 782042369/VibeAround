@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    common::logging::init();
     let daemon = server::ServerDaemon::new(common::config::DEFAULT_PORT);
     let dist_path = PathBuf::from("web").join("dist");
 

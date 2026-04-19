@@ -119,6 +119,8 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 fn main() {
+    common::logging::init();
+
     // Fast-path: if our port is already in use, exit immediately before
     // allocating Tauri resources. tauri_plugin_single_instance (below) is the
     // real guard, but this avoids a full Tauri init just to discover the duplicate.

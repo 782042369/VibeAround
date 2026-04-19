@@ -101,7 +101,7 @@ where
     let body = match serde_json::to_string(event) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[ws_chat] serialize failed: {}", e);
+            tracing::error!(error = %e, "ws_chat serialize failed");
             return Ok(());
         }
     };
