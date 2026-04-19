@@ -52,7 +52,7 @@ pub async fn spawn_bridge(
     )
     .await?;
 
-    eprintln!(
+    tracing::info!(
         "[agent_factory] spawned bridge: agent_id={} channel={}",
         agent_id, channel_kind
     );

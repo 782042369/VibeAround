@@ -185,7 +185,7 @@ async fn run_ws_loop<T, F, Fut>(
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    eprintln!("[VibeAround][{}] lagged by {}, sending fresh", label, n);
+                    tracing::info!("[VibeAround][{}] lagged by {}, sending fresh", label, n);
                     if send_current(&mut socket, &build).await.is_err() {
                         break;
                     }

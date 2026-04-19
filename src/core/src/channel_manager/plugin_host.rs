@@ -76,7 +76,7 @@ impl PluginHost {
 
     pub async fn send_output(&self, output: ChannelOutput) {
         let route = output.route_key().clone();
-        eprintln!(
+        tracing::info!(
             "[PluginHost] send_output route={} channel_kind={}",
             route, route.channel_kind
         );
@@ -96,7 +96,7 @@ impl PluginHost {
                 .iter()
                 .map(|e| format!("{:?}", e.key()))
                 .collect();
-            eprintln!(
+            tracing::info!(
                 "[ChannelManager] no plugin runtime for route {} (looking up channel_kind={:?}, known={:?})",
                 route, route.channel_kind, known
             );

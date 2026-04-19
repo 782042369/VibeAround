@@ -49,7 +49,7 @@ pub async fn start_web_tunnel(
             .trim_start_matches("https://")
             .trim_start_matches("http://")
     );
-    eprintln!("[cloudflare] Tunnel starting, public URL: {}", url);
+    tracing::info!("[cloudflare] Tunnel starting, public URL: {}", url);
 
     Ok((super::TunnelGuard::Process(child), url))
 }

@@ -60,11 +60,11 @@ pub(super) async fn run_acp_plugin_bridge(
             let fwd_channel = channel_kind.clone();
             let monitor_notify_host = Arc::clone(&fwd_plugin_host);
             let forwarder = tokio::task::spawn_local(async move {
-                eprintln!("[{}] output forwarder started", fwd_channel);
+                tracing::info!("[{}] output forwarder started", fwd_channel);
                 while let Some(output) = output_rx.recv().await {
                     forward_output_to_plugin(&conn, &fwd_channel, &fwd_plugin_host, output).await;
                 }
-                eprintln!("[{}] output forwarder ended", fwd_channel);
+                tracing::info!("[{}] output forwarder ended", fwd_channel);
             });
 
             // Drive ACP IO on this task. When the child plugin process dies
@@ -73,11 +73,11 @@ pub(super) async fn run_acp_plugin_bridge(
             // exit, and the bridge thread's resources release cleanly.
             let exit_reason = match handle_io.await {
                 Err(error) => {
-                    eprintln!("[{}] ACP plugin IO terminated: {}", channel_kind, error);
+                    tracing::info!("[{}] ACP plugin IO terminated: {}", channel_kind, error);
                     format!("io terminated: {}", error)
                 }
                 Ok(()) => {
-                    eprintln!("[{}] ACP plugin bridge exited cleanly", channel_kind);
+                    tracing::info!("[{}] ACP plugin bridge exited cleanly", channel_kind);
                     "bridge exited".to_string()
                 }
             };

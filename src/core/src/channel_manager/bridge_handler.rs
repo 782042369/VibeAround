@@ -61,7 +61,7 @@ impl BridgeClientHandler for ChannelBridgeHandler {
             .and_then(|v| v.as_str())
             .map(|s| s.chars().take(60).collect::<String>())
             .unwrap_or_default();
-        eprintln!(
+        tracing::info!(
             "[ChannelBridgeHandler] session_notification route={} session={} kind={} preview={:?}",
             self.route, args.session_id, update_kind, preview
         );
@@ -117,7 +117,7 @@ impl BridgeClientHandler for ChannelBridgeHandler {
             }
         };
 
-        eprintln!(
+        tracing::info!(
             "[ChannelBridgeHandler] request_permission forwarding route={} request_id={} options={}",
             self.route, request_id, forwarded.options.len()
         );
@@ -137,7 +137,7 @@ impl BridgeClientHandler for ChannelBridgeHandler {
             Ok(response) => Ok(response),
             Err(_) => {
                 self.plugin_host.pending_permissions.remove(&request_id);
-                eprintln!(
+                tracing::info!(
                     "[ChannelBridgeHandler] request_permission dropped (plugin gone?) route={} request_id={}",
                     self.route, request_id
                 );

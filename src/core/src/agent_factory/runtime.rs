@@ -118,7 +118,7 @@ impl AcpBridge {
     }
 
     pub async fn shutdown(&self) {
-        eprintln!("[{}-bridge] shutdown signaled", self.agent_id);
+        tracing::info!("[{}-bridge] shutdown signaled", self.agent_id);
         let _ = self.cancel_tx.send(true);
     }
 }
@@ -234,7 +234,7 @@ fn run_bridge_thread(
                         let _ = ready_tx.send(Ok(ready));
                         // Wait for cancellation signal
                         let _ = cancel_rx.wait_for(|v| *v).await;
-                        eprintln!("[{}-bridge] cancelled, exiting thread", cancel_label);
+                        tracing::info!("[{}-bridge] cancelled, exiting thread", cancel_label);
                     }
                     Err(e) => {
                         let _ = ready_tx.send(Err(e));
@@ -275,7 +275,7 @@ async fn init_bridge(
     let io_label = agent_id.clone();
     tokio::task::spawn_local(async move {
         if let Err(error) = handle_io.await {
-            eprintln!("[{}-bridge] ACP IO terminated: {}", io_label, error);
+            tracing::info!("[{}-bridge] ACP IO terminated: {}", io_label, error);
         }
     });
 
@@ -297,7 +297,7 @@ async fn init_bridge(
         {
             Ok(_) => Some(resume_session_id),
             Err(error) => {
-                eprintln!(
+                tracing::info!(
                     "[{}-bridge] failed to load session {}, bridge will start without session: {}",
                     agent_id, resume_session_id, error
                 );

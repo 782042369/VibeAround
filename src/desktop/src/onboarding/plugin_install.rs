@@ -64,7 +64,7 @@ pub(super) async fn npm_command(args: &[&str], cwd: &std::path::Path) -> std::io
     let mut node_args: Vec<String> = vec![npm_cli.to_string_lossy().to_string()];
     node_args.extend(args.iter().map(|s| s.to_string()));
 
-    eprintln!("[npm_command] node {} {}", npm_cli.display(), args.join(" "));
+    tracing::info!("[npm_command] node {} {}", npm_cli.display(), args.join(" "));
     common::env::command("node")
         .args(&node_args)
         .current_dir(cwd)
@@ -90,10 +90,10 @@ pub(super) async fn run_install_inner(request: InstallPluginRequest) -> anyhow::
     // If a previous install left a partial directory (no dist/), wipe it for a clean clone.
     let needs_clone = if target_dir.exists() {
         if target_dir.join("dist").exists() {
-            eprintln!("[install_plugin] {} already built, skipping clone", request.plugin_id);
+            tracing::info!("[install_plugin] {} already built, skipping clone", request.plugin_id);
             false
         } else {
-            eprintln!("[install_plugin] {} has no dist (stale install), re-cloning", request.plugin_id);
+            tracing::info!("[install_plugin] {} has no dist (stale install), re-cloning", request.plugin_id);
             std::fs::remove_dir_all(&target_dir).context("removing stale plugin directory")?;
             true
         }
@@ -102,7 +102,7 @@ pub(super) async fn run_install_inner(request: InstallPluginRequest) -> anyhow::
     };
 
     if needs_clone {
-        eprintln!("[install_plugin] cloning {} → {:?}", request.github_url, target_dir);
+        tracing::info!("[install_plugin] cloning {} → {:?}", request.github_url, target_dir);
         let output = tokio::process::Command::new("git")
             .args(["clone", "--depth", "1", &request.github_url, &target_dir.to_string_lossy()])
             .stdout(std::process::Stdio::piped())
@@ -115,13 +115,13 @@ pub(super) async fn run_install_inner(request: InstallPluginRequest) -> anyhow::
         }
     }
 
-    eprintln!("[install_plugin] npm install in {:?}", target_dir);
+    tracing::info!("[install_plugin] npm install in {:?}", target_dir);
     let output = npm_command(&["install"], &target_dir).await.context("npm install")?;
     if !output.status.success() {
         bail!("npm install failed: {}", String::from_utf8_lossy(&output.stderr));
     }
 
-    eprintln!("[install_plugin] npm run build in {:?}", target_dir);
+    tracing::info!("[install_plugin] npm run build in {:?}", target_dir);
     let output = npm_command(&["run", "build"], &target_dir).await.context("npm run build")?;
     if !output.status.success() {
         bail!("npm run build failed: {}", String::from_utf8_lossy(&output.stderr));
@@ -139,7 +139,7 @@ pub(super) async fn run_install_inner(request: InstallPluginRequest) -> anyhow::
 
     let actual_id = match plugins::find_plugin(&request.plugin_id) {
         Some(p) => {
-            eprintln!("[install_plugin] {} discoverable (manifest id='{}')", request.plugin_id, p.manifest.id);
+            tracing::info!("[install_plugin] {} discoverable (manifest id='{}')", request.plugin_id, p.manifest.id);
             Some(p.manifest.id.clone())
         }
         None => {
@@ -148,7 +148,7 @@ pub(super) async fn run_install_inner(request: InstallPluginRequest) -> anyhow::
                 .ok()
                 .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
                 .and_then(|v| v.get("id").and_then(|id| id.as_str()).map(String::from));
-            eprintln!(
+            tracing::info!(
                 "[install_plugin] WARNING: {} built but not discoverable (manifest id={:?})",
                 request.plugin_id, fallback_id
             );

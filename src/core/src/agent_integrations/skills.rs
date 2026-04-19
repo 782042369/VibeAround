@@ -59,7 +59,7 @@ pub(super) fn install_skill(agent: &str) -> anyhow::Result<()> {
             let _ = std::fs::create_dir_all(&skill_base);
             std::fs::write(&target, content)
                 .with_context(|| format!("Write {:?}", target))?;
-            eprintln!(
+            tracing::info!(
                 "[integrations] Installed {}/{} skill at {:?}",
                 agent, skill_name, target
             );
@@ -70,7 +70,7 @@ pub(super) fn install_skill(agent: &str) -> anyhow::Result<()> {
             let _ = std::fs::create_dir_all(&skill_dir);
             std::fs::write(&target, content)
                 .with_context(|| format!("Write {:?}", target))?;
-            eprintln!(
+            tracing::info!(
                 "[integrations] Installed {}/{} skill at {:?}",
                 agent, skill_name, target
             );
@@ -120,7 +120,7 @@ pub(super) fn uninstall_skill(agent: &str) -> anyhow::Result<()> {
             let target = skill_base.join(&filename);
             if target.exists() {
                 let _ = std::fs::remove_file(&target);
-                eprintln!(
+                tracing::info!(
                     "[integrations] Removed {}/{} skill at {:?}",
                     agent, skill_name, target
                 );
@@ -129,7 +129,7 @@ pub(super) fn uninstall_skill(agent: &str) -> anyhow::Result<()> {
             let skill_dir = skill_base.join(skill_name);
             if skill_dir.exists() {
                 let _ = std::fs::remove_dir_all(&skill_dir);
-                eprintln!(
+                tracing::info!(
                     "[integrations] Removed {}/{} skill at {:?}",
                     agent, skill_name, skill_dir
                 );

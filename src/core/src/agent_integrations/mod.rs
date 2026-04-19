@@ -44,7 +44,7 @@ pub fn sync_integrations(settings: &serde_json::Value) {
     let mcp_url = match crate::auth::read_token_file() {
         Some(auth) => format!("http://127.0.0.1:{}/va/mcp?token={}", port, auth.token),
         None => {
-            eprintln!(
+            tracing::info!(
                 "[integrations] auth.json missing — writing MCP config without token; \
                  coding agents will get 401 until the daemon rewrites it"
             );
@@ -59,20 +59,20 @@ pub fn sync_integrations(settings: &serde_json::Value) {
         let enabled = enabled_agents.iter().any(|a| a == agent);
         if enabled {
             if let Err(e) = install_mcp_config(agent, &mcp_url) {
-                eprintln!("[integrations] MCP config install for {}: {:#}", agent, e);
+                tracing::info!("[integrations] MCP config install for {}: {:#}", agent, e);
             }
             if let Err(e) = install_skill(agent) {
-                eprintln!("[integrations] skill install for {}: {:#}", agent, e);
+                tracing::info!("[integrations] skill install for {}: {:#}", agent, e);
             }
         } else {
             if let Err(e) = uninstall_mcp_config(agent) {
-                eprintln!(
+                tracing::info!(
                     "[integrations] MCP config uninstall for {}: {:#}",
                     agent, e
                 );
             }
             if let Err(e) = uninstall_skill(agent) {
-                eprintln!("[integrations] skill uninstall for {}: {:#}", agent, e);
+                tracing::info!("[integrations] skill uninstall for {}: {:#}", agent, e);
             }
         }
     }
@@ -120,7 +120,7 @@ pub async fn auto_install_npm_agent_with_output(
     if !output.status.success() {
         anyhow::bail!("npm install {} failed: {}", npm_package, stderr.trim());
     }
-    eprintln!("[integrations] installed {}", npm_package);
+    tracing::info!("[integrations] installed {}", npm_package);
     Ok(InstallOutput { stdout, stderr })
 }
 
@@ -136,7 +136,7 @@ pub async fn auto_install_agent_cmd_with_output(
     install_cmd: &str,
     agent: &str,
 ) -> anyhow::Result<InstallOutput> {
-    eprintln!(
+    tracing::info!(
         "[integrations] running install for {}: {}",
         agent, install_cmd
     );
@@ -156,7 +156,7 @@ pub async fn auto_install_agent_cmd_with_output(
         anyhow::bail!("install {} failed: {}", agent, stderr.trim());
     }
 
-    eprintln!("[integrations] installed {}", agent);
+    tracing::info!("[integrations] installed {}", agent);
     Ok(InstallOutput { stdout, stderr })
 }
 
@@ -188,9 +188,9 @@ pub async fn install_acp_agents(settings: &serde_json::Value) {
             if crate::env::resolve_acp_agent_bin(bin_name).is_ok() {
                 continue;
             }
-            eprintln!("[integrations] installing ACP agent: {}", npm_pkg);
+            tracing::info!("[integrations] installing ACP agent: {}", npm_pkg);
             if let Err(e) = auto_install_npm_agent(npm_pkg).await {
-                eprintln!("[integrations] npm install {} error: {}", npm_pkg, e);
+                tracing::info!("[integrations] npm install {} error: {}", npm_pkg, e);
             }
         }
         // Native binary agents with install command (Cursor, Kiro)
@@ -199,7 +199,7 @@ pub async fn install_acp_agents(settings: &serde_json::Value) {
                 continue;
             }
             if let Err(e) = auto_install_agent_cmd(install_cmd, agent_id).await {
-                eprintln!("[integrations] install {} error: {}", agent_id, e);
+                tracing::info!("[integrations] install {} error: {}", agent_id, e);
             }
         }
     }

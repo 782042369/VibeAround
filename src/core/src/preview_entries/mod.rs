@@ -238,7 +238,7 @@ pub fn kill_by_session(session_id: &str) {
         return;
     }
 
-    eprintln!(
+    tracing::info!(
         "[preview] kill_by_session session={} count={}",
         session_id,
         to_remove.len()
@@ -314,7 +314,7 @@ pub fn tracked_ports() -> Vec<u16> {
 pub fn shutdown_kill_all_ports() {
     let ports = tracked_ports();
     if !ports.is_empty() {
-        eprintln!(
+        tracing::info!(
             "[preview] shutdown: killing dev servers on ports {:?}",
             ports
         );

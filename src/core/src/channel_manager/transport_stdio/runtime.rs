@@ -80,7 +80,7 @@ impl StdioPluginRuntime {
             let reader = tokio::io::BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                eprintln!("[{}][plugin] {}", stderr_channel, line);
+                tracing::info!("[{}][plugin] {}", stderr_channel, line);
             }
         });
 
@@ -100,7 +100,7 @@ impl StdioPluginRuntime {
             impl Drop for Guard {
                 fn drop(&mut self) {
                     if let Some(_child) = ChildRegistry::global().remove(self.0) {
-                        eprintln!(
+                        tracing::info!(
                             "[{}] guardian drop: plugin child killed via registry",
                             self.1
                         );
@@ -151,7 +151,7 @@ impl StdioPluginRuntime {
 
     pub async fn send_output(&self, output: ChannelOutput) {
         if let Err(error) = self.output_tx.send(output) {
-            eprintln!(
+            tracing::info!(
                 "[{}] failed to send output to ACP plugin bridge: {}",
                 self.channel_kind, error
             );

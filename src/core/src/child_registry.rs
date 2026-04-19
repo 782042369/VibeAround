@@ -82,7 +82,7 @@ impl ChildRegistry {
             id
         };
         let pid = child.id();
-        eprintln!(
+        tracing::info!(
             "[child-registry] register id={} kind={:?} label={} pid={:?}",
             id, kind, label, pid
         );
@@ -95,7 +95,7 @@ impl ChildRegistry {
     /// stdout EOF, or during the happy-path shutdown.
     pub fn remove(&self, id: u64) -> Option<Child> {
         self.entries.remove(&id).map(|(_, entry)| {
-            eprintln!(
+            tracing::info!(
                 "[child-registry] remove id={} kind={:?} label={}",
                 id, entry.kind, entry.label
             );
@@ -112,16 +112,16 @@ impl ChildRegistry {
     /// return promptly, and the OS will reap the killed children anyway.
     pub fn kill_all(&self) {
         let ids: Vec<u64> = self.entries.iter().map(|e| *e.key()).collect();
-        eprintln!("[child-registry] kill_all: {} child(ren)", ids.len());
+        tracing::info!("[child-registry] kill_all: {} child(ren)", ids.len());
         for id in ids {
             if let Some((_, mut entry)) = self.entries.remove(&id) {
                 let pid = entry.child.id();
                 match entry.child.start_kill() {
-                    Ok(()) => eprintln!(
+                    Ok(()) => tracing::info!(
                         "[child-registry] killed id={} kind={:?} label={} pid={:?}",
                         id, entry.kind, entry.label, pid
                     ),
-                    Err(e) => eprintln!(
+                    Err(e) => tracing::info!(
                         "[child-registry] start_kill failed id={} label={}: {}",
                         id, entry.label, e
                     ),
@@ -208,7 +208,7 @@ pub fn orphan_sweep() {
             continue;
         }
 
-        eprintln!(
+        tracing::info!(
             "[child-registry] orphan_sweep: killing pid={} ppid={:?} kind={} cmd={}",
             pid.as_u32(),
             proc_.parent().map(|p| p.as_u32()),
@@ -219,7 +219,7 @@ pub fn orphan_sweep() {
         if proc_.kill() {
             killed += 1;
         } else {
-            eprintln!(
+            tracing::info!(
                 "[child-registry] orphan_sweep: failed to kill pid={}",
                 pid.as_u32()
             );
@@ -227,6 +227,6 @@ pub fn orphan_sweep() {
     }
 
     if killed > 0 {
-        eprintln!("[child-registry] orphan_sweep: killed {} orphan(s)", killed);
+        tracing::info!("[child-registry] orphan_sweep: killed {} orphan(s)", killed);
     }
 }

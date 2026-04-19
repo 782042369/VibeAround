@@ -385,7 +385,7 @@ impl ChannelMonitor {
                 ChannelRunStatus::Running => {
                     let last = state.last_seen_ts.load(Ordering::Relaxed);
                     if now.saturating_sub(last) > HEARTBEAT_TIMEOUT_SECS {
-                        eprintln!(
+                        tracing::info!(
                             "[monitor] {} watchdog fired (last_seen {}s ago > {}s)",
                             state.kind,
                             now.saturating_sub(last),

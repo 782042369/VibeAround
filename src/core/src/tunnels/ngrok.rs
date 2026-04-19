@@ -28,7 +28,7 @@ pub async fn start_web_tunnel(
         .map_err(|e| format!("forward URL: {}", e))?;
     let forwarder = match config.ngrok_domain.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
         Some(domain) => {
-            eprintln!("[ngrok] Using static domain: {}", domain);
+            tracing::info!("[ngrok] Using static domain: {}", domain);
             let f = session
                 .http_endpoint()
                 .domain(domain)

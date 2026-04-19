@@ -124,7 +124,7 @@ impl ACPPod {
         // CLI agents (Claude Code, Codex, Gemini CLI) accept input at any
         // time and queue/interrupt internally via ACP. Blocking here caused
         // user-visible hangs when a turn didn't end (e.g. background tasks).
-        eprintln!(
+        tracing::info!(
             "[ACPPod] prompt route={} cli_kind={:?} blocks={}",
             self.route,
             cli_kind,
@@ -144,7 +144,7 @@ impl ACPPod {
                 .ensure_bridge(cli_kind, resume_sid, resume_cwd, downstream_handler)
                 .await
                 .map_err(|error| {
-                    eprintln!(
+                    tracing::info!(
                         "[ACPPod] ensure_bridge failed route={}: {:#}",
                         self.route, error
                     );
@@ -174,13 +174,13 @@ impl ACPPod {
                 flag.store(false, Ordering::Release);
             }
 
-            eprintln!(
+            tracing::info!(
                 "[ACPPod] prompt SENDING route={} session={}",
                 self.route, session_id
             );
             let request = acp::PromptRequest::new(session_id, content_blocks);
             let response = acp::Agent::prompt(&*bridge, request).await;
-            eprintln!(
+            tracing::info!(
                 "[ACPPod] prompt RETURNED route={} ok={}",
                 self.route,
                 response.is_ok()
@@ -252,14 +252,14 @@ impl ACPPod {
 
     /// Switch agent kind — kill current bridge, drain queue, next prompt spawns new one.
     pub async fn switch_agent(&self, agent_kind: String) {
-        eprintln!(
+        tracing::info!(
             "[ACPPod] switch_agent route={} new_kind={}",
             self.route, agent_kind
         );
         self.full_reset().await;
         *self.cli_kind.lock().await = Some(agent_kind.clone());
         let _ = self.change_tx.send(());
-        eprintln!(
+        tracing::info!(
             "[ACPPod] switch_agent done route={} cli_kind={:?}",
             self.route, agent_kind
         );
@@ -267,7 +267,7 @@ impl ACPPod {
 
     /// Switch profile — kill current bridge, drain queue, next prompt spawns new one.
     pub async fn switch_profile(&self, profile: String) {
-        eprintln!(
+        tracing::info!(
             "[ACPPod] switch_profile route={} new_profile={}",
             self.route, profile
         );

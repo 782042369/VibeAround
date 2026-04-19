@@ -40,21 +40,21 @@ pub fn data_dir() -> PathBuf {
 fn init_data_dir() {
     let dir = data_dir();
     if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!("[VibeAround] Failed to create data dir {:?}: {}", dir, e);
+        tracing::info!("[VibeAround] Failed to create data dir {:?}: {}", dir, e);
         return;
     }
     let settings_path = dir.join("settings.json");
     if !settings_path.exists() {
-        eprintln!("[VibeAround] Creating default settings.json at {:?}", settings_path);
+        tracing::info!("[VibeAround] Creating default settings.json at {:?}", settings_path);
         if let Err(e) = std::fs::write(&settings_path, DEFAULT_SETTINGS_JSON) {
-            eprintln!("[VibeAround] Failed to write settings.json: {}", e);
+            tracing::info!("[VibeAround] Failed to write settings.json: {}", e);
         } else if let Err(e) = crate::auth::set_owner_only(&settings_path) {
-            eprintln!("[VibeAround] Failed to chmod settings.json: {}", e);
+            tracing::info!("[VibeAround] Failed to chmod settings.json: {}", e);
         }
     }
     let ws_dir = dir.join("workspaces");
     if let Err(e) = std::fs::create_dir_all(&ws_dir) {
-        eprintln!("[VibeAround] Failed to create workspaces dir: {}", e);
+        tracing::info!("[VibeAround] Failed to create workspaces dir: {}", e);
     }
 }
 

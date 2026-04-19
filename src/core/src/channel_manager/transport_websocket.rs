@@ -37,7 +37,7 @@ impl WebChannelManager {
     pub fn dispatch_output(&self, output: ChannelOutput) {
         let chat_id = &output.route_key().chat_id;
         let has_conn = self.connections.contains_key(chat_id);
-        eprintln!(
+        tracing::info!(
             "[WebChannelManager] dispatch_output chat_id={} has_connection={}",
             chat_id, has_conn
         );
@@ -65,12 +65,12 @@ impl WebSocketPluginRuntime {
     }
 
     pub async fn send_output(&self, output: ChannelOutput) {
-        eprintln!(
+        tracing::info!(
             "[WebSocketPluginRuntime] send_output channel_kind={} route={}",
             self.channel_kind, output.route_key()
         );
         if let Err(error) = self.outbound_tx.send(output) {
-            eprintln!(
+            tracing::info!(
                 "[{}] failed to deliver websocket output: {}",
                 self.channel_kind, error
             );

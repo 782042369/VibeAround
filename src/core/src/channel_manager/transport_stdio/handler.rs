@@ -51,7 +51,7 @@ impl acp::Agent for PluginAgentHandler {
         &self,
         _args: acp::InitializeRequest,
     ) -> acp::Result<acp::InitializeResponse> {
-        eprintln!("[{}] ACP initialize from plugin", self.channel_kind);
+        tracing::info!("[{}] ACP initialize from plugin", self.channel_kind);
 
         let mut meta = serde_json::Map::new();
         meta.insert("channelKind".into(), self.channel_kind.clone().into());
@@ -106,7 +106,7 @@ impl acp::Agent for PluginAgentHandler {
             })
             .unwrap_or_default();
 
-        eprintln!(
+        tracing::info!(
             "[{}] ACP prompt chat_id={} blocks={} text_preview={}",
             self.channel_kind,
             chat_id,
@@ -146,7 +146,7 @@ impl acp::Agent for PluginAgentHandler {
         let chat_id = args.session_id.to_string();
         let route = RouteKey::new(&self.channel_kind, &chat_id);
 
-        eprintln!("[{}] ACP cancel chat_id={}", self.channel_kind, chat_id);
+        tracing::info!("[{}] ACP cancel chat_id={}", self.channel_kind, chat_id);
 
         let _ = self.input_tx.send(ChannelInput::Stop { route });
         Ok(())
@@ -212,7 +212,7 @@ impl acp::Agent for PluginAgentHandler {
                 let _ = self.input_tx.send(input);
             }
             other => {
-                eprintln!(
+                tracing::info!(
                     "[{}] unhandled ext_notification: {}",
                     self.channel_kind, other
                 );
@@ -223,7 +223,7 @@ impl acp::Agent for PluginAgentHandler {
 
     async fn ext_method(&self, args: acp::ExtRequest) -> acp::Result<acp::ExtResponse> {
         let method = args.method.to_string();
-        eprintln!("[{}] unhandled ext_method: {}", self.channel_kind, method);
+        tracing::info!("[{}] unhandled ext_method: {}", self.channel_kind, method);
         Err(acp::Error::method_not_found())
     }
 }

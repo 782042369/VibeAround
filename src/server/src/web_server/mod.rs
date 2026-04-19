@@ -65,11 +65,11 @@ pub(crate) struct AppState {
 /// Ensure web dist exists (build web first).
 fn verify_web_dist(web_dist: &std::path::Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if !web_dist.exists() {
-        eprintln!("[VibeAround] Web dist not found: {:?}", web_dist);
+        tracing::info!("[VibeAround] Web dist not found: {:?}", web_dist);
         return Err(format!("Web dist not found: {:?}", web_dist).into());
     }
     if !web_dist.join("index.html").exists() {
-        eprintln!("[VibeAround] index.html not found in {:?}", web_dist);
+        tracing::info!("[VibeAround] index.html not found in {:?}", web_dist);
         return Err(format!("index.html not found in {:?}", web_dist).into());
     }
     Ok(())
@@ -86,7 +86,7 @@ async fn spa_fallback(dist_path: PathBuf) -> Response {
                 (StatusCode::INTERNAL_SERVER_ERROR, "failed to build response").into_response()
             }),
         Err(e) => {
-            eprintln!("[VibeAround] Failed to read index.html: {}", e);
+            tracing::info!("[VibeAround] Failed to read index.html: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load index.html: {}", e)).into_response()
         }
     }
@@ -228,7 +228,7 @@ pub async fn run_web_server(
 
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
-            eprintln!(
+            tracing::info!(
                 "[VibeAround] ⚠️  Port {} is already in use — is another VibeAround instance running?",
                 port
             );

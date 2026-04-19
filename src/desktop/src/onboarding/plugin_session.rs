@@ -103,7 +103,7 @@ async fn spawn_node_session(name: &str, entry_point: &Path, plugin_dir: &Path) -
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                eprintln!("[onboarding:{}] {}", name, line);
+                tracing::info!("[onboarding:{}] {}", name, line);
             }
         });
     }

@@ -132,7 +132,7 @@ impl ChannelManager {
             match ChannelPluginManifest::from_discovered(channel_name.to_string(), plugin) {
                 Some(manifest) => manifest,
                 None => {
-                    eprintln!(
+                    tracing::info!(
                         "[{}] config=missing channels.{} — plugin disabled",
                         channel_name, channel_name
                     );
@@ -150,7 +150,7 @@ impl ChannelManager {
     ) {
         self.plugin_host
             .register_websocket_plugin(channel_name.to_string(), outbound_tx);
-        eprintln!("[{}] registered internal ACP plugin", channel_name);
+        tracing::info!("[{}] registered internal ACP plugin", channel_name);
     }
 
     /// Fire-and-forget: enqueue input for async processing. `Send`-safe

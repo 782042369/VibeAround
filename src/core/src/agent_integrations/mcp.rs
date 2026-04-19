@@ -111,7 +111,7 @@ pub(super) fn uninstall_mcp_config(agent: &str) -> anyhow::Result<()> {
         let pretty = serde_json::to_string_pretty(&root).context("JSON serialize")?;
         std::fs::write(&config_path, pretty)
             .with_context(|| format!("Write {:?}", config_path))?;
-        eprintln!(
+        tracing::info!(
             "[integrations] Removed MCP config for {} at {:?}",
             agent, config_path
         );
@@ -166,7 +166,7 @@ fn install_mcp_config_json(
     std::fs::write(config_path, pretty)
         .with_context(|| format!("Write {:?}", config_path))?;
 
-    eprintln!(
+    tracing::info!(
         "[integrations] Installed MCP config for {} at {:?}",
         agent, config_path
     );
@@ -230,7 +230,7 @@ fn install_mcp_config_toml(
     std::fs::write(config_path, doc.to_string())
         .with_context(|| format!("Write {:?}", config_path))?;
 
-    eprintln!(
+    tracing::info!(
         "[integrations] Installed MCP config for {} at {:?} (TOML)",
         agent, config_path
     );
@@ -260,7 +260,7 @@ fn uninstall_mcp_config_toml(
     if changed {
         std::fs::write(config_path, doc.to_string())
             .with_context(|| format!("Write {:?}", config_path))?;
-        eprintln!(
+        tracing::info!(
             "[integrations] Removed MCP config for {} at {:?} (TOML)",
             agent, config_path
         );

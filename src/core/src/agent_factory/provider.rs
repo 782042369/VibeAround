@@ -75,7 +75,7 @@ impl AgentProvider for StdioAcpProvider {
         let (program, resolved_args) = if let Some(npm_pkg) = &agent_def.acp.npm_package {
             let bin_name = agent_def.acp.bin_name.as_deref().unwrap_or(npm_pkg);
             if crate::env::resolve_acp_agent_bin(bin_name).is_err() {
-                eprintln!("[{}-acp] auto-installing {} ...", self.agent_id, npm_pkg);
+                tracing::info!("[{}-acp] auto-installing {} ...", self.agent_id, npm_pkg);
                 crate::agent_integrations::auto_install_npm_agent(npm_pkg).await?;
             }
             let entry = crate::env::resolve_acp_agent_bin(bin_name)
@@ -83,7 +83,7 @@ impl AgentProvider for StdioAcpProvider {
             ("node".to_string(), vec![entry.to_string_lossy().to_string()])
         } else if let Some(install_cmd) = &agent_def.acp.install_cmd {
             if !crate::agent_integrations::is_program_available(&agent_def.acp.program) {
-                eprintln!("[{}-acp] auto-installing via install cmd ...", self.agent_id);
+                tracing::info!("[{}-acp] auto-installing via install cmd ...", self.agent_id);
                 crate::agent_integrations::auto_install_agent_cmd(install_cmd, &self.agent_id).await?;
             }
             (agent_def.acp.program.clone(), agent_def.acp.args.clone())
@@ -113,7 +113,7 @@ fn spawn_stdio_acp(
 ) -> anyhow::Result<(DuplexStream, DuplexStream)> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    eprintln!("[{}-acp] spawning {} {} in {:?}", agent_id, program, args.join(" "), cwd);
+    tracing::info!("[{}-acp] spawning {} {} in {:?}", agent_id, program, args.join(" "), cwd);
     let mut cmd = crate::env::command(program);
     cmd.args(args)
         .current_dir(cwd)
@@ -126,7 +126,7 @@ fn spawn_stdio_acp(
     }
     let mut child = cmd.spawn()
         .with_context(|| format!("Failed to spawn {} {}. Is it installed?", program, args.join(" ")))?;
-    eprintln!("[{}-acp] process spawned pid={:?}", agent_id, child.id());
+    tracing::info!("[{}-acp] process spawned pid={:?}", agent_id, child.id());
 
     let child_stdout = child.stdout.take().context("Process has no stdout")?;
     let child_stdin = child.stdin.take().context("Process has no stdin")?;
@@ -161,7 +161,7 @@ fn spawn_stdio_acp(
         // Clean shutdown path: pull the child out of the registry and drop
         // it. kill_on_drop fires if the process is still alive.
         if let Some(_c) = crate::child_registry::ChildRegistry::global().remove(registry_id) {
-            eprintln!("[{}-acp] stdout EOF — dropping child via registry", agent_id_owned);
+            tracing::info!("[{}-acp] stdout EOF — dropping child via registry", agent_id_owned);
         }
     });
 

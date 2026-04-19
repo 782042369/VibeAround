@@ -40,7 +40,7 @@ pub(super) async fn relocate_cached_media(
             let src_path = uri.strip_prefix("file://").unwrap_or(&uri);
             let src = std::path::Path::new(src_path);
             if !src.exists() {
-                eprintln!("[ACPPod] relocate: source not found {}", src.display());
+                tracing::info!("[ACPPod] relocate: source not found {}", src.display());
                 continue;
             }
             let file_name = src
@@ -51,7 +51,7 @@ pub(super) async fn relocate_cached_media(
             let dest = workspace_cache.join(&file_name);
 
             if let Err(e) = tokio::fs::create_dir_all(&workspace_cache).await {
-                eprintln!(
+                tracing::info!(
                     "[ACPPod] relocate: mkdir failed {}: {}",
                     workspace_cache.display(),
                     e
@@ -61,7 +61,7 @@ pub(super) async fn relocate_cached_media(
             if let Err(e) = tokio::fs::rename(src, &dest).await {
                 // rename may fail across filesystems; fall back to copy+remove
                 if let Err(e2) = tokio::fs::copy(src, &dest).await {
-                    eprintln!(
+                    tracing::info!(
                         "[ACPPod] relocate: move failed {} -> {}: rename={}, copy={}",
                         src.display(),
                         dest.display(),
@@ -74,7 +74,7 @@ pub(super) async fn relocate_cached_media(
             }
 
             let new_uri = format!("file://{}", dest.to_string_lossy());
-            eprintln!("[ACPPod] relocate: {} -> {}", src.display(), dest.display());
+            tracing::info!("[ACPPod] relocate: {} -> {}", src.display(), dest.display());
             rl.uri = new_uri.into();
         }
     }

@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         if let Err(e) = daemon.start(dist_path).await {
-            eprintln!("[VibeAround] Fatal: {}", e);
+            tracing::info!("[VibeAround] Fatal: {}", e);
         }
     });
 

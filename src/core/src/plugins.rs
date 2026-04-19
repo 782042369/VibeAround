@@ -207,7 +207,7 @@ fn load_plugins_from_dir(
 
         let plugin_id = manifest.id.trim().to_string();
         if plugin_id.is_empty() {
-            eprintln!(
+            tracing::info!(
                 "[plugins] skipping plugin with empty id: {}",
                 manifest_path.display()
             );
@@ -215,7 +215,7 @@ fn load_plugins_from_dir(
         }
 
         if manifest.kind.trim().is_empty() {
-            eprintln!(
+            tracing::info!(
                 "[plugins] skipping plugin '{}' with empty kind: {}",
                 plugin_id,
                 manifest_path.display()
@@ -230,7 +230,7 @@ fn load_plugins_from_dir(
         };
 
         if let Some(previous) = discovered.insert(plugin_id.clone(), discovered_plugin) {
-            eprintln!(
+            tracing::info!(
                 "[plugins] plugin '{}' from {} overrides {}",
                 plugin_id,
                 plugin_dir.display(),
@@ -245,7 +245,7 @@ fn read_plugin_manifest(path: &Path) -> Option<PluginManifest> {
     match serde_json::from_str::<PluginManifest>(&raw) {
         Ok(manifest) => Some(manifest),
         Err(error) => {
-            eprintln!(
+            tracing::info!(
                 "[plugins] failed to parse manifest {}: {}",
                 path.display(),
                 error

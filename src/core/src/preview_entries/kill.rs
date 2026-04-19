@@ -29,7 +29,7 @@ pub(super) fn kill_pids_on_ports(ports: &[u16]) {
         .collect();
 
     if pgids.is_empty() {
-        eprintln!(
+        tracing::info!(
             "[preview] kill: no process groups resolved for pids {:?}",
             pids
         );
@@ -46,7 +46,7 @@ pub(super) fn kill_pids_on_ports(ports: &[u16]) {
             let _ = Command::new("kill")
                 .args(["-TERM", &format!("-{}", pgid)])
                 .output();
-            eprintln!("[preview] SIGTERM pgid={}", pgid);
+            tracing::info!("[preview] SIGTERM pgid={}", pgid);
         }
 
         // Give it half a second to exit politely, then SIGKILL survivors.
@@ -56,7 +56,7 @@ pub(super) fn kill_pids_on_ports(ports: &[u16]) {
             let _ = Command::new("kill")
                 .args(["-KILL", &format!("-{}", pgid)])
                 .output();
-            eprintln!("[preview] SIGKILL pgid={}", pgid);
+            tracing::info!("[preview] SIGKILL pgid={}", pgid);
         }
     }
 

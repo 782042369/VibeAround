@@ -34,14 +34,14 @@ pub(super) async fn forward_output_to_plugin(
                     if let Err(error) =
                         acp::Client::session_notification(&*conn, notification).await
                     {
-                        eprintln!(
+                        tracing::info!(
                             "[{}] failed to send session_notification: {}",
                             channel_kind, error
                         );
                     }
                 }
                 Err(error) => {
-                    eprintln!(
+                    tracing::info!(
                         "[{}] failed to parse RawAcp as SessionNotification: {}",
                         channel_kind, error
                     );
@@ -119,7 +119,7 @@ pub(super) async fn forward_output_to_plugin(
             let request: acp::RequestPermissionRequest = match serde_json::from_value(payload) {
                 Ok(r) => r,
                 Err(e) => {
-                    eprintln!(
+                    tracing::info!(
                         "[{}] failed to parse PermissionRequest payload route={} request_id={}: {}",
                         channel_kind, route, request_id, e
                     );
@@ -133,7 +133,7 @@ pub(super) async fn forward_output_to_plugin(
             };
             let response = acp::Client::request_permission(&*conn, request).await;
             let Some((_, tx)) = plugin_host.pending_permissions.remove(&request_id) else {
-                eprintln!(
+                tracing::info!(
                     "[{}] PermissionRequest response dropped — no pending route={} request_id={}",
                     channel_kind, route, request_id
                 );
@@ -144,7 +144,7 @@ pub(super) async fn forward_output_to_plugin(
                     let _ = tx.send(resp);
                 }
                 Err(e) => {
-                    eprintln!(
+                    tracing::info!(
                         "[{}] plugin requestPermission failed route={} request_id={}: {}",
                         channel_kind, route, request_id, e
                     );
@@ -167,7 +167,7 @@ async fn send_ext_notification(
         match RawValue::from_string(serde_json::to_string(params).unwrap_or_default()) {
             Ok(raw) => Arc::from(raw),
             Err(error) => {
-                eprintln!(
+                tracing::info!(
                     "[{}] failed to serialize ext params: {}",
                     channel_kind, error
                 );
@@ -176,7 +176,7 @@ async fn send_ext_notification(
         };
     let notification = acp::ExtNotification::new(method, raw_params);
     if let Err(error) = acp::Client::ext_notification(&*conn, notification).await {
-        eprintln!(
+        tracing::info!(
             "[{}] failed to send ext_notification {}: {}",
             channel_kind, method, error
         );

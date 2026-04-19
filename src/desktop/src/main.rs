@@ -126,7 +126,7 @@ fn main() {
     // real guard, but this avoids a full Tauri init just to discover the duplicate.
     let port = common::config::DEFAULT_PORT;
     if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-        eprintln!(
+        tracing::info!(
             "[VibeAround] Another instance is already running (port {} in use). Exiting.",
             port
         );
@@ -140,7 +140,7 @@ fn main() {
     // a Tauri webview that starts rendering before the daemon has fully
     // booted) can read `~/.vibearound/auth.json` from its first render.
     if let Err(e) = daemon.persist_auth_token() {
-        eprintln!("[VibeAround] Failed to persist auth token: {}", e);
+        tracing::info!("[VibeAround] Failed to persist auth token: {}", e);
     }
 
     let onboarding_needed = onboarding::needs_onboarding();
@@ -167,7 +167,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            eprintln!("[VibeAround] ⚠️  Another instance tried to start, focusing existing window");
+            tracing::info!("[VibeAround] ⚠️  Another instance tried to start, focusing existing window");
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
                 let _ = w.show();
@@ -250,9 +250,9 @@ fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if onboarding_needed {
-                    eprintln!("[VibeAround] Waiting for onboarding to complete…");
+                    tracing::info!("[VibeAround] Waiting for onboarding to complete…");
                     gate.notified().await;
-                    eprintln!("[VibeAround] Onboarding complete, starting daemon…");
+                    tracing::info!("[VibeAround] Onboarding complete, starting daemon…");
 
                     // Mark onboarding as done for tray
                     if let Some(state) = app_handle.try_state::<OnboardingActive>() {
@@ -261,7 +261,7 @@ fn main() {
                 }
 
                 if let Err(e) = start_daemon(&app_handle).await {
-                    eprintln!("[VibeAround] Daemon error: {}", e);
+                    tracing::info!("[VibeAround] Daemon error: {}", e);
                 }
 
                 // Onboarding path: settings were empty when we ran the

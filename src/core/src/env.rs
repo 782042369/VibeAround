@@ -19,7 +19,7 @@ static ENRICHED_ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
 pub fn enriched_env() -> &'static HashMap<String, String> {
     ENRICHED_ENV.get_or_init(|| {
         let result = probe_enriched_env();
-        eprintln!(
+        tracing::info!(
             "[env] enriched environment ({} vars, PATH has {} entries)",
             result.len(),
             result.get("PATH").map(|p| p.matches(':').count() + 1).unwrap_or(0)
@@ -193,15 +193,15 @@ fn probe_unix_login_shell_env() -> Option<HashMap<String, String>> {
                     .collect();
 
                 if parsed.contains_key("PATH") && parsed.len() > 5 {
-                    eprintln!("[env] probed {} vars from {}", parsed.len(), shell);
+                    tracing::info!("[env] probed {} vars from {}", parsed.len(), shell);
                     return Some(parsed);
                 }
             }
             Ok(_) => {
-                eprintln!("[env] shell {} exited with non-zero status", shell);
+                tracing::info!("[env] shell {} exited with non-zero status", shell);
             }
             Err(e) => {
-                eprintln!("[env] failed to probe {}: {}", shell, e);
+                tracing::info!("[env] failed to probe {}: {}", shell, e);
             }
         }
     }
