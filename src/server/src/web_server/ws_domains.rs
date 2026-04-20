@@ -83,7 +83,7 @@ pub async fn ws_tunnels_handler(
 }
 
 async fn build_tunnels(
-    manager: &common::tunnels::TunnelManager,
+    manager: &common::tunnel_manager::TunnelManager,
 ) -> Vec<crate::api_types::TunnelRuntime> {
     use common::state::StateSource;
     manager

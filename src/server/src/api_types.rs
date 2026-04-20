@@ -119,7 +119,7 @@ pub struct ChannelRuntime {
 
 /// One tunnel, as returned by `GET /api/tunnels`.
 ///
-/// Sources: `common::tunnels::TunnelManager::list()`.
+/// Sources: `common::tunnel_manager::TunnelManager::list()`.
 ///
 /// # Wire format (JSON)
 /// ```json
@@ -134,7 +134,7 @@ pub struct ChannelRuntime {
 pub struct TunnelRuntime {
     pub provider: &'static str,
     pub url: Option<String>,
-    pub status: common::tunnels::TunnelStatus,
+    pub status: common::tunnel_manager::TunnelStatus,
     pub uptime_secs: u64,
 }
 

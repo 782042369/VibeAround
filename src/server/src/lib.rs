@@ -19,7 +19,7 @@ use common::child_registry::{self, ChildRegistry};
 use common::config;
 use common::plugins;
 use common::pty::{PtySessionManager, Registry, SessionId};
-use common::tunnels::{self, TunnelManager};
+use common::tunnel_manager::{self, TunnelManager};
 
 /// Unified daemon that starts and manages all VibeAround services.
 /// Both the server binary and the desktop (Tauri) binary use this.
@@ -63,7 +63,7 @@ impl RunningDaemon {
 
         // Kill any user-started dev servers we were previewing so they don't
         // outlive the daemon. Best-effort; failures are logged.
-        common::preview_entries::shutdown_kill_all_ports();
+        common::preview_manager::shutdown_kill_all_ports();
 
         let pty_manager = PtySessionManager::from_registry(Arc::clone(&self.pty));
         let session_ids: Vec<SessionId> = self.pty.iter().map(|entry| entry.key().clone()).collect();
@@ -252,7 +252,7 @@ impl ServerDaemon {
         let tunnel_handle = if tunnel_provider.is_enabled() {
             let tunnel_manager = Arc::clone(&tunnels);
             let handle = tokio::spawn(async move {
-                match tunnels::start_web_tunnel_with_provider(tunnel_provider, &cfg).await {
+                match tunnel_manager::start_web_tunnel_with_provider(tunnel_provider, &cfg).await {
                     Ok((guard, url)) => {
                         tracing::info!(url = %url, "tunnel connected");
                         tunnel_manager.set_url(tunnel_provider.as_str(), &url);

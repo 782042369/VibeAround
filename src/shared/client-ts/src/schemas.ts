@@ -39,7 +39,7 @@ export const AgentIdSchema = z.enum(AGENT_IDS);
 // Constants mirrored from Rust
 // ---------------------------------------------------------------------------
 
-/** Mirror of `common::preview_entries::SHARE_TTL_SECS`. */
+/** Mirror of `common::preview_manager::SHARE_TTL_SECS`. */
 export const PREVIEW_SHARE_TTL_SECS = 600;
 
 // ---------------------------------------------------------------------------
