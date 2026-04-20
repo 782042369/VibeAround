@@ -12,13 +12,11 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { loopbackBaseUrl, loopbackWsBaseUrl } from "@va/client";
 
-/** All dashboard routes live under /va/ to keep the root namespace free for
- *  cookie-based dev-server preview proxying. */
-const VA_PREFIX = "/va";
-
-export const API_BASE = `http://127.0.0.1:12358${VA_PREFIX}`;
-export const WS_BASE = `ws://127.0.0.1:12358${VA_PREFIX}`;
+export const DAEMON_PORT = 12358;
+export const API_BASE = loopbackBaseUrl(DAEMON_PORT);
+export const WS_BASE = loopbackWsBaseUrl(DAEMON_PORT);
 
 interface AuthFile {
   port: number;

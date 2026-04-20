@@ -1,5 +1,6 @@
 //! VibeAround server crate: Axum HTTP + WebSocket, and the unified ServerDaemon entry point.
 
+pub mod api_types;
 mod web_server;
 
 pub use web_server::run_web_server;
@@ -8,24 +9,23 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
-use tokio::sync::broadcast;
+use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
-use common::acp_hub::ACPHub;
+use common::conversations::ConversationManager;
 use common::auth::{self, AuthToken};
-use common::channel_manager::{handle_channel_input, ChannelManager, WebChannelManager};
-use common::child_registry::{self, ChildRegistry};
+use common::channels::{handle_channel_input, ChannelManager, WebChannelManager};
+use common::process::registry::{self as child_registry, ChildRegistry};
 use common::config;
 use common::plugins;
-use common::pty::{PtySessionManager, SessionId};
-use common::runtime_status::RuntimeStatusStore;
-use common::service::ServiceStatusManager;
-use common::tunnels;
+use common::pty::{PtySessionManager, Registry, SessionId};
+use common::tunnels::{self, TunnelManager};
 
 /// Unified daemon that starts and manages all VibeAround services.
 /// Both the server binary and the desktop (Tauri) binary use this.
 pub struct ServerDaemon {
-    pub services: Arc<ServiceStatusManager>,
+    pub tunnels: Arc<TunnelManager>,
+    pub pty: Registry,
     pub port: u16,
     /// Per-session auth token, regenerated on every daemon start.
     /// Exposed so Tauri can append `?token=` when opening the dashboard.
@@ -34,17 +34,26 @@ pub struct ServerDaemon {
 
 pub struct RunningDaemon {
     pub channel_hub: Arc<ChannelManager>,
-    pub acp_hub: Arc<ACPHub>,
+    pub conversation_manager: Arc<ConversationManager>,
     pub web_channel: Arc<WebChannelManager>,
     pub web_handle: JoinHandle<Result<(), String>>,
     pub tunnel_handle: JoinHandle<()>,
     pub web_dispatch_handle: JoinHandle<()>,
-    pub services: Arc<ServiceStatusManager>,
+    pub tunnels: Arc<TunnelManager>,
+    pub pty: Registry,
+    /// Signal to the channel-input OS thread that it should unwind.
+    /// Dropped sender = no wake-up ever, so we hold this for the life of
+    /// `RunningDaemon` and signal on `stop()`.
+    channel_input_shutdown: Arc<Notify>,
+    /// Owned so `stop()` can join the thread — otherwise each
+    /// daemon-restart cycle leaks the thread + its full ACP/plugin
+    /// object graph.
+    channel_input_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl RunningDaemon {
-    pub async fn stop(&self) {
-        self.acp_hub.shutdown_all().await;
+    pub async fn stop(mut self) {
+        self.conversation_manager.shutdown_all().await;
         self.channel_hub.shutdown_all().await;
 
         // Safety net: synchronously kill any child process still registered
@@ -54,10 +63,10 @@ impl RunningDaemon {
 
         // Kill any user-started dev servers we were previewing so they don't
         // outlive the daemon. Best-effort; failures are logged.
-        common::preview_entries::shutdown_kill_all_ports();
+        common::previews::shutdown_kill_all_ports();
 
-        let pty_manager = PtySessionManager::from_registry(Arc::clone(&self.services.pty));
-        let session_ids: Vec<SessionId> = self.services.pty.iter().map(|entry| entry.key().clone()).collect();
+        let pty_manager = PtySessionManager::from_registry(Arc::clone(&self.pty));
+        let session_ids: Vec<SessionId> = self.pty.iter().map(|entry| entry.key().clone()).collect();
         for session_id in session_ids {
             let _ = pty_manager.delete_session(session_id);
         }
@@ -66,22 +75,32 @@ impl RunningDaemon {
         self.web_handle.abort();
         self.tunnel_handle.abort();
 
-        // Clear service status so stale entries don't persist across restarts
-        self.services.clear();
+        // Wake the channel-input thread and join it so the next
+        // `start_background()` call doesn't accumulate orphaned threads.
+        self.channel_input_shutdown.notify_waiters();
+        if let Some(handle) = self.channel_input_thread.take() {
+            let _ = tokio::task::spawn_blocking(move || handle.join()).await;
+        }
+
+        // Clear tunnel + PTY registries so stale entries don't persist
+        // across restarts.
+        self.tunnels.clear();
+        self.pty.clear();
     }
 }
 
 impl ServerDaemon {
     pub fn new(port: u16) -> Self {
         Self {
-            services: Arc::new(ServiceStatusManager::new(port)),
+            tunnels: TunnelManager::new(),
+            pty: common::pty::new_registry(),
             port,
             auth_token: Arc::new(AuthToken::generate()),
         }
     }
 
-    pub fn services(&self) -> Arc<ServiceStatusManager> {
-        Arc::clone(&self.services)
+    pub fn tunnels(&self) -> Arc<TunnelManager> {
+        Arc::clone(&self.tunnels)
     }
 
     /// Borrow the session auth token. Tauri uses this to open the dashboard
@@ -120,42 +139,26 @@ impl ServerDaemon {
         // in-memory cache reflects the latest settings.json (which may have
         // been rewritten by onboarding or a manual edit since last start).
         let cfg = config::reload();
-        let services = Arc::clone(&self.services);
+        let tunnels = Arc::clone(&self.tunnels);
+        let pty = Arc::clone(&self.pty);
 
         // Persist the auth token so the Tauri side (tray, desktop-ui) can
         // read it without a separate IPC channel. Overwrites any stale file
         // from a previous run — older tokens are invalidated immediately.
         if let Err(e) = auth::write_token_file(self.port, &self.auth_token) {
-            eprintln!(
-                "[VibeAround][daemon] Failed to write auth token file: {} (the dashboard will reject requests without it)",
-                e
+            tracing::warn!(
+                error = %e,
+                "failed to write auth token file — dashboard will reject requests without it"
             );
         }
 
-        // 1. Initialize hub architecture: ACPHub → ChannelManager
-        let acp_hub = Arc::new(ACPHub::new());
-        let channel_hub = Arc::new(ChannelManager::new(Arc::clone(&acp_hub)));
+        // 1. Initialize hub architecture: ConversationManager → ChannelManager
+        let conversation_manager = Arc::new(ConversationManager::new());
+        let channel_hub = Arc::new(ChannelManager::new(Arc::clone(&conversation_manager)));
         let web_channel = WebChannelManager::new();
 
-        // 2. Wire event subscribers: RuntimeStatusStore listens to SystemEvent broadcast
-        let runtime_status = RuntimeStatusStore::new(services.change_tx());
-        {
-            let runtime_status = Arc::clone(&runtime_status);
-            let mut event_rx = acp_hub.subscribe();
-            tokio::spawn(async move {
-                loop {
-                    match event_rx.recv().await {
-                        Ok(event) => runtime_status.project_event(&event),
-                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
-                }
-            });
-        }
-        services.set_runtime_status(Arc::clone(&runtime_status));
-
-        // 3. ChannelManager subscribes to SystemEvent for agent info forwarding
-        channel_hub.start_event_forwarder(acp_hub.subscribe());
+        // 2. ChannelManager subscribes to SystemEvent for agent info forwarding
+        channel_hub.start_event_forwarder(conversation_manager.subscribe());
 
         // Register built-in internal channels.
         let (web_outbound_tx, mut web_outbound_rx) = web_channel.sender();
@@ -170,10 +173,17 @@ impl ServerDaemon {
         };
 
         // Start channel input processing loop on a dedicated thread with LocalSet.
+        //
+        // The thread can't observe mpsc channel closure on its own — its own
+        // `Arc<PluginHost>` transitively holds the input_tx — so we give it
+        // an explicit shutdown `Notify` and hand the join handle back to
+        // `RunningDaemon` so `stop()` can unwind cleanly.
         let mut input_rx = channel_hub.take_input_rx().context("input_rx already taken")?;
-        let acp_hub_for_input = Arc::clone(&acp_hub);
+        let manager_for_input = Arc::clone(&conversation_manager);
         let plugin_host_for_input = channel_hub.plugin_host();
-        std::thread::Builder::new()
+        let channel_input_shutdown = Arc::new(Notify::new());
+        let input_shutdown_for_thread = Arc::clone(&channel_input_shutdown);
+        let channel_input_thread = std::thread::Builder::new()
             .name("channel-input".to_string())
             .spawn(move || {
                 let runtime = tokio::runtime::Builder::new_current_thread()
@@ -183,12 +193,19 @@ impl ServerDaemon {
                 runtime.block_on(async move {
                     let local = tokio::task::LocalSet::new();
                     local.run_until(async move {
-                        while let Some(input) = input_rx.recv().await {
-                            let acp_hub = Arc::clone(&acp_hub_for_input);
-                            let plugin_host = Arc::clone(&plugin_host_for_input);
-                            tokio::task::spawn_local(async move {
-                                handle_channel_input(&acp_hub, &plugin_host, input).await;
-                            });
+                        loop {
+                            tokio::select! {
+                                biased;
+                                _ = input_shutdown_for_thread.notified() => break,
+                                maybe = input_rx.recv() => {
+                                    let Some(input) = maybe else { break };
+                                    let conversation_manager = Arc::clone(&manager_for_input);
+                                    let plugin_host = Arc::clone(&plugin_host_for_input);
+                                    tokio::task::spawn_local(async move {
+                                        handle_channel_input(&conversation_manager, &plugin_host, input).await;
+                                    });
+                                }
+                            }
                         }
                     }).await;
                 });
@@ -196,22 +213,21 @@ impl ServerDaemon {
             .expect("Failed to spawn channel input thread");
 
         // 3. Channel plugins — supervised by ChannelMonitor (respawn on
-        //    crash + heartbeat watchdog). Install the monitor back-ref into
-        //    ServiceStatusManager so the Dashboard snapshot + kill flow
-        //    route through it.
-        services.set_channel_monitor(Arc::downgrade(&channel_hub.monitor()));
-
-        let discovered_plugins = plugins::discover_channel_plugins();
+        //    crash + heartbeat watchdog). Handlers reach the monitor
+        //    directly via `state.channel_hub.monitor()`; no back-ref
+        //    needed.
+        let discovered_plugins = plugins::channel::discover();
         for name in cfg.channel_names() {
             let Some(plugin) = discovered_plugins.get(&name) else {
-                eprintln!("[VibeAround][daemon] no plugin found for channel '{}', skipping", name);
+                tracing::warn!(channel = %name, "no plugin found, skipping");
                 continue;
             };
             channel_hub.register_plugin(&name, plugin);
         }
 
         // 4. Web server (Axum)
-        let web_services = Arc::clone(&services);
+        let web_tunnels = Arc::clone(&tunnels);
+        let web_pty = Arc::clone(&pty);
         let web_channel_hub = Arc::clone(&channel_hub);
         let web_channel_manager = Arc::clone(&web_channel);
         let web_auth_token = Arc::clone(&self.auth_token);
@@ -220,7 +236,8 @@ impl ServerDaemon {
             run_web_server(
                 daemon_port,
                 dist_path,
-                web_services,
+                web_tunnels,
+                web_pty,
                 web_channel_hub,
                 web_channel_manager,
                 web_auth_token,
@@ -231,36 +248,39 @@ impl ServerDaemon {
 
         // 5. Tunnel (skip when provider is "none")
         let tunnel_provider = cfg.tunnel_provider;
-        eprintln!("[VibeAround][daemon] Tunnel ({})", tunnel_provider.as_str());
+        tracing::info!(provider = %tunnel_provider.as_str(), "tunnel configured");
         let tunnel_handle = if tunnel_provider.is_enabled() {
-            let tunnel_services = Arc::clone(&services);
+            let tunnel_manager = Arc::clone(&tunnels);
             let handle = tokio::spawn(async move {
                 match tunnels::start_web_tunnel_with_provider(tunnel_provider, &cfg).await {
                     Ok((guard, url)) => {
-                        eprintln!("[VibeAround][daemon] Tunnel URL: {}", url);
-                        tunnel_services.set_tunnel_url(tunnel_provider.as_str(), &url);
+                        tracing::info!(url = %url, "tunnel connected");
+                        tunnel_manager.set_url(tunnel_provider.as_str(), &url);
                         guard.wait().await;
                     }
                     Err(e) => {
-                        eprintln!("[VibeAround][daemon] Tunnel failed: {}", e);
+                        tracing::error!(error = %e, "tunnel failed");
                     }
                 }
             });
-            services.register_tunnel(tunnel_provider, handle.abort_handle());
+            tunnels.register(tunnel_provider, handle.abort_handle());
             handle
         } else {
-            eprintln!("[VibeAround][daemon] Tunnel disabled (none)");
+            tracing::debug!("tunnel disabled (provider=none)");
             tokio::spawn(async { /* no-op: keep the JoinHandle type consistent */ })
         };
 
         Ok(RunningDaemon {
             channel_hub,
-            acp_hub,
+            conversation_manager,
             web_channel,
             web_handle,
             tunnel_handle,
             web_dispatch_handle,
-            services,
+            tunnels,
+            pty,
+            channel_input_shutdown,
+            channel_input_thread: Some(channel_input_thread),
         })
     }
 
@@ -270,14 +290,14 @@ impl ServerDaemon {
         tokio::select! {
             result = &mut running.web_handle => {
                 match result {
-                    Ok(Ok(())) => eprintln!("[VibeAround][daemon] web server stopped"),
-                    Ok(Err(e)) => eprintln!("[VibeAround][daemon] web server error: {}", e),
-                    Err(e) => eprintln!("[VibeAround][daemon] web server panic: {}", e),
+                    Ok(Ok(())) => tracing::info!("web server stopped"),
+                    Ok(Err(e)) => tracing::error!(error = %e, "web server error"),
+                    Err(e) => tracing::error!(error = %e, "web server panic"),
                 }
                 running.tunnel_handle.abort();
             }
             _ = tokio::signal::ctrl_c() => {
-                eprintln!("\n[VibeAround][daemon] shutting down...");
+                tracing::info!("shutting down");
                 running.stop().await;
             }
         }

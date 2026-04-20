@@ -1,0 +1,243 @@
+//! HTTP/WebSocket API response shapes for the dashboard.
+//!
+//! This module owns the **wire contract** between the server and its
+//! frontends (web dashboard, Tauri desktop-ui, plus any future TUI / CLI
+//! / third-party consumer). Types here exist only to be serialized.
+//!
+//! # Where the data comes from
+//!
+//! Structs in this module are populated by reading `common` core state
+//! (via `config::ensure_loaded()` and `resources::...`). The core does
+//! not know about HTTP; it exposes domain data and this module maps it
+//! to wire shapes. Consumers that aren't HTTP (TUI, CLI) should write
+//! their own mapping alongside core, not reuse these types.
+//!
+//! # Consumers
+//!
+//! The canonical TS validator/types live in
+//! `src/shared/client-ts/src/schemas.ts` (zod). Keep the wire shapes
+//! documented on each struct below so Python/Swift/curl consumers can
+//! derive their own schemas without reading the zod file.
+
+use serde::Serialize;
+
+/// Per-agent display info returned under `AgentsConfig.agents`.
+///
+/// # Wire format (JSON)
+/// ```json
+/// { "id": "claude", "name": "Claude Code", "description": "Claude Code CLI" }
+/// ```
+///
+/// - `id`: an agent ID from `resources/agents.json` (e.g. `"claude"`,
+///   `"gemini"`, `"qwen-code"`).
+/// - `name` / `description`: copied from that file's `display_name` and
+///   `description` fields.
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+/// `GET /api/agents` response envelope.
+///
+/// # Wire format (JSON)
+/// ```json
+/// {
+///   "agents": [
+///     { "id": "claude", "name": "Claude Code", "description": "..." },
+///     { "id": "gemini", "name": "Gemini CLI",  "description": "..." }
+///   ],
+///   "default_agent": "claude"
+/// }
+/// ```
+///
+/// - `agents`: the enabled subset from settings.json (not all agents in
+///   `agents.json`), ordered as configured.
+/// - `default_agent`: raw string from settings.json. The server does not
+///   cross-validate against `agents` — consumers should treat an
+///   unrecognized value as "no default".
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentsConfig {
+    pub agents: Vec<AgentInfo>,
+    pub default_agent: String,
+}
+
+impl AgentInfo {
+    /// Build an `AgentInfo` for each of the given agent IDs by looking up
+    /// the corresponding entry in `agents.json`. IDs with no matching
+    /// entry are silently dropped.
+    pub fn for_ids(ids: &[String]) -> Vec<Self> {
+        ids.iter()
+            .filter_map(|id| {
+                let def = common::resources::agent_by_id(id)?;
+                Some(Self {
+                    id: id.clone(),
+                    name: def.display_name.clone(),
+                    description: def.description.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-domain runtime shapes. Each is returned by a dedicated
+// `/api/<domain>` handler reading directly from the relevant kernel
+// manager — no unified snapshot envelope, no aggregate facade.
+// ---------------------------------------------------------------------------
+
+/// One channel plugin, as returned by `GET /api/channels`.
+///
+/// Sources: `common::channels::monitor::ChannelMonitor::list()`
+///
+/// # Wire format (JSON)
+/// ```json
+/// {
+///   "kind": "telegram",
+///   "status": "running",
+///   "reason": null,
+///   "crash_count": 0,
+///   "last_seen_age_secs": 3,
+///   "restart_in_secs": 0,
+///   "started_at": 1713460000
+/// }
+/// ```
+///
+/// `status` is one of: `"not_started" | "spawning" | "running" | "crashed" | "stopped"`.
+/// `reason` carries a short explanation for crashed/stopped states.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelRuntime {
+    pub kind: String,
+    pub status: &'static str,
+    pub reason: Option<String>,
+    pub crash_count: u32,
+    pub last_seen_age_secs: u64,
+    pub restart_in_secs: u64,
+    pub started_at: u64,
+}
+
+/// One tunnel, as returned by `GET /api/tunnels`.
+///
+/// Sources: `common::tunnels::TunnelManager::list()`.
+///
+/// # Wire format (JSON)
+/// ```json
+/// {
+///   "provider": "localtunnel",
+///   "url": "https://quiet-pig-42.loca.lt",
+///   "status": { "state": "running" },
+///   "uptime_secs": 120
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize)]
+pub struct TunnelRuntime {
+    pub provider: &'static str,
+    pub url: Option<String>,
+    pub status: common::tunnels::TunnelStatus,
+    pub uptime_secs: u64,
+}
+
+// ---------------------------------------------------------------------------
+// /ws/chat wire events
+// ---------------------------------------------------------------------------
+
+/// Every frame the `/ws/chat` handler pushes to the web dashboard. Tagged
+/// by `kind` so the frontend does an exhaustive `switch` instead of
+/// string-sniffing a free-form JSON blob.
+///
+/// Lifecycle events (config / agent_ready / session_ready /
+/// command_menu / permission_request / system_text / error) are
+/// dashboard meta — our own addition on top of ACP. Streaming tokens /
+/// tool calls / turn completion all arrive as raw ACP
+/// `SessionNotification` payloads under the `acp_notification` kind.
+/// The frontend imports the matching TS types from
+/// `@agentclientprotocol/sdk`, so there is no hand-written schema on
+/// top of ACP.
+///
+/// # Wire format (JSON — examples)
+/// ```json
+/// { "kind": "config", "channel_id": "web:abc", "agents": [...], "default_agent": "claude" }
+/// { "kind": "agent_ready", "agent": "Claude Code", "version": "1.0" }
+/// { "kind": "session_ready", "session_id": "01HX..." }
+/// { "kind": "system_text", "text": "Session paired." }
+/// { "kind": "acp_notification", "payload": { /* acp::SessionNotification */ } }
+/// { "kind": "permission_request", "request_id": "pr-1", "request": { ... } }
+/// { "kind": "command_menu", "system_commands": [...], "agent_commands": [...] }
+/// { "kind": "error", "error": "spawn failed: ..." }
+/// ```
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChatEvent {
+    Config {
+        channel_id: String,
+        agents: Vec<AgentInfo>,
+        default_agent: String,
+    },
+    AgentReady {
+        agent: String,
+        version: String,
+    },
+    SessionReady {
+        session_id: String,
+    },
+    CommandMenu {
+        system_commands: serde_json::Value,
+        agent_commands: serde_json::Value,
+    },
+    PermissionRequest {
+        request_id: String,
+        request: serde_json::Value,
+    },
+    SystemText {
+        text: String,
+    },
+    /// Raw ACP payload. Consumers decode via
+    /// `@agentclientprotocol/sdk`'s `SessionNotification` on the TS
+    /// side, `acp::SessionNotification` on the Rust side.
+    AcpNotification {
+        payload: serde_json::Value,
+    },
+    Error {
+        error: String,
+    },
+}
+
+/// One agent runtime, as returned by `GET /api/agents/runtime`.
+///
+/// Sources: `common::conversations::ConversationManager::list()` → `Conversation::state()`.
+///
+/// # Wire format (JSON)
+/// ```json
+/// {
+///   "route_key": "telegram:chat_42",
+///   "channel_kind": "telegram",
+///   "chat_id": "chat_42",
+///   "cli_kind": "claude",
+///   "profile": "default",
+///   "session_id": "01HXYZ...",
+///   "workspace": "/Users/foo/bar",
+///   "busy": false,
+///   "failed": null,
+///   "started_at": 1713460000,
+///   "agent_name": "Claude Code",
+///   "agent_title": "Claude",
+///   "agent_version": "1.0.0"
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentRuntime {
+    pub route_key: String,
+    pub channel_kind: String,
+    pub chat_id: String,
+    pub cli_kind: Option<String>,
+    pub profile: Option<String>,
+    pub session_id: Option<String>,
+    pub workspace: Option<String>,
+    pub busy: bool,
+    pub failed: Option<String>,
+    pub started_at: u64,
+    pub agent_name: Option<String>,
+    pub agent_title: Option<String>,
+    pub agent_version: Option<String>,
+}

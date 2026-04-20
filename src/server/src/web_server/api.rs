@@ -5,8 +5,13 @@
 //! - DELETE /api/sessions/:session_id
 //! - GET /api/tmux/sessions
 //! - GET /api/agents
-//! - GET /api/services
-//! - DELETE /api/services/:category/:id
+//! - GET  /api/channels
+//! - POST /api/channels/:kind/{stop,restart,start}
+//! - GET  /api/tunnels
+//! - DELETE /api/tunnels/:provider
+//! - GET  /api/agents/runtime
+//! - DELETE /api/agents/:route_key
+//! - DELETE /api/pty/:session_id
 
 use axum::{
     extract::{Path, State},
@@ -17,6 +22,7 @@ use axum::{
 
 use common::config;
 use common::pty::{list_tmux_sessions, tmux_available, PtyTool, SessionId};
+use common::state::StateSource;
 
 use super::AppState;
 
@@ -31,101 +37,171 @@ pub async fn list_tmux_sessions_handler() -> Json<serde_json::Value> {
 }
 
 /// GET /api/agents — list enabled agents and default agent for frontend agent selector.
-pub async fn list_agents_handler() -> Json<serde_json::Value> {
+pub async fn list_agents_handler() -> Json<crate::api_types::AgentsConfig> {
     let cfg = config::ensure_loaded();
-    let agents: Vec<serde_json::Value> = cfg.enabled_agents.iter().map(|kind| {
-        serde_json::json!({
-            "id": kind.to_string(),
-            "name": kind.display_name(),
-            "description": kind.description(),
-        })
-    }).collect();
-    Json(serde_json::json!({
-        "agents": agents,
-        "default_agent": cfg.default_agent,
-    }))
+    Json(crate::api_types::AgentsConfig {
+        agents: crate::api_types::AgentInfo::for_ids(&cfg.enabled_agents),
+        default_agent: cfg.default_agent.clone(),
+    })
 }
 
-/// GET /api/services — list all services grouped by category.
-pub async fn list_services_handler(State(state): State<AppState>) -> Json<common::service::StatusSnapshot> {
-    Json(state.services.snapshot())
+/// GET /api/channels — live list of channel plugins from `ChannelMonitor`.
+pub async fn list_channels_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::api_types::ChannelRuntime>> {
+    let monitor = state.channel_hub.monitor();
+    let entries = monitor.list().await;
+    Json(
+        entries
+            .into_iter()
+            .map(|s| crate::api_types::ChannelRuntime {
+                kind: s.kind,
+                status: s.status.as_str(),
+                reason: if s.reason.is_empty() { None } else { Some(s.reason) },
+                crash_count: s.crash_count,
+                last_seen_age_secs: s.last_seen_age_secs,
+                restart_in_secs: s.restart_in_secs,
+                started_at: s.started_at,
+            })
+            .collect(),
+    )
 }
 
-/// POST /api/services/channels/:kind/stop — user-initiated stop of a channel
+/// GET /api/tunnels — live list of tunnels from `TunnelManager`.
+pub async fn list_tunnels_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::api_types::TunnelRuntime>> {
+    let entries = state.tunnels.list().await;
+    Json(
+        entries
+            .into_iter()
+            .map(|t| crate::api_types::TunnelRuntime {
+                provider: t.provider.as_str(),
+                url: t.url,
+                status: t.status,
+                uptime_secs: t.uptime_secs,
+            })
+            .collect(),
+    )
+}
+
+/// GET /api/agents/runtime — live list of agent pods from `ConversationManager`.
+pub async fn list_agents_runtime_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::api_types::AgentRuntime>> {
+    let conversation_manager = state.channel_hub.conversation_manager();
+    let pods = conversation_manager.list();
+    let mut out = Vec::with_capacity(pods.len());
+    for pod in pods {
+        let st = pod.state().await;
+        let (agent_name, agent_title, agent_version) = st
+            .initialize
+            .as_ref()
+            .and_then(|i| i.agent_info.as_ref())
+            .map(|info| (Some(info.name.clone()), info.title.clone(), Some(info.version.clone())))
+            .unwrap_or((None, None, None));
+        out.push(crate::api_types::AgentRuntime {
+            route_key: pod.route.as_key(),
+            channel_kind: pod.route.channel_kind.clone(),
+            chat_id: pod.route.chat_id.clone(),
+            cli_kind: st.cli_kind,
+            profile: st.profile,
+            session_id: st.session_id,
+            workspace: st.workspace,
+            busy: st.busy,
+            failed: st.failed,
+            started_at: pod.started_at(),
+            agent_name,
+            agent_title,
+            agent_version,
+        });
+    }
+    Json(out)
+}
+
+/// POST /api/channels/:kind/stop — user-initiated stop of a channel
 /// plugin (no auto-respawn).
 pub async fn stop_channel_handler(
     State(state): State<AppState>,
     Path(kind): Path<String>,
 ) -> impl IntoResponse {
-    let Some(monitor) = state.services.channel_monitor() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "monitor not available".to_string());
-    };
-    match monitor.force_stop(&kind).await {
+    match state.channel_hub.monitor().force_stop(&kind).await {
         Ok(()) => (StatusCode::OK, format!("Stopped {}", kind)),
         Err(e) => (StatusCode::NOT_FOUND, e),
     }
 }
 
-/// POST /api/services/channels/:kind/restart — user-initiated restart (kill +
+/// POST /api/channels/:kind/restart — user-initiated restart (kill +
 /// immediate respawn, no 15s backoff).
 pub async fn restart_channel_handler(
     State(state): State<AppState>,
     Path(kind): Path<String>,
 ) -> impl IntoResponse {
-    let Some(monitor) = state.services.channel_monitor() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "monitor not available".to_string());
-    };
-    match monitor.force_restart(&kind).await {
+    match state.channel_hub.monitor().force_restart(&kind).await {
         Ok(()) => (StatusCode::OK, format!("Restarting {}", kind)),
         Err(e) => (StatusCode::NOT_FOUND, e),
     }
 }
 
-/// POST /api/services/channels/:kind/start — transition a Stopped channel
+/// POST /api/channels/:kind/start — transition a Stopped channel
 /// back to Crashed(restart_at=now) so the next monitor tick respawns it.
 pub async fn start_channel_handler(
     State(state): State<AppState>,
     Path(kind): Path<String>,
 ) -> impl IntoResponse {
-    let Some(monitor) = state.services.channel_monitor() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "monitor not available".to_string());
-    };
-    match monitor.force_start(&kind) {
+    match state.channel_hub.monitor().force_start(&kind) {
         Ok(()) => (StatusCode::OK, format!("Starting {}", kind)),
         Err(e) => (StatusCode::NOT_FOUND, e),
     }
 }
 
-/// DELETE /api/services/:category/:id — kill a specific service.
-pub async fn kill_service_handler(
+/// DELETE /api/tunnels/:provider — kill a running tunnel.
+pub async fn kill_tunnel_handler(
     State(state): State<AppState>,
-    Path((category, id)): Path<(String, String)>,
+    Path(provider): Path<String>,
 ) -> impl IntoResponse {
-    // Agent kill is async (needs ACPHub.close) — handle it here rather than in
-    // the sync ServiceStatusManager.kill_service().
-    if category == "agents" {
-        if let Some(route) = common::acp::routing::RouteKey::from_key(&id) {
-            state.channel_hub.acp_hub().close(&route, Some("killed by user".to_string())).await;
-            return (StatusCode::OK, format!("Killed {}/{}", category, id));
-        }
-        return (StatusCode::NOT_FOUND, format!("Invalid agent route key: {}", id));
-    }
-
-    // PTY kill must go through PtySessionManager to actually kill the child
-    // process, not just remove the registry entry.
-    if category == "pty" {
-        if let Ok(uuid) = uuid::Uuid::parse_str(&id) {
-            if state.pty_manager.delete_session(SessionId(uuid)) {
-                return (StatusCode::OK, format!("Killed {}/{}", category, id));
-            }
-        }
-        return (StatusCode::NOT_FOUND, format!("Service {}/{} not found", category, id));
-    }
-
-    if state.services.kill_service(&category, &id) {
-        (StatusCode::OK, format!("Killed {}/{}", category, id))
+    if state.tunnels.kill(&provider) {
+        (StatusCode::OK, format!("Killed tunnel {}", provider))
     } else {
-        (StatusCode::NOT_FOUND, format!("Service {}/{} not found", category, id))
+        (StatusCode::NOT_FOUND, format!("Tunnel {} not found", provider))
+    }
+}
+
+/// DELETE /api/agents/:route_key — close an agent pod.
+///
+/// `route_key` is the colon-joined form from `RouteKey::as_key()`, e.g.
+/// `telegram:chat_42`. The handler closes the pod (shutting down its
+/// bridge) and returns `404` if the key doesn't parse.
+pub async fn kill_agent_handler(
+    State(state): State<AppState>,
+    Path(route_key): Path<String>,
+) -> impl IntoResponse {
+    let Some(route) = common::routing::RouteKey::from_key(&route_key) else {
+        return (StatusCode::NOT_FOUND, format!("Invalid agent route key: {}", route_key));
+    };
+    state
+        .channel_hub
+        .conversation_manager()
+        .close(&route, Some("killed by user".to_string()))
+        .await;
+    (StatusCode::OK, format!("Killed agent {}", route_key))
+}
+
+/// DELETE /api/pty/:session_id — kill a PTY session.
+///
+/// Goes through `PtySessionManager::delete_session` so the child
+/// process gets SIGKILL'd, not just the registry entry removed.
+pub async fn kill_pty_handler(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    let Ok(uuid) = uuid::Uuid::parse_str(&session_id) else {
+        return (StatusCode::BAD_REQUEST, format!("Invalid session id: {}", session_id));
+    };
+    if state.pty_manager.delete_session(SessionId(uuid)) {
+        (StatusCode::OK, format!("Killed pty {}", session_id))
+    } else {
+        (StatusCode::NOT_FOUND, format!("PTY session {} not found", session_id))
     }
 }
 
@@ -297,8 +373,8 @@ pub async fn set_default_workspace_handler(
 
 /// GET /api/previews — list all live preview sessions and the active tunnel URL.
 pub async fn list_previews_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let previews = common::preview_entries::list_snapshots();
-    let tunnel_url = state.services.get_tunnel_url();
+    let previews = common::previews::list_snapshots();
+    let tunnel_url = state.tunnels.first_url();
     Json(serde_json::json!({
         "previews": previews,
         "tunnel_url": tunnel_url,
@@ -307,7 +383,7 @@ pub async fn list_previews_handler(State(state): State<AppState>) -> Json<serde_
 
 /// DELETE /api/previews/:slug — close one preview and kill its dev-server port.
 pub async fn delete_preview_handler(Path(slug): Path<String>) -> impl IntoResponse {
-    if common::preview_entries::delete_session(&slug) {
+    if common::previews::delete_session(&slug) {
         (StatusCode::OK, format!("Preview {} closed", slug))
     } else {
         (StatusCode::NOT_FOUND, format!("Preview {} not found", slug))

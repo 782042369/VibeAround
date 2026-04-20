@@ -8,8 +8,8 @@ mod mcp;
 mod pair;
 mod preview;
 mod ws_chat;
+mod ws_domains;
 mod ws_pty;
-mod ws_services;
 
 use axum::body::Body;
 use axum::http::{HeaderValue, Method, StatusCode};
@@ -22,8 +22,9 @@ use std::sync::Arc;
 use tower_http::services::ServeDir;
 
 use common::auth::AuthToken;
-use common::channel_manager::{ChannelManager, WebChannelManager};
-use common::pty::PtySessionManager;
+use common::channels::{ChannelManager, WebChannelManager};
+use common::pty::{PtySessionManager, Registry};
+use common::tunnels::TunnelManager;
 
 use self::auth::{require_auth, AuthState};
 
@@ -45,14 +46,18 @@ struct WsQuery {
     token: Option<String>,
 }
 
-/// Shared app state: registry, SPA fallback path, working dir, service manager.
+/// Shared app state: per-domain manager handles + server metadata.
 #[derive(Clone)]
 pub(crate) struct AppState {
     pty_manager: Arc<PtySessionManager>,
     dist_for_fallback: PathBuf,
-    services: Arc<common::service::ServiceStatusManager>,
+    tunnels: Arc<TunnelManager>,
     channel_hub: Arc<ChannelManager>,
     web_channel: Arc<WebChannelManager>,
+    /// Port the daemon is bound to. Handlers that need to build
+    /// loopback URLs use this instead of reaching into a services
+    /// facade.
+    port: u16,
     /// Shared HTTP client for preview proxy (connection pooling).
     preview_client: reqwest::Client,
 }
@@ -60,11 +65,11 @@ pub(crate) struct AppState {
 /// Ensure web dist exists (build web first).
 fn verify_web_dist(web_dist: &std::path::Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if !web_dist.exists() {
-        eprintln!("[VibeAround] Web dist not found: {:?}", web_dist);
+        tracing::info!("[VibeAround] Web dist not found: {:?}", web_dist);
         return Err(format!("Web dist not found: {:?}", web_dist).into());
     }
     if !web_dist.join("index.html").exists() {
-        eprintln!("[VibeAround] index.html not found in {:?}", web_dist);
+        tracing::info!("[VibeAround] index.html not found in {:?}", web_dist);
         return Err(format!("index.html not found in {:?}", web_dist).into());
     }
     Ok(())
@@ -81,7 +86,7 @@ async fn spa_fallback(dist_path: PathBuf) -> Response {
                 (StatusCode::INTERNAL_SERVER_ERROR, "failed to build response").into_response()
             }),
         Err(e) => {
-            eprintln!("[VibeAround] Failed to read index.html: {}", e);
+            tracing::info!("[VibeAround] Failed to read index.html: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load index.html: {}", e)).into_response()
         }
     }
@@ -96,7 +101,8 @@ async fn spa_fallback_handler(axum::extract::State(state): axum::extract::State<
 pub async fn run_web_server(
     port: u16,
     dist_path: PathBuf,
-    services: Arc<common::service::ServiceStatusManager>,
+    tunnels: Arc<TunnelManager>,
+    pty_registry: Registry,
     channel_hub: Arc<ChannelManager>,
     web_channel: Arc<WebChannelManager>,
     auth_token: Arc<AuthToken>,
@@ -117,11 +123,12 @@ pub async fn run_web_server(
         .build()
         .expect("reqwest client");
     let state = AppState {
-        pty_manager: Arc::new(PtySessionManager::from_registry(Arc::clone(&services.pty))),
+        pty_manager: Arc::new(PtySessionManager::from_registry(pty_registry)),
         dist_for_fallback: web_dist.clone(),
-        services,
+        tunnels,
         channel_hub,
         web_channel,
+        port,
         preview_client,
     };
 
@@ -148,24 +155,27 @@ pub async fn run_web_server(
         .route("/api/agents", get(api::list_agents_handler))
         .route("/ws", get(ws_pty::ws_handler))
         .route("/ws/chat", get(ws_chat::ws_chat_handler))
-        .route("/ws/services", get(ws_services::ws_services_handler))
-        .route("/api/services", get(api::list_services_handler))
+        .route("/ws/channels", get(ws_domains::ws_channels_handler))
+        .route("/ws/tunnels", get(ws_domains::ws_tunnels_handler))
+        .route("/ws/agents/runtime", get(ws_domains::ws_agents_runtime_handler))
+        .route("/api/channels", get(api::list_channels_handler))
+        .route("/api/tunnels", get(api::list_tunnels_handler))
+        .route("/api/agents/runtime", get(api::list_agents_runtime_handler))
         .route(
-            "/api/services/{category}/{id}",
-            delete(api::kill_service_handler),
-        )
-        .route(
-            "/api/services/channels/{kind}/stop",
+            "/api/channels/{kind}/stop",
             post(api::stop_channel_handler),
         )
         .route(
-            "/api/services/channels/{kind}/restart",
+            "/api/channels/{kind}/restart",
             post(api::restart_channel_handler),
         )
         .route(
-            "/api/services/channels/{kind}/start",
+            "/api/channels/{kind}/start",
             post(api::start_channel_handler),
         )
+        .route("/api/tunnels/{provider}", delete(api::kill_tunnel_handler))
+        .route("/api/agents/{route_key}", delete(api::kill_agent_handler))
+        .route("/api/pty/{session_id}", delete(api::kill_pty_handler))
         .route("/api/previews", get(api::list_previews_handler))
         .route("/api/previews/{slug}", delete(api::delete_preview_handler))
         .route(
@@ -189,7 +199,8 @@ pub async fn run_web_server(
     // page load can boot and read the `?token=` parameter from its own URL.
     //
     // Preview routes are also un-authed — the 8-char slug itself acts as a
-    // short-lived authentication token (5-min TTL, cryptographically random).
+    // short-lived authentication token (10-min TTL, cryptographically random;
+    // single source of truth: `common::previews::SHARE_TTL_SECS`).
     let public = Router::new()
         // Pairing API: no auth required (pairing IS the auth flow).
         .route("/api/pair/start", post(pair::start_handler))
@@ -218,7 +229,7 @@ pub async fn run_web_server(
 
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
-            eprintln!(
+            tracing::info!(
                 "[VibeAround] ⚠️  Port {} is already in use — is another VibeAround instance running?",
                 port
             );

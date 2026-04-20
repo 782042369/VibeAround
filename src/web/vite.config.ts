@@ -7,7 +7,10 @@ export default defineConfig({
   base: "/va/",
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "@va/client": path.resolve(__dirname, "../shared/client-ts/src/index.ts"),
+    },
   },
   server: {
     port: 5180,

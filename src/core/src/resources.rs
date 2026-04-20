@@ -306,27 +306,6 @@ mod tests {
         assert!(agent_by_alias("nonexistent").is_none());
     }
 
-    #[test]
-    fn agent_ids_match_agent_kind() {
-        // Ensure every agent in JSON has a matching AgentKind variant
-        use crate::agent_factory::provider::AgentKind;
-        for agent in AGENTS.iter() {
-            assert!(
-                AgentKind::from_str_loose(&agent.id).is_some(),
-                "Agent '{}' in agents.json has no matching AgentKind variant",
-                agent.id
-            );
-        }
-        // Ensure every AgentKind variant has an entry in agents.json
-        for kind in AgentKind::all() {
-            let id = kind.to_string();
-            assert!(
-                agent_by_id(&id).is_some(),
-                "AgentKind::{} has no entry in agents.json",
-                kind
-            );
-        }
-    }
 
     #[test]
     fn mcp_tools_list_injects_agent_enums() {

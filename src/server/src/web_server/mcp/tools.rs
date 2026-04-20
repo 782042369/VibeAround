@@ -4,7 +4,7 @@
 //! validates inputs, touches workspace config / preview store / session
 //! files, and returns a JSON-RPC response.
 //!
-//! Tools never touch `ACPHub`, pods, or bridges — they're stateless. Any
+//! Tools never touch `ConversationManager`, pods, or bridges — they're stateless. Any
 //! session loading happens later when the user sends `/pickup` in IM chat.
 
 use axum::Json;
@@ -33,10 +33,14 @@ pub(super) async fn mcp_get_session_id(
         None => return jsonrpc_err(id, -32602, "Missing required argument: chat_id"),
     };
 
-    let route = common::acp::routing::RouteKey::new(channel_kind, chat_id);
-    let acp_hub = state.channel_hub.acp_hub();
+    let route = common::routing::RouteKey::new(channel_kind, chat_id);
+    let conversation_manager = state.channel_hub.conversation_manager();
 
-    match acp_hub.snapshot(&route).await {
+    let state_opt = match conversation_manager.conversation(&route) {
+        Some(conv) => Some(conv.state().await),
+        None => None,
+    };
+    match state_opt {
         Some(snap) if snap.session_id.is_some() => {
             let sid = snap.session_id.unwrap();
             mcp_text(id, &sid)
@@ -49,7 +53,7 @@ pub(super) async fn mcp_get_session_id(
 }
 
 // ---------------------------------------------------------------------------
-// prepare_handover — stateless, no ACPHub dependency
+// prepare_handover — stateless, no ConversationManager dependency
 // ---------------------------------------------------------------------------
 
 pub(super) async fn mcp_prepare_handover(
@@ -112,7 +116,7 @@ pub(super) async fn mcp_prepare_handover(
         },
     };
 
-    let code = common::pickup_codes::store(
+    let code = common::conversations::handover::pickup_codes::store(
         agent_kind_str.to_string(),
         session_id,
         cwd.to_string(),
@@ -222,7 +226,7 @@ pub(super) async fn mcp_preview_start(
         .map(String::from);
 
     let (owner_slug, share_slug) =
-        common::preview_entries::ensure_server(port, cwd_path, title, session_id.clone());
+        common::previews::ensure_server(port, cwd_path, title, session_id.clone());
     let owner_url = build_preview_url(state, "preview/u", &owner_slug);
     let share_url = build_preview_url(state, "preview/s", &share_slug);
 
@@ -302,7 +306,7 @@ pub(super) async fn mcp_md_preview(
         });
 
     let (owner_slug, share_slug) =
-        common::preview_entries::ensure_file(file_path, cwd_path, title);
+        common::previews::ensure_file(file_path, cwd_path, title);
     let owner_url = build_preview_url(state, "preview/u", &owner_slug);
     let share_url = build_preview_url(state, "preview/s", &share_slug);
 
@@ -366,8 +370,8 @@ fn derive_title(arguments: &serde_json::Value, cwd_path: &std::path::Path) -> St
 /// All preview routes live under `/va/` to avoid conflicts with dev servers.
 fn build_preview_url(state: &AppState, route: &str, slug: &str) -> String {
     let base = state
-        .services
-        .get_tunnel_url()
-        .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.services.port));
+        .tunnels
+        .first_url()
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.port));
     format!("{}/va/{}/{}", base.trim_end_matches('/'), route, slug)
 }

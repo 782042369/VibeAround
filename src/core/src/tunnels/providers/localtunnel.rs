@@ -1,0 +1,103 @@
+//! Localtunnel: expose the web dashboard (and xterm) over the internet via a public URL.
+//! Spawns `npx localtunnel --port <DEFAULT_PORT>` (or bunx), parses the public URL from stdout, keeps process alive.
+//! Tunnel password: loca.lt uses the tunnel initiator's public IP as the "password" (anti-abuse).
+//! There is no SDK to get it; the only way is to GET https://loca.lt/mytunnelpassword from the same
+//! machine running the tunnel — we do that and parse the IP from the response.
+
+use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
+
+
+const PORT: u16 = crate::config::DEFAULT_PORT;
+
+/// Try to extract public URL from a line of localtunnel stdout (e.g. "your url is: https://xxx.loca.lt").
+fn parse_url_from_line(line: &str) -> Option<String> {
+    let line = line.trim();
+    // Common patterns: "your url is: https://..." or "https://...loca.lt"
+    if let Some(idx) = line.find("https://") {
+        let rest = &line[idx..];
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '\r' || c == '\n')
+            .unwrap_or(rest.len());
+        let url = rest[..end].trim_end_matches(|c| c == '.' || c == ',');
+        if url.starts_with("https://") && (url.contains("loca.lt") || url.contains("localtunnel")) {
+            return Some(url.to_string());
+        }
+    }
+    if let Some(idx) = line.find("http://") {
+        let rest = &line[idx..];
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '\r' || c == '\n')
+            .unwrap_or(rest.len());
+        let url = rest[..end].trim_end_matches(|c| c == '.' || c == ',');
+        if url.contains("loca.lt") || url.contains("localtunnel") {
+            return Some(url.to_string());
+        }
+    }
+    None
+}
+
+/// Start localtunnel for the given port. Returns (guard, public URL) once the URL is printed.
+/// Caller must keep the guard and await `guard.wait()` to keep the tunnel alive.
+pub async fn start(port: u16) -> Result<(crate::tunnels::TunnelGuard, String), Box<dyn std::error::Error + Send + Sync>> {
+    let tunnel_def = crate::resources::tunnel_by_id("localtunnel")
+        .expect("localtunnel not in tunnels.json");
+    let program = tunnel_def.program.as_deref().unwrap_or("npx");
+    let base_args: Vec<&str> = tunnel_def.args.as_ref()
+        .map(|a| a.iter().map(|s| s.as_str()).collect())
+        .unwrap_or_else(|| vec!["localtunnel", "--port"]);
+
+    let mut cmd = crate::process::env::command(program);
+    cmd.args(&base_args)
+        .arg(port.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let error_hint = crate::resources::tunnel_spawn_error_hint(tunnel_def)
+        .unwrap_or("is Node/npx installed?");
+    let mut child = cmd.spawn().map_err(|e| {
+        format!("Failed to spawn {} ({}): {}", program, error_hint, e)
+    })?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("localtunnel stdout not captured")?;
+
+    let reader = BufReader::new(stdout);
+    let mut lines = reader.lines();
+    let url = loop {
+        let line = lines
+            .next_line()
+            .await
+            .map_err(|e| format!("Reading localtunnel stdout: {}", e))?
+            .ok_or("localtunnel closed stdout before printing URL")?;
+        if let Some(u) = parse_url_from_line(&line) {
+            break u;
+        }
+    };
+
+    Ok((crate::tunnels::TunnelGuard::Process(child), url))
+}
+
+/// Start tunnel for the default web dashboard port.
+pub async fn start_web_tunnel() -> Result<(crate::tunnels::TunnelGuard, String), Box<dyn std::error::Error + Send + Sync>> {
+    start(PORT).await
+}
+
+/// Localtunnel backend. Implements TunnelBackend for unified dispatch.
+pub struct LocaltunnelBackend;
+
+#[async_trait::async_trait]
+impl crate::tunnels::TunnelBackend for LocaltunnelBackend {
+    fn name(&self) -> &'static str {
+        "localtunnel"
+    }
+
+    async fn start_web_tunnel(
+        &self,
+        _config: &crate::config::Config,
+    ) -> Result<(crate::tunnels::TunnelGuard, String), Box<dyn std::error::Error + Send + Sync>> {
+        start_web_tunnel().await
+    }
+}

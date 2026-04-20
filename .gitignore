@@ -57,6 +57,7 @@ demo*/
 .specstory/
 .docs/
 .cursorindexingignore
+.superpowers/
 
 # Plugins (managed separately, not committed to main repo)
 src/plugins/
@@ -68,3 +69,6 @@ wiki/
 apple-sign.config
 build.sh
 .build-env
+
+# ts-rs leftover (removed — fence against accidental resurrection)
+src/core/bindings/

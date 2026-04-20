@@ -12,8 +12,10 @@ use tokio::sync::{Mutex, Notify};
 
 use onboarding::{OnboardingGate, OnboardingInstallState, OnboardingSessions};
 
-/// Shared ServiceStatusManager, injected into Tauri state for tray and IPC access.
-pub struct AppServiceManager(pub Arc<common::service::ServiceStatusManager>);
+/// Shared `TunnelManager` handle, injected into Tauri state for the
+/// tray (live tunnel menu item) and any IPC command that needs the
+/// current tunnel URL.
+pub struct AppTunnels(pub Arc<common::tunnels::TunnelManager>);
 
 /// Whether the app is currently in onboarding mode (tray reads this).
 pub struct OnboardingActive(pub std::sync::atomic::AtomicBool);
@@ -117,12 +119,14 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 fn main() {
+    common::logging::init();
+
     // Fast-path: if our port is already in use, exit immediately before
     // allocating Tauri resources. tauri_plugin_single_instance (below) is the
     // real guard, but this avoids a full Tauri init just to discover the duplicate.
     let port = common::config::DEFAULT_PORT;
     if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-        eprintln!(
+        tracing::info!(
             "[VibeAround] Another instance is already running (port {} in use). Exiting.",
             port
         );
@@ -130,13 +134,13 @@ fn main() {
     }
 
     let daemon = Arc::new(server::ServerDaemon::new(port));
-    let services = daemon.services();
+    let tunnels = daemon.tunnels();
 
     // Persist the auth token immediately so the desktop-ui (which runs in
     // a Tauri webview that starts rendering before the daemon has fully
     // booted) can read `~/.vibearound/auth.json` from its first render.
     if let Err(e) = daemon.persist_auth_token() {
-        eprintln!("[VibeAround] Failed to persist auth token: {}", e);
+        tracing::info!("[VibeAround] Failed to persist auth token: {}", e);
     }
 
     let onboarding_needed = onboarding::needs_onboarding();
@@ -153,7 +157,7 @@ fn main() {
     // itself with the freshly populated settings. Skipping here also
     // avoids a pointless uninstall sweep over files that don't exist yet.
     if !onboarding_needed {
-        common::agent_integrations::sync_integrations(
+        common::agent::sync_integrations(
             &onboarding::get_settings_value(),
         );
     }
@@ -163,14 +167,14 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            eprintln!("[VibeAround] ⚠️  Another instance tried to start, focusing existing window");
+            tracing::info!("[VibeAround] ⚠️  Another instance tried to start, focusing existing window");
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
                 let _ = w.show();
                 let _ = w.set_focus();
             }
         }))
-        .manage(AppServiceManager(services))
+        .manage(AppTunnels(tunnels))
         .manage(OnboardingGate { notify: Arc::clone(&gate) })
         .manage(OnboardingSessions {
             plugin_sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -246,9 +250,9 @@ fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if onboarding_needed {
-                    eprintln!("[VibeAround] Waiting for onboarding to complete…");
+                    tracing::info!("[VibeAround] Waiting for onboarding to complete…");
                     gate.notified().await;
-                    eprintln!("[VibeAround] Onboarding complete, starting daemon…");
+                    tracing::info!("[VibeAround] Onboarding complete, starting daemon…");
 
                     // Mark onboarding as done for tray
                     if let Some(state) = app_handle.try_state::<OnboardingActive>() {
@@ -257,7 +261,7 @@ fn main() {
                 }
 
                 if let Err(e) = start_daemon(&app_handle).await {
-                    eprintln!("[VibeAround] Daemon error: {}", e);
+                    tracing::info!("[VibeAround] Daemon error: {}", e);
                 }
 
                 // Onboarding path: settings were empty when we ran the
@@ -266,7 +270,7 @@ fn main() {
                 // steady-state path already ran this pre-binding, so
                 // re-running would be wasted work.
                 if onboarding_needed {
-                    common::agent_integrations::sync_integrations(
+                    common::agent::sync_integrations(
                         &onboarding::get_settings_value(),
                     );
                 }
@@ -285,8 +289,8 @@ fn main() {
             // abrupt exit (e.g. signal-driven shutdown before the async
             // runtime has been able to drain its tasks).
             if let tauri::RunEvent::Exit = event {
-                common::child_registry::ChildRegistry::global().kill_all();
-                common::preview_entries::shutdown_kill_all_ports();
+                common::process::registry::ChildRegistry::global().kill_all();
+                common::previews::shutdown_kill_all_ports();
             }
         });
 }

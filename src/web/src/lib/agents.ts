@@ -1,27 +1,44 @@
+import { AGENT_IDS, type AgentId } from "@va/client";
 import type { ToolType } from "@/lib/terminal-types";
 
+export type { AgentId };
+export { AGENT_IDS };
+
 export interface AgentDisplayInfo {
-  id: string;
+  id: AgentId;
   name: string;
 }
 
-export const AGENT_DISPLAY_NAMES: Record<string, string> = {
+/** Display names for every `AgentId`. The `Record<AgentId, ...>` shape
+ *  means adding an entry to `resources/agents.json` breaks the build here
+ *  until the display name is filled in. */
+export const AGENT_DISPLAY_NAMES: Record<AgentId, string> = {
   claude: "Claude Code",
   gemini: "Gemini CLI",
-  codex: "Codex CLI",
   opencode: "Opencode",
+  codex: "Codex CLI",
+  cursor: "Cursor",
+  kiro: "Kiro",
+  "qwen-code": "Qwen Code",
 };
 
+function isAgentId(value: string): value is AgentId {
+  return (AGENT_IDS as readonly string[]).includes(value);
+}
+
 export function getAgentDisplayName(agentId: string): string {
-  return AGENT_DISPLAY_NAMES[agentId] ?? agentId;
+  return isAgentId(agentId) ? AGENT_DISPLAY_NAMES[agentId] : agentId;
 }
 
 export function getToolDisplayName(tool: string): string {
-  return AGENT_DISPLAY_NAMES[tool.toLowerCase()] ?? "Terminal";
+  const normalized = tool.toLowerCase();
+  return isAgentId(normalized) ? AGENT_DISPLAY_NAMES[normalized] : "Terminal";
 }
 
 export function agentIdToToolType(agentId: string): ToolType {
   const normalized = agentId.toLowerCase();
+  // ToolType is a subset of AgentId (plus "generic"). Widen here and let
+  // the theme layer treat any kind it doesn't recognize as "generic".
   if (normalized === "claude" || normalized === "codex" || normalized === "gemini" || normalized === "opencode") {
     return normalized;
   }

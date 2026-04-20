@@ -40,21 +40,21 @@ pub fn data_dir() -> PathBuf {
 fn init_data_dir() {
     let dir = data_dir();
     if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!("[VibeAround] Failed to create data dir {:?}: {}", dir, e);
+        tracing::info!("[VibeAround] Failed to create data dir {:?}: {}", dir, e);
         return;
     }
     let settings_path = dir.join("settings.json");
     if !settings_path.exists() {
-        eprintln!("[VibeAround] Creating default settings.json at {:?}", settings_path);
+        tracing::info!("[VibeAround] Creating default settings.json at {:?}", settings_path);
         if let Err(e) = std::fs::write(&settings_path, DEFAULT_SETTINGS_JSON) {
-            eprintln!("[VibeAround] Failed to write settings.json: {}", e);
+            tracing::info!("[VibeAround] Failed to write settings.json: {}", e);
         } else if let Err(e) = crate::auth::set_owner_only(&settings_path) {
-            eprintln!("[VibeAround] Failed to chmod settings.json: {}", e);
+            tracing::info!("[VibeAround] Failed to chmod settings.json: {}", e);
         }
     }
     let ws_dir = dir.join("workspaces");
     if let Err(e) = std::fs::create_dir_all(&ws_dir) {
-        eprintln!("[VibeAround] Failed to create workspaces dir: {}", e);
+        tracing::info!("[VibeAround] Failed to create workspaces dir: {}", e);
     }
 }
 
@@ -99,7 +99,10 @@ pub struct Config {
     pub tmux_detach_others: bool,
     // --- Agents ---
     pub default_agent: String,
-    pub enabled_agents: Vec<crate::agent_factory::agents::AgentKind>,
+    /// Subset of agent IDs from `resources/agents.json` the user has enabled.
+    /// Validated at load time — entries that don't resolve via
+    /// `resources::agent_by_alias` are dropped.
+    pub enabled_agents: Vec<String>,
     // --- Raw channels JSON (for dynamic plugin config) ---
     raw_channels: serde_json::Value,
 }
@@ -275,11 +278,11 @@ fn load_settings_from(path: &std::path::Path) -> Config {
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str())
-                .filter_map(crate::agent_factory::agents::AgentKind::from_str_loose)
+                .filter_map(|s| crate::resources::agent_by_alias(s).map(|def| def.id.clone()))
                 .collect::<Vec<_>>()
         })
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| crate::agent_factory::agents::AgentKind::all().to_vec());
+        .filter(|v: &Vec<String>| !v.is_empty())
+        .unwrap_or_else(|| crate::resources::AGENTS.iter().map(|a| a.id.clone()).collect());
 
     Config {
         tunnel_provider,
@@ -362,7 +365,7 @@ impl Default for Config {
             preview_base_url: None,
             tmux_detach_others: true,
             default_agent: "claude".to_string(),
-            enabled_agents: crate::agent_factory::agents::AgentKind::all().to_vec(),
+            enabled_agents: crate::resources::AGENTS.iter().map(|a| a.id.clone()).collect(),
             raw_channels: serde_json::Value::Object(serde_json::Map::new()),
         }
     }

@@ -1,21 +1,16 @@
-//! VibeAround core: ACP hub, agent factory, channels, PTY, tunnels, workspace. No UI, no HTTP.
+//! VibeAround core: conversation manager, agents, channels, PTY, tunnels, workspace. No UI, no HTTP.
 
-pub mod acp;
-pub mod acp_hub;
-pub mod agent_factory;
-pub mod agent_integrations;
+pub mod agent;
 pub mod auth;
-pub mod channel_manager;
-pub mod child_registry;
+pub mod channels;
 pub mod config;
-pub mod env;
-pub mod pickup_codes;
-pub mod preview_entries;
+pub mod conversations;
+pub mod logging;
 pub mod plugins;
+pub mod previews;
+pub mod process;
 pub mod pty;
 pub mod resources;
-pub mod runtime_status;
-pub mod service;
-pub mod session_manager;
+pub mod routing;
+pub mod state;
 pub mod tunnels;
-pub mod workspace;
