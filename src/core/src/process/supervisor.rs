@@ -288,6 +288,19 @@ impl Supervisor {
         })
     }
 
+    /// Process-wide singleton. Bound to `ChildRegistry::global()`; the
+    /// tick loop is auto-started on first access. Must be called from
+    /// inside a tokio runtime (every production call site qualifies).
+    pub fn global() -> Arc<Self> {
+        use std::sync::OnceLock;
+        static INSTANCE: OnceLock<Arc<Supervisor>> = OnceLock::new();
+        Arc::clone(INSTANCE.get_or_init(|| {
+            let sup = Supervisor::new(ChildRegistry::global());
+            sup.spawn_tick_loop();
+            sup
+        }))
+    }
+
     /// Register a new supervised process. Returns an opaque `ProcessId`
     /// that the caller uses for later `force_*`, `touch`, and status calls.
     /// The first spawn attempt is kicked off immediately (not waiting for

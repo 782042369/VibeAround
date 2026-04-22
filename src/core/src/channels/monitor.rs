@@ -27,7 +27,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::conversations::ConversationManager;
 use crate::process::bridge::{BridgeFactory, ProcessBridge};
-use crate::process::registry::{ChildRegistry, ProcessKind};
+use crate::process::registry::ProcessKind;
 use crate::process::supervisor::{
     ProcessEvent, ProcessId, RestartPolicy, SpawnSpec, Supervisor,
 };
@@ -121,8 +121,7 @@ impl ChannelMonitor {
         plugin_host: Arc<PluginHost>,
         change_tx: broadcast::Sender<()>,
     ) -> Arc<Self> {
-        let supervisor = Supervisor::new(ChildRegistry::global());
-        supervisor.spawn_tick_loop();
+        let supervisor = Supervisor::global();
 
         let forwarder_rx = supervisor.subscribe();
         let forwarder_tx = change_tx.clone();
