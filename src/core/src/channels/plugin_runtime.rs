@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use tokio::task::AbortHandle;
-
 use super::transport_stdio::StdioPluginRuntime;
 use super::transport_websocket::WebSocketPluginRuntime;
 use super::ChannelOutput;
@@ -13,13 +11,6 @@ pub enum PluginRuntime {
 }
 
 impl PluginRuntime {
-    pub fn abort_handle(&self) -> Option<AbortHandle> {
-        match self {
-            Self::Stdio(runtime) => Some(runtime.abort_handle()),
-            Self::WebSocket(_) => None,
-        }
-    }
-
     pub async fn send_output(&self, output: ChannelOutput) {
         match self {
             Self::Stdio(runtime) => runtime.send_output(output).await,

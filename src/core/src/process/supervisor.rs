@@ -432,7 +432,11 @@ impl Supervisor {
     /// `RunningDaemon::stop` — this method only drives the cooperative
     /// shutdown.
     pub async fn shutdown_all(&self) {
-        if let Some(tx) = self.shutdown_tx.lock().take() {
+        // Take the sender out of the guard before awaiting — parking_lot
+        // MutexGuard is !Send, so holding it across .await infects the
+        // entire shutdown chain.
+        let shutdown = self.shutdown_tx.lock().take();
+        if let Some(tx) = shutdown {
             let _ = tx.send(()).await;
         }
         let procs: Vec<_> = self.processes.read().values().cloned().collect();

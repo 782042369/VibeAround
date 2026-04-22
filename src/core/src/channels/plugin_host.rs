@@ -28,8 +28,9 @@ pub struct PluginHost {
     pub pending_permissions:
         DashMap<String, (ChannelKind, oneshot::Sender<acp::RequestPermissionResponse>)>,
     /// Back-pointer to the ChannelMonitor. Weak to avoid a reference cycle
-    /// (ChannelMonitor holds `Arc<PluginHost>`). Used by bridge threads to
-    /// call `mark_crashed` on plugin exit and `touch` on `_va/heartbeat`.
+    /// (ChannelMonitor holds `Arc<PluginHost>`). Used by the plugin bridge
+    /// to call `touch` on `_va/heartbeat`. `mark_crashed` is no longer
+    /// needed here — the supervisor observes `BridgeExit` directly.
     monitor: RwLock<Weak<ChannelMonitor>>,
 }
 
@@ -58,10 +59,11 @@ impl PluginHost {
         self.input_tx.clone()
     }
 
-    /// Insert or replace the stdio runtime for a channel kind. Called by the
-    /// monitor on initial spawn and on every respawn so `send_output` always
-    /// routes to the live process.
-    pub async fn replace_stdio_runtime(
+    /// Insert or replace the stdio runtime for a channel kind. Called by
+    /// the supervisor's bridge factory on every (re)spawn so `send_output`
+    /// always routes to the live process. Sync — the body is just a
+    /// `DashMap::insert`.
+    pub fn replace_stdio_runtime(
         &self,
         channel_kind: &str,
         runtime: Arc<StdioPluginRuntime>,

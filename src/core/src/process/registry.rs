@@ -82,10 +82,13 @@ impl ChildRegistry {
         }
     }
 
-    /// Global singleton. Stable across daemon restarts within the same process.
-    pub fn global() -> &'static ChildRegistry {
-        static INSTANCE: OnceLock<ChildRegistry> = OnceLock::new();
-        INSTANCE.get_or_init(ChildRegistry::new)
+    /// Global singleton. Stable across daemon restarts within the same
+    /// process. Returned as `Arc<Self>` so the `Supervisor` can hold it
+    /// through dependency injection while legacy callers still use
+    /// `ChildRegistry::global().kill_all()` via `Arc` auto-deref.
+    pub fn global() -> std::sync::Arc<ChildRegistry> {
+        static INSTANCE: OnceLock<std::sync::Arc<ChildRegistry>> = OnceLock::new();
+        std::sync::Arc::clone(INSTANCE.get_or_init(|| std::sync::Arc::new(ChildRegistry::new())))
     }
 
     /// Register a spawned child. Returns an opaque token that the caller
