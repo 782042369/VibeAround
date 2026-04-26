@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Globe, Bot, MessageSquare, Terminal, X, RefreshCw, ExternalLink, Server, Wifi, WifiOff, FolderOpen, Eye, Play, Rocket,
+  Activity, Globe, Bot, MessageSquare, X, RefreshCw, ExternalLink, Settings, Wifi, WifiOff, FolderOpen, Eye, Play, Rocket,
 } from "lucide-react";
 import type { TunnelStatus } from "@va/client";
 import { useChannelsState, type ChannelRuntime } from "./hooks/useChannelsState";
@@ -214,10 +214,10 @@ function App() {
   return <Dashboard />;
 }
 
-type DashboardPage = "services" | "workspaces" | "previews" | "launch";
+type DashboardPage = "launch" | "status" | "previews" | "workspaces";
 
 function Dashboard() {
-  const [page, setPage] = useState<DashboardPage>("services");
+  const [page, setPage] = useState<DashboardPage>("launch");
 
   const channels = useChannelsState();
   const tunnels = useTunnelsState();
@@ -274,19 +274,12 @@ function Dashboard() {
     <div className="h-full flex flex-col">
       <header className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-          <TabButton active={page === "services"} onClick={() => setPage("services")} icon={<Server className="w-3 h-3" />} label="VibeAround" />
-          <TabButton active={page === "workspaces"} onClick={() => setPage("workspaces")} icon={<FolderOpen className="w-3 h-3" />} label="Workspaces" />
-          <TabButton active={page === "previews"} onClick={() => setPage("previews")} icon={<Eye className="w-3 h-3" />} label="Previews" />
           <TabButton active={page === "launch"} onClick={() => setPage("launch")} icon={<Rocket className="w-3 h-3" />} label="Launch" />
+          <TabButton active={page === "status"} onClick={() => setPage("status")} icon={<Activity className="w-3 h-3" />} label="Status" />
+          <TabButton active={page === "previews"} onClick={() => setPage("previews")} icon={<Eye className="w-3 h-3" />} label="Previews" />
+          <TabButton active={page === "workspaces"} onClick={() => setPage("workspaces")} icon={<FolderOpen className="w-3 h-3" />} label="Workspaces" />
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => window.location.replace("/onboarding")}
-            className="text-xs text-primary hover:underline"
-            title="Open Config Wizard"
-          >
-            Config Wizard
-          </button>
           {anyConnected ? (
             <span className="flex items-center gap-1 text-xs text-emerald-600">
               <Wifi className="w-3 h-3" /> Live
@@ -303,6 +296,14 @@ function Dashboard() {
           >
             <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
+          <button
+            onClick={() => window.location.replace("/onboarding")}
+            className="p-1 rounded hover:bg-accent transition-colors"
+            title="Open Config Wizard"
+            aria-label="Open Config Wizard"
+          >
+            <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
         </div>
       </header>
 
@@ -318,6 +319,28 @@ function Dashboard() {
         <div className="flex-1 min-h-0"><Launch /></div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                Status
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Runtime health for tunnels, agents, and messaging channels.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                void openDashboardUrl(`http://127.0.0.1:${DAEMON_PORT}/va/`);
+              }}
+              className="shrink-0 text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              Open Web Dashboard <ExternalLink className="w-3 h-3" />
+            </button>
+          </div>
+
           <Section
             icon={<Globe className="w-4 h-4 text-primary" />}
             title="Tunnel"
@@ -363,25 +386,6 @@ function Dashboard() {
                 />
               ))
             )}
-          </Section>
-
-          <Section
-            icon={<Terminal className="w-4 h-4 text-primary" />}
-            title="Dashboard"
-          >
-            <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-sm text-muted-foreground">Open the web dashboard</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  void openDashboardUrl(`http://127.0.0.1:${DAEMON_PORT}/va/`);
-                }}
-                className="text-xs text-primary hover:underline flex items-center gap-1"
-              >
-                Open Web Dashboard <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
           </Section>
         </div>
       )}

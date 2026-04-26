@@ -117,6 +117,12 @@ function generateProfileId(providerId: string): string {
   return `${providerId}-${random}`;
 }
 
+const CONTROL_CLASS =
+  "h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15";
+const MONO_CONTROL_CLASS = `${CONTROL_CLASS} font-mono`;
+const SECRET_CONTROL_CLASS = `${CONTROL_CLASS} pr-8 font-mono`;
+const SELECT_CLASS = `${CONTROL_CLASS} cursor-pointer`;
+
 export function ProfileFormDialog({
   catalog,
   initial,
@@ -262,7 +268,7 @@ export function ProfileFormDialog({
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-background border border-border rounded-lg shadow-xl w-[560px] max-h-[85vh] flex flex-col overflow-hidden">
+      <div className="bg-background border border-border rounded-lg shadow-xl w-[620px] max-w-[calc(100vw-32px)] max-h-[85vh] flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
           <h3 className="text-sm font-semibold">
             {editing
@@ -471,29 +477,205 @@ function FormBody(props: FormBodyProps) {
   const apiKindsEditable = provider.id === "custom";
 
   return (
-    <div className="space-y-4">
-      <FieldRow
-        label="Label"
-        hint="Shown on the launcher card. Pick something that helps you tell multiple keys apart (e.g. work vs personal)."
-      >
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder={`${provider.label} (work)`}
-          className="w-full px-2 py-1 text-sm border border-border rounded bg-background"
-        />
-      </FieldRow>
+    <div className="space-y-3">
+      <FormSection title="Profile">
+        <FieldRow label="Label" hint="Visible name for this profile.">
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder={`${provider.label} (work)`}
+            className={CONTROL_CLASS}
+          />
+        </FieldRow>
 
-      <div>
-        <div className="text-xs font-medium mb-1.5">API kinds</div>
-        <div className="flex flex-wrap gap-2">
-          {apiKindEndpoints.map((ep) => {
-            const checked = selectedApiTypes.includes(ep.api_type);
-            return apiKindsEditable ? (
+        <ApiKindsField
+          endpoints={apiKindEndpoints}
+          editable={apiKindsEditable}
+          selectedApiTypes={selectedApiTypes}
+          setSelectedApiTypes={setSelectedApiTypes}
+        />
+      </FormSection>
+
+      {fieldDefs.length > 0 && (
+        <FormSection title="Credentials">
+          {fieldDefs.map((f) => (
+            <CredentialField
+              key={f.name}
+              field={f}
+              value={credentials[f.name] ?? ""}
+              reveal={revealKeys[f.name] ?? false}
+              onChange={(v) => setCredentials({ ...credentials, [f.name]: v })}
+              onToggleReveal={() =>
+                setRevealKeys({ ...revealKeys, [f.name]: !revealKeys[f.name] })
+              }
+            />
+          ))}
+        </FormSection>
+      )}
+
+      {selectedApiTypes.length > 0 && (
+        <FormSection title="Model settings">
+          <div className="space-y-2">
+            {selectedApiTypes.map((apiType) => {
+              const ep = provider.endpoints.find((e) => e.api_type === apiType);
+              if (!ep) return null;
+              const ov = overrides[apiType] ?? {};
+              return (
+                <div key={apiType} className="border border-border/60 rounded-md p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-mono px-1.5 py-0.5 rounded bg-muted">
+                      {apiTypeShort(apiType)}
+                    </span>
+                    <span className="text-muted-foreground">{apiType}</span>
+                  </div>
+                  {shouldShowBaseUrl(provider, ep, ov) && (
+                    <FieldRow
+                      label={provider.id === "azure" ? "Endpoint" : "Base URL"}
+                      required={ep.default_base_url === ""}
+                      hint={
+                        ep.default_base_url
+                          ? "Leave blank to use the catalog default."
+                          : provider.id === "custom"
+                          ? "Required for custom endpoints."
+                          : "Endpoint URL from the provider dashboard."
+                      }
+                    >
+                      <input
+                        type="text"
+                        value={ov.base_url ?? ""}
+                        onChange={(e) =>
+                          setOverrides({
+                            ...overrides,
+                            [apiType]: { ...ov, base_url: e.target.value },
+                          })
+                        }
+                        placeholder={
+                          ep.default_base_url ||
+                          (provider.id === "azure"
+                            ? "https://your-resource.openai.azure.com/openai/v1"
+                            : "https://your-endpoint.example.com/v1")
+                        }
+                        className={MONO_CONTROL_CLASS}
+                      />
+                    </FieldRow>
+                  )}
+                  <FieldRow
+                    label={provider.id === "azure" ? "Deployment name" : "Model"}
+                    hint={apiKindHint(provider, apiType)}
+                  >
+                    {ep.models.length > 0 ? (
+                      <select
+                        value={ov.model ?? ""}
+                        onChange={(e) =>
+                          setOverrides({
+                            ...overrides,
+                            [apiType]: { ...ov, model: e.target.value },
+                          })
+                        }
+                        className={SELECT_CLASS}
+                      >
+                        <option value="">(none)</option>
+                        {ep.models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label ?? m.id}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={ov.model ?? ""}
+                        onChange={(e) =>
+                          setOverrides({
+                            ...overrides,
+                            [apiType]: { ...ov, model: e.target.value },
+                          })
+                        }
+                        placeholder="model id (e.g. gpt-4o, claude-sonnet-4-6)"
+                        className={MONO_CONTROL_CLASS}
+                      />
+                    )}
+                  </FieldRow>
+                  {ep.capabilities?.reasoning_effort && (
+                    <FieldRow label="Reasoning effort">
+                      <select
+                        value={ov.reasoning_effort ?? "medium"}
+                        onChange={(e) =>
+                          setOverrides({
+                            ...overrides,
+                            [apiType]: { ...ov, reasoning_effort: e.target.value },
+                          })
+                        }
+                        className={SELECT_CLASS}
+                      >
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="xhigh">xhigh</option>
+                      </select>
+                    </FieldRow>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </FormSection>
+      )}
+
+      {provider.homepage && (
+        <a
+          href={provider.homepage}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-primary hover:underline flex items-center gap-1"
+        >
+          <Globe className="w-3 h-3" /> {provider.homepage}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function FormSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3 border-t border-border/60 pt-3 first:border-t-0 first:pt-0">
+      <div className="text-xs font-semibold">{title}</div>
+      {children}
+    </section>
+  );
+}
+
+function ApiKindsField({
+  endpoints,
+  editable,
+  selectedApiTypes,
+  setSelectedApiTypes,
+}: {
+  endpoints: CatalogEntry["endpoints"];
+  editable: boolean;
+  selectedApiTypes: string[];
+  setSelectedApiTypes: (v: string[]) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] font-medium text-muted-foreground mb-1">
+        API kinds
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {endpoints.map((ep) => {
+          const checked = selectedApiTypes.includes(ep.api_type);
+          if (editable) {
+            return (
               <label
                 key={ep.api_type}
-                className={`flex items-center gap-2 px-3 py-1.5 border rounded cursor-pointer text-xs ${
+                className={`h-8 flex items-center gap-2 px-2.5 border rounded-md cursor-pointer text-xs ${
                   checked ? "border-primary bg-primary/10" : "border-border hover:bg-accent/30"
                 }`}
               >
@@ -509,163 +691,32 @@ function FormBody(props: FormBodyProps) {
                       );
                     }
                   }}
+                  className="h-3.5 w-3.5 accent-primary"
                 />
                 <span className="font-mono">{apiTypeShort(ep.api_type)}</span>
-                <span className="text-muted-foreground/70">· {apiTypeLabel(ep.api_type)}</span>
+                <span className="text-muted-foreground/70">
+                  · {apiTypeLabel(ep.api_type)}
+                </span>
               </label>
-            ) : (
-              <div
-                key={ep.api_type}
-                className="flex items-center gap-2 px-3 py-1.5 border border-primary bg-primary/10 rounded text-xs"
-              >
-                <span className="font-mono">{apiTypeShort(ep.api_type)}</span>
-                <span className="text-muted-foreground/70">· {apiTypeLabel(ep.api_type)}</span>
-              </div>
             );
-          })}
-        </div>
-        <p className="text-[11px] text-muted-foreground/70 mt-1">
-          {apiKindsEditable
-            ? "Multi-select for custom keys that work with more than one API shape."
-            : "Preset providers include their supported API kinds automatically."}
-        </p>
+          }
+          return (
+            <div
+              key={ep.api_type}
+              className="h-8 flex items-center gap-2 px-2.5 border border-primary bg-primary/10 rounded-md text-xs"
+            >
+              <span className="font-mono">{apiTypeShort(ep.api_type)}</span>
+              <span className="text-muted-foreground/70">
+                · {apiTypeLabel(ep.api_type)}
+              </span>
+            </div>
+          );
+        })}
       </div>
-
-      {fieldDefs.length > 0 && (
-        <div className="space-y-2 pt-2 border-t border-border/50">
-          <div className="text-xs font-medium">Credentials</div>
-          {fieldDefs.map((f) => (
-            <CredentialField
-              key={f.name}
-              field={f}
-              value={credentials[f.name] ?? ""}
-              reveal={revealKeys[f.name] ?? false}
-              onChange={(v) => setCredentials({ ...credentials, [f.name]: v })}
-              onToggleReveal={() =>
-                setRevealKeys({ ...revealKeys, [f.name]: !revealKeys[f.name] })
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {selectedApiTypes.length > 0 && (
-        <div className="space-y-3 pt-2 border-t border-border/50">
-          <div className="text-xs font-medium">Per-API settings</div>
-          {selectedApiTypes.map((apiType) => {
-            const ep = provider.endpoints.find((e) => e.api_type === apiType);
-            if (!ep) return null;
-            const ov = overrides[apiType] ?? {};
-            return (
-              <div key={apiType} className="border border-border/60 rounded p-3 space-y-2">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="font-mono px-1.5 py-0.5 rounded bg-muted">
-                    {apiTypeShort(apiType)}
-                  </span>
-                  <span className="text-muted-foreground">{apiType}</span>
-                </div>
-                {shouldShowBaseUrl(provider, ep, ov) && (
-                  <FieldRow
-                    label={provider.id === "azure" ? "Endpoint" : "Base URL"}
-                    required={ep.default_base_url === ""}
-                    hint={
-                      ep.default_base_url
-                        ? "Leave at default unless your provider has a region-specific endpoint"
-                        : provider.id === "custom"
-                        ? "no default — fill in the endpoint your custom provider serves"
-                        : "Fill in the endpoint URL from your provider dashboard."
-                    }
-                  >
-                    <input
-                      type="text"
-                      value={ov.base_url ?? ""}
-                      onChange={(e) =>
-                        setOverrides({
-                          ...overrides,
-                          [apiType]: { ...ov, base_url: e.target.value },
-                        })
-                      }
-                      placeholder={
-                        ep.default_base_url ||
-                        (provider.id === "azure"
-                          ? "https://your-resource.openai.azure.com/openai/v1"
-                          : "https://your-endpoint.example.com/v1")
-                      }
-                      className="w-full px-2 py-1 text-sm border border-border rounded bg-background font-mono"
-                    />
-                  </FieldRow>
-                )}
-                <FieldRow
-                  label={provider.id === "azure" ? "Deployment name" : "Model"}
-                  hint={apiKindHint(provider, apiType)}
-                >
-                  {ep.models.length > 0 ? (
-                    <select
-                      value={ov.model ?? ""}
-                      onChange={(e) =>
-                        setOverrides({
-                          ...overrides,
-                          [apiType]: { ...ov, model: e.target.value },
-                        })
-                      }
-                      className="w-full px-2 py-1 text-sm border border-border rounded bg-background"
-                    >
-                      <option value="">(none)</option>
-                      {ep.models.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label ?? m.id}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={ov.model ?? ""}
-                      onChange={(e) =>
-                        setOverrides({
-                          ...overrides,
-                          [apiType]: { ...ov, model: e.target.value },
-                        })
-                      }
-                      placeholder="model id (e.g. gpt-4o, claude-sonnet-4-6)"
-                      className="w-full px-2 py-1 text-sm border border-border rounded bg-background font-mono"
-                    />
-                  )}
-                </FieldRow>
-                {ep.capabilities?.reasoning_effort && (
-                  <FieldRow label="Reasoning effort">
-                    <select
-                      value={ov.reasoning_effort ?? "medium"}
-                      onChange={(e) =>
-                        setOverrides({
-                          ...overrides,
-                          [apiType]: { ...ov, reasoning_effort: e.target.value },
-                        })
-                      }
-                      className="w-full px-2 py-1 text-sm border border-border rounded bg-background"
-                    >
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                      <option value="xhigh">xhigh</option>
-                    </select>
-                  </FieldRow>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {provider.homepage && (
-        <a
-          href={provider.homepage}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[11px] text-primary hover:underline flex items-center gap-1"
-        >
-          <Globe className="w-3 h-3" /> {provider.homepage}
-        </a>
+      {editable && (
+        <p className="text-[10px] text-muted-foreground/60 mt-1">
+          Select every API shape this endpoint supports.
+        </p>
       )}
     </div>
   );
@@ -692,7 +743,7 @@ function CredentialField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder ?? undefined}
-          className="w-full px-2 py-1 pr-7 text-sm border border-border rounded bg-background font-mono"
+          className={SECRET_CONTROL_CLASS}
         />
         {field.secret && (
           <button
