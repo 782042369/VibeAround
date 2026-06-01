@@ -1,8 +1,9 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { Eye, EyeOff, Globe } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Globe, Loader2, LogIn } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -17,10 +18,15 @@ import {
   SECRET_INPUT_CLASS,
 } from "./ProfileFormDialog.constants";
 import {
-  apiKindHint,
+  googleOAuthLogin,
+  googleOAuthStatus,
+  type GoogleOAuthStatus,
+} from "./api";
+import {
   arraysEqual,
   canOverrideInputSupport,
   collectFields,
+  defaultAuthMode,
   endpointId,
   endpointLabel,
   endpointsForApiType,
@@ -29,11 +35,18 @@ import {
   providerApiKindsEditable,
   providerApiKindEndpoints,
   providerUsesEndpointGroups,
+  requiresProfileModel,
   selectedEndpointGroup,
+  selectedAuthModes,
   selectedEndpoint,
   shouldShowBaseUrl,
 } from "./profileFormHelpers";
-import type { ApiTypeOverrides, CatalogEntry, FieldDef } from "./types";
+import type {
+  ApiTypeOverrides,
+  AuthMode,
+  CatalogEntry,
+  FieldDef,
+} from "./types";
 import type { ProviderSettings } from "./types";
 import { apiTypeLabel, apiTypeShort } from "./types";
 
@@ -43,6 +56,8 @@ interface FormBodyProps {
   setLabel: (v: string) => void;
   selectedApiTypes: string[];
   setSelectedApiTypes: (v: string[]) => void;
+  authMode: AuthMode;
+  setAuthMode: (v: AuthMode) => void;
   credentials: Record<string, string>;
   setCredentials: (v: Record<string, string>) => void;
   overrides: Record<string, ApiTypeOverrides>;
@@ -61,6 +76,8 @@ export function FormBody({
   setLabel,
   selectedApiTypes,
   setSelectedApiTypes,
+  authMode,
+  setAuthMode,
   credentials,
   setCredentials,
   overrides,
@@ -88,10 +105,37 @@ export function FormBody({
   const fieldDefs = collectFields(
     provider,
     effectiveSelectedApiTypes,
-    "api_key",
+    authMode,
     overrides,
   );
+  const [googleStatus, setGoogleStatus] = useState<GoogleOAuthStatus | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const authModeOptions = selectedAuthModes(
+    provider,
+    effectiveSelectedApiTypes,
+    overrides,
+  );
+  const googleAccountsSelected =
+    provider.id === "gemini" &&
+    (authMode === "google_oauth" || authMode === "oauth_via_cli") &&
+    effectiveSelectedApiTypes.some((apiType) => {
+      const endpoint = selectedEndpoint(provider, apiType, overrides);
+      return endpoint ? endpointId(endpoint) === "google-accounts" : false;
+    });
   const apiKindsEditable = providerApiKindsEditable(provider);
+  const configurableApiTypes = effectiveSelectedApiTypes.filter((apiType) => {
+    const ep = selectedEndpoint(provider, apiType, overrides);
+    if (!ep) return false;
+    const endpointOptions = endpointsForApiType(provider, apiType);
+    const ov = overrides[apiType] ?? {};
+    return (
+      (!usesEndpointGroups && endpointOptions.length > 1) ||
+      shouldShowBaseUrl(provider, ep, ov) ||
+      requiresProfileModel(provider, ep) ||
+      canOverrideInputSupport(provider, ep)
+    );
+  });
 
   useEffect(() => {
     if (!usesEndpointGroups || !selectedGroup) return;
@@ -113,11 +157,50 @@ export function FormBody({
     visibleApiTypes,
   ]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!googleAccountsSelected) {
+      setGoogleStatus(null);
+      setGoogleError(null);
+      setGoogleLoading(false);
+      return;
+    }
+
+    setGoogleError(null);
+    googleOAuthStatus()
+      .then((status) => {
+        if (!cancelled) setGoogleStatus(status);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setGoogleError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [googleAccountsSelected]);
+
+  async function handleGoogleOAuthLogin() {
+    setGoogleLoading(true);
+    setGoogleError(null);
+    try {
+      setGoogleStatus(await googleOAuthLogin());
+    } catch (error) {
+      setGoogleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   function applyEndpointGroup(groupId: string) {
     const group = endpointGroups.find((candidate) => candidate.id === groupId);
     if (!group) return;
-    setSelectedApiTypes(group.endpoints.map((endpoint) => endpoint.api_type));
-    setOverrides(overridesForEndpoints(group.endpoints, overrides));
+    const nextApiTypes = group.endpoints.map((endpoint) => endpoint.api_type);
+    const nextOverrides = overridesForEndpoints(group.endpoints, overrides);
+    setSelectedApiTypes(nextApiTypes);
+    setOverrides(nextOverrides);
+    setAuthMode(defaultAuthMode(provider, nextApiTypes, nextOverrides, authMode));
   }
 
   function applySelectedApiTypes(apiTypes: string[]) {
@@ -132,6 +215,7 @@ export function FormBody({
     }
     setOverrides(nextOverrides);
     setSelectedApiTypes(apiTypes);
+    setAuthMode(defaultAuthMode(provider, apiTypes, nextOverrides, authMode));
   }
 
   return (
@@ -146,30 +230,228 @@ export function FormBody({
             className={INPUT_CLASS}
           />
         </FieldRow>
-
-        {usesEndpointGroups && selectedGroup && (
-          <EndpointGroupField
-            groups={endpointGroups}
-            selectedGroupId={selectedGroup.id}
-            onChange={applyEndpointGroup}
-          />
-        )}
-
-        <ApiKindsField
-          endpoints={visibleApiKindEndpoints}
-          editable={apiKindsEditable}
-          selectedApiTypes={effectiveSelectedApiTypes}
-          setSelectedApiTypes={applySelectedApiTypes}
-        />
-
-        <ProxyField
-          checked={useSettingsProxy}
-          onChange={setUseSettingsProxy}
-        />
       </FormSection>
 
-      {fieldDefs.length > 0 && (
-        <FormSection title={t("Credentials")}>
+      {effectiveSelectedApiTypes.length > 0 && (
+        <FormSection title={t("Endpoint settings")}>
+          {usesEndpointGroups && selectedGroup && (
+            <EndpointGroupField
+              groups={endpointGroups}
+              selectedGroupId={selectedGroup.id}
+              onChange={applyEndpointGroup}
+            />
+          )}
+
+          {authModeOptions.length > 1 && (
+            <FieldRow label={t("Auth method")}>
+              <Select
+                value={authMode}
+                onValueChange={(value) =>
+                  setAuthMode(
+                    defaultAuthMode(
+                      provider,
+                      effectiveSelectedApiTypes,
+                      overrides,
+                      value as AuthMode,
+                    ),
+                  )
+                }
+              >
+                <SelectTrigger size="sm" className="h-8 w-full text-[13px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {authModeOptions.map((auth) => (
+                    <SelectItem
+                      key={auth.mode}
+                      value={auth.mode}
+                      className="text-xs"
+                    >
+                      {t(auth.label ?? auth.mode)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+          )}
+
+          {googleAccountsSelected && (
+            <GoogleOAuthField
+              status={googleStatus}
+              loading={googleLoading}
+              error={googleError}
+              onLogin={handleGoogleOAuthLogin}
+            />
+          )}
+
+          {configurableApiTypes.length > 0 && (
+            <div className="space-y-2">
+              {configurableApiTypes.map((apiType) => {
+                const ep = selectedEndpoint(provider, apiType, overrides);
+                if (!ep) return null;
+                const ov = overrides[apiType] ?? {};
+                const endpointOptions = endpointsForApiType(provider, apiType);
+                return (
+                  <div
+                    key={apiType}
+                    className="border border-border/60 rounded-md p-2.5 space-y-2"
+                  >
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-mono px-1.5 py-0.5 rounded bg-muted">
+                        {apiTypeShort(apiType)}
+                      </span>
+                      <span className="text-muted-foreground/70">
+                        · {t(apiTypeLabel(apiType))}
+                      </span>
+                    </div>
+                    {!usesEndpointGroups && endpointOptions.length > 1 && (
+                      <FieldRow label={t("Endpoint type")}>
+                        <Select
+                          value={endpointId(ep)}
+                          onValueChange={(value) => {
+                            const nextEndpoint =
+                              endpointOptions.find(
+                                (endpoint) => endpointId(endpoint) === value,
+                              ) ?? endpointOptions[0];
+                            if (!nextEndpoint) return;
+                            const nextOverride: ApiTypeOverrides = {
+                              ...ov,
+                              endpoint_id: endpointId(nextEndpoint),
+                              base_url: nextEndpoint.default_base_url || undefined,
+                            };
+                            if (!requiresProfileModel(provider, nextEndpoint)) {
+                              delete nextOverride.model;
+                            }
+                            delete nextOverride.reasoning_effort;
+                            setOverrides({
+                              ...overrides,
+                              [apiType]: nextOverride,
+                            });
+                          }}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            className="h-8 w-full text-[13px]"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {endpointOptions.map((endpoint) => (
+                              <SelectItem
+                                key={endpointId(endpoint)}
+                                value={endpointId(endpoint)}
+                                className="text-xs"
+                              >
+                                {t(endpointLabel(endpoint))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldRow>
+                    )}
+                    {shouldShowBaseUrl(provider, ep, ov) && (
+                      <FieldRow
+                        label={
+                          provider.id === "azure" || provider.id === "gemini"
+                            ? "Endpoint"
+                            : "Base URL"
+                        }
+                        required={ep.default_base_url === ""}
+                        hint={
+                          ep.default_base_url
+                            ? t("Leave blank to use the catalog default.")
+                            : provider.id === "custom"
+                              ? t("Required for custom endpoints.")
+                              : provider.id === "gemini"
+                                ? t("Required for Vertex AI; use the endpoint root ending in /endpoints/openapi.")
+                              : t("Endpoint URL from the provider dashboard.")
+                        }
+                      >
+                        <Input
+                          type="text"
+                          value={ov.base_url ?? ""}
+                          onChange={(e) =>
+                            setOverrides({
+                              ...overrides,
+                              [apiType]: { ...ov, base_url: e.target.value },
+                            })
+                          }
+                          placeholder={
+                            ep.default_base_url ||
+                            (provider.id === "azure"
+                              ? "https://your-resource.openai.azure.com/openai/v1"
+                              : provider.id === "gemini"
+                                ? "https://aiplatform.googleapis.com/v1/projects/PROJECT/locations/LOCATION/endpoints/openapi"
+                              : "https://your-endpoint.example.com/v1")
+                          }
+                          className={MONO_INPUT_CLASS}
+                        />
+                      </FieldRow>
+                    )}
+                    {requiresProfileModel(provider, ep) && (
+                      <FieldRow
+                        label={
+                          provider.id === "azure" ? "Deployment name" : "Model"
+                        }
+                      >
+                        <Input
+                          type="text"
+                          value={ov.model ?? ""}
+                          onChange={(e) =>
+                            setOverrides({
+                              ...overrides,
+                              [apiType]: { ...ov, model: e.target.value },
+                            })
+                          }
+                          placeholder={t("model id (e.g. gpt-4o, claude-sonnet-4-6)")}
+                          className={MONO_INPUT_CLASS}
+                        />
+                      </FieldRow>
+                    )}
+                    {canOverrideInputSupport(provider, ep) && (
+                      <FieldRow label={t("Input support")}>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <CheckRow
+                            label="Images"
+                            checked={!!ov.capabilities?.image_input}
+                            onChange={(checked) =>
+                              setOverrides({
+                                ...overrides,
+                                [apiType]: {
+                                  ...ov,
+                                  capabilities: {
+                                    ...(ov.capabilities ?? {}),
+                                    image_input: checked,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                          <CheckRow
+                            label="Files"
+                            checked={!!ov.capabilities?.file_input}
+                            onChange={(checked) =>
+                              setOverrides({
+                                ...overrides,
+                                [apiType]: {
+                                  ...ov,
+                                  capabilities: {
+                                    ...(ov.capabilities ?? {}),
+                                    file_input: checked,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      </FieldRow>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {fieldDefs.map((f) => (
             <CredentialField
               key={f.name}
@@ -182,241 +464,18 @@ export function FormBody({
               }
             />
           ))}
-        </FormSection>
-      )}
 
-      {effectiveSelectedApiTypes.length > 0 && (
-        <FormSection title={t("Model settings")}>
-          <div className="space-y-2">
-            {effectiveSelectedApiTypes.map((apiType) => {
-              const ep = selectedEndpoint(provider, apiType, overrides);
-              if (!ep) return null;
-              const ov = overrides[apiType] ?? {};
-              const endpointOptions = endpointsForApiType(provider, apiType);
-              const modelHint = apiKindHint(provider, apiType, ep);
-              return (
-                <div
-                  key={apiType}
-                  className="border border-border/60 rounded-md p-2.5 space-y-2"
-                >
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-mono px-1.5 py-0.5 rounded bg-muted">
-                      {apiTypeShort(apiType)}
-                    </span>
-                    <span className="text-muted-foreground/70">
-                      · {t(apiTypeLabel(apiType))}
-                    </span>
-                  </div>
-                  {!usesEndpointGroups && endpointOptions.length > 1 && (
-                    <FieldRow label={t("Endpoint type")}>
-                      <Select
-                        value={endpointId(ep)}
-                        onValueChange={(value) => {
-                          const nextEndpoint =
-                            endpointOptions.find(
-                              (endpoint) => endpointId(endpoint) === value,
-                            ) ?? endpointOptions[0];
-                          if (!nextEndpoint) return;
-                          const modelStillValid = nextEndpoint.models.some(
-                            (model) => model.id === ov.model,
-                          );
-                          setOverrides({
-                            ...overrides,
-                            [apiType]: {
-                              ...ov,
-                              endpoint_id: endpointId(nextEndpoint),
-                              base_url: nextEndpoint.default_base_url || undefined,
-                              model: modelStillValid
-                                ? ov.model
-                                : (nextEndpoint.models[0]?.id ?? ov.model ?? ""),
-                            },
-                          });
-                        }}
-                      >
-                        <SelectTrigger
-                          size="sm"
-                          className="h-8 w-full text-[13px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {endpointOptions.map((endpoint) => (
-                            <SelectItem
-                              key={endpointId(endpoint)}
-                              value={endpointId(endpoint)}
-                              className="text-xs"
-                            >
-                              {endpointLabel(endpoint)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FieldRow>
-                  )}
-                  {shouldShowBaseUrl(provider, ep, ov) && (
-                    <FieldRow
-                      label={
-                        provider.id === "azure" || provider.id === "gemini"
-                          ? "Endpoint"
-                          : "Base URL"
-                      }
-                      required={ep.default_base_url === ""}
-                      hint={
-                        ep.default_base_url
-                          ? t("Leave blank to use the catalog default.")
-                          : provider.id === "custom"
-                            ? t("Required for custom endpoints.")
-                            : provider.id === "gemini"
-                              ? t("Required for Vertex AI; use the endpoint root ending in /endpoints/openapi.")
-                            : t("Endpoint URL from the provider dashboard.")
-                      }
-                    >
-                      <Input
-                        type="text"
-                        value={ov.base_url ?? ""}
-                        onChange={(e) =>
-                          setOverrides({
-                            ...overrides,
-                            [apiType]: { ...ov, base_url: e.target.value },
-                          })
-                        }
-                        placeholder={
-                          ep.default_base_url ||
-                          (provider.id === "azure"
-                            ? "https://your-resource.openai.azure.com/openai/v1"
-                            : provider.id === "gemini"
-                              ? "https://aiplatform.googleapis.com/v1/projects/PROJECT/locations/LOCATION/endpoints/openapi"
-                            : "https://your-endpoint.example.com/v1")
-                        }
-                        className={MONO_INPUT_CLASS}
-                      />
-                    </FieldRow>
-                  )}
-                  <FieldRow
-                    label={
-                      provider.id === "azure" ? "Deployment name" : "Model"
-                    }
-                    hint={modelHint ? t(modelHint) : undefined}
-                  >
-                    {ep.models.length > 0 ? (
-                      <Select
-                        value={ov.model ?? ""}
-                        onValueChange={(value) =>
-                          setOverrides({
-                            ...overrides,
-                            [apiType]: { ...ov, model: value },
-                          })
-                        }
-                      >
-                        <SelectTrigger
-                          size="sm"
-                          className="h-8 w-full text-[13px]"
-                        >
-                          <SelectValue placeholder={t("Select a model")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ep.models.map((m) => (
-                            <SelectItem
-                              key={m.id}
-                              value={m.id}
-                              className="text-xs"
-                            >
-                              {m.label ?? m.id}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        type="text"
-                        value={ov.model ?? ""}
-                        onChange={(e) =>
-                          setOverrides({
-                            ...overrides,
-                            [apiType]: { ...ov, model: e.target.value },
-                          })
-                        }
-                        placeholder={t("model id (e.g. gpt-4o, claude-sonnet-4-6)")}
-                        className={MONO_INPUT_CLASS}
-                      />
-                    )}
-                  </FieldRow>
-                  {ep.capabilities?.reasoning_effort && (
-                    <FieldRow label={t("Reasoning effort")}>
-                      <Select
-                        value={ov.reasoning_effort ?? "medium"}
-                        onValueChange={(value) =>
-                          setOverrides({
-                            ...overrides,
-                            [apiType]: { ...ov, reasoning_effort: value },
-                          })
-                        }
-                      >
-                        <SelectTrigger
-                          size="sm"
-                          className="h-8 w-full text-[13px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low" className="text-xs">
-                            low
-                          </SelectItem>
-                          <SelectItem value="medium" className="text-xs">
-                            medium
-                          </SelectItem>
-                          <SelectItem value="high" className="text-xs">
-                            high
-                          </SelectItem>
-                          <SelectItem value="xhigh" className="text-xs">
-                            xhigh
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FieldRow>
-                  )}
-                  {canOverrideInputSupport(provider, ep) && (
-                    <FieldRow label={t("Input support")}>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <CheckRow
-                          label="Images"
-                          checked={!!ov.capabilities?.image_input}
-                          onChange={(checked) =>
-                            setOverrides({
-                              ...overrides,
-                              [apiType]: {
-                                ...ov,
-                                capabilities: {
-                                  ...(ov.capabilities ?? {}),
-                                  image_input: checked,
-                                },
-                              },
-                            })
-                          }
-                        />
-                        <CheckRow
-                          label="Files"
-                          checked={!!ov.capabilities?.file_input}
-                          onChange={(checked) =>
-                            setOverrides({
-                              ...overrides,
-                              [apiType]: {
-                                ...ov,
-                                capabilities: {
-                                  ...(ov.capabilities ?? {}),
-                                  file_input: checked,
-                                },
-                              },
-                            })
-                          }
-                        />
-                      </div>
-                    </FieldRow>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <ApiKindsField
+            endpoints={visibleApiKindEndpoints}
+            editable={apiKindsEditable}
+            selectedApiTypes={effectiveSelectedApiTypes}
+            setSelectedApiTypes={applySelectedApiTypes}
+          />
+
+          <ProxyField
+            checked={useSettingsProxy}
+            onChange={setUseSettingsProxy}
+          />
         </FormSection>
       )}
 
@@ -455,7 +514,7 @@ function EndpointGroupField({
   const { t } = useI18n();
 
   return (
-    <FieldRow label={t("Plan type")}>
+    <FieldRow label={t("Endpoint")}>
       <Select value={selectedGroupId} onValueChange={onChange}>
         <SelectTrigger size="sm" className="h-8 w-full text-[13px]">
           <SelectValue />
@@ -469,6 +528,65 @@ function EndpointGroupField({
         </SelectContent>
       </Select>
     </FieldRow>
+  );
+}
+
+function GoogleOAuthField({
+  status,
+  loading,
+  error,
+  onLogin,
+}: {
+  status: GoogleOAuthStatus | null;
+  loading: boolean;
+  error: string | null;
+  onLogin: () => void;
+}) {
+  const { t } = useI18n();
+  const signedIn = !!status?.signedIn;
+
+  return (
+    <div>
+      <div className="text-[11px] font-medium text-muted-foreground mb-0.5">
+        {t("Google account")}
+      </div>
+      <div
+        className={`flex min-h-10 items-center justify-between gap-3 rounded-md border px-2.5 py-2 text-xs ${
+          signedIn ? "border-primary bg-primary/10" : "border-border"
+        }`}
+      >
+        <div className="min-w-0 flex items-center gap-2">
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+          ) : signedIn ? (
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+          ) : (
+            <LogIn className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate font-medium">
+            {signedIn ? t("Signed in with Google") : t("Google account not connected")}
+          </span>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onLogin}
+          disabled={loading}
+          className="h-8"
+        >
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <LogIn className="h-3.5 w-3.5" />
+          )}
+          {signedIn ? t("Reconnect") : t("Sign in")}
+        </Button>
+      </div>
+      {error && (
+        <div className="mt-1 text-[10px] text-destructive">{error}</div>
+      )}
+    </div>
   );
 }
 
@@ -490,9 +608,9 @@ function ProxyField({
       }`}
     >
       <span className="min-w-0">
-        <span className="block font-medium">{t("Use Settings proxy")}</span>
+        <span className="block font-medium">{t("Use HTTP proxy")}</span>
         <span className="block text-[10px] text-muted-foreground/70">
-          {t("Provider requests for this profile use the configured Settings proxy when it is enabled.")}
+          {t("Provider requests for this profile use the configured HTTP proxy when it is enabled.")}
         </span>
       </span>
       <input

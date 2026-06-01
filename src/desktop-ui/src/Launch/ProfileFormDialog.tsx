@@ -24,6 +24,7 @@ import { ProviderGrid } from "./ProfileProviderGrid";
 import {
   arraysEqual,
   collectFields,
+  defaultAuthMode,
   defaultApiKindEndpoints,
   overridesForEndpoints,
   pruneOverrides,
@@ -31,6 +32,7 @@ import {
   providerApiKindEndpoints,
   providerApiKindsEditable,
   providerUsesEndpointGroups,
+  requiresProfileModel,
   selectedEndpointGroup,
   selectedEndpoint,
   stripEmpty,
@@ -90,6 +92,9 @@ export function ProfileFormDialog({
   const [selectedApiTypes, setSelectedApiTypes] = useState<string[]>(
     Array.from(new Set((initial?.api_types ?? []).filter(isProviderApiKind))),
   );
+  const [authMode, setAuthMode] = useState<AuthMode>(
+    initial?.auth_mode ?? "api_key",
+  );
   const [credentials, setCredentials] = useState<Record<string, string>>(
     initial?.credentials ?? {},
   );
@@ -109,8 +114,11 @@ export function ProfileFormDialog({
   useEffect(() => {
     if (!provider || editing) return;
     const apiKindEndpoints = defaultApiKindEndpoints(provider);
-    setSelectedApiTypes(apiKindEndpoints.map((e) => e.api_type));
-    setOverrides(overridesForEndpoints(apiKindEndpoints));
+    const apiTypes = apiKindEndpoints.map((e) => e.api_type);
+    const nextOverrides = overridesForEndpoints(apiKindEndpoints);
+    setSelectedApiTypes(apiTypes);
+    setOverrides(nextOverrides);
+    setAuthMode(defaultAuthMode(provider, apiTypes, nextOverrides));
     setProviderSettings(
       provider.id === "deepseek"
         ? {
@@ -133,6 +141,16 @@ export function ProfileFormDialog({
     setSelectedApiTypes((current) =>
       arraysEqual(current, apiKinds) ? current : apiKinds,
     );
+    setAuthMode((current) =>
+      defaultAuthMode(provider, apiKinds, overrides, current),
+    );
+  }, [provider, overrides, selectedApiTypes]);
+
+  useEffect(() => {
+    if (!provider || selectedApiTypes.length === 0) return;
+    setAuthMode((current) =>
+      defaultAuthMode(provider, selectedApiTypes, overrides, current),
+    );
   }, [provider, overrides, selectedApiTypes]);
 
   function handlePickProvider(c: CatalogEntry) {
@@ -153,7 +171,7 @@ export function ProfileFormDialog({
       return;
     }
 
-    const fieldDefs = collectFields(provider, selectedApiTypes, "api_key", overrides);
+    const fieldDefs = collectFields(provider, selectedApiTypes, authMode, overrides);
     for (const f of fieldDefs) {
       if (f.required && !credentials[f.name]?.trim()) {
         setError(t("{{field}} is required", { field: t(f.label) }));
@@ -165,7 +183,7 @@ export function ProfileFormDialog({
       const ep = selectedEndpoint(provider, apiType, overrides);
       if (!ep) continue;
       const ov = overrides[apiType];
-      if (!ov?.model?.trim()) {
+      if (requiresProfileModel(provider, ep) && !ov?.model?.trim()) {
         setError(t("Model is required for {{apiType}}", { apiType }));
         return;
       }
@@ -176,12 +194,19 @@ export function ProfileFormDialog({
       }
     }
 
+    const credentialFieldNames = new Set(fieldDefs.map((field) => field.name));
+    const selectedCredentials = Object.fromEntries(
+      Object.entries(credentials).filter(([name]) =>
+        credentialFieldNames.has(name),
+      ),
+    );
+
     const draft: ProfileDraft = {
       label: label.trim(),
       provider: provider.id,
-      auth_mode: "api_key" as AuthMode,
+      auth_mode: authMode,
       api_types: selectedApiTypes,
-      credentials: stripEmpty(credentials),
+      credentials: stripEmpty(selectedCredentials),
       overrides: pruneOverrides(overrides, selectedApiTypes, provider),
       use_settings_proxy: useSettingsProxy,
       provider_settings: pruneProviderSettings(provider.id, providerSettings),
@@ -232,6 +257,8 @@ export function ProfileFormDialog({
               setLabel={setLabel}
               selectedApiTypes={selectedApiTypes}
               setSelectedApiTypes={setSelectedApiTypes}
+              authMode={authMode}
+              setAuthMode={setAuthMode}
               credentials={credentials}
               setCredentials={setCredentials}
               overrides={overrides}
@@ -268,7 +295,7 @@ export function ProfileFormDialog({
                 size="sm"
                 onClick={() => setStep("pick-provider")}
               >
-                {t("Back")}
+                {t("Change provider")}
               </Button>
             )}
           </div>

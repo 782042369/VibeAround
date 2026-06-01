@@ -1,20 +1,87 @@
 use axum::body::Body;
 use axum::http::{header, HeaderMap as InboundHeaderMap, StatusCode};
 use axum::response::Response;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use std::time::Duration;
 
+use common::config::{self, Retry429Config};
 use common::profiles::schema::ProfileDef;
 use common::profiles::{catalog, normalize_legacy_profile_and_persist, schema};
 
 use super::{json_error, BridgeProtocol};
 
 pub(super) struct UpstreamEndpoint {
-    pub(super) url: String,
+    pub(super) base_url: String,
     pub(super) protocol: BridgeProtocol,
     pub(super) profile: ProfileDef,
     pub(super) headers: BTreeMap<String, String>,
     pub(super) auth_header: bool,
+    pub(super) kind: UpstreamKind,
+    append_v1_path: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum UpstreamKind {
+    Standard,
+    GoogleCodeAssist,
+}
+
+pub(super) struct ResolvedUpstreamRoute {
+    pub(super) stream: bool,
+    pub(super) url: String,
+    pub(super) model: Option<String>,
+}
+
+impl UpstreamEndpoint {
+    pub(super) fn request_url(&self, request: &Value) -> Result<String, String> {
+        if self.kind == UpstreamKind::GoogleCodeAssist {
+            return Ok(join_code_assist_endpoint(
+                &self.base_url,
+                request_stream(self.protocol, request),
+            ));
+        }
+        match self.protocol {
+            BridgeProtocol::OpenAiResponses => Ok(join_protocol_endpoint(
+                &self.base_url,
+                "responses",
+                self.append_v1_path,
+            )),
+            BridgeProtocol::OpenAiChat => Ok(join_protocol_endpoint(
+                &self.base_url,
+                "chat/completions",
+                self.append_v1_path,
+            )),
+            BridgeProtocol::AnthropicMessages => Ok(join_protocol_endpoint(
+                &self.base_url,
+                "messages",
+                self.append_v1_path,
+            )),
+            BridgeProtocol::GeminiGenerateContent => {
+                let model = gemini_model_from_request(request).ok_or_else(|| {
+                    "Gemini upstream request is missing route model metadata".to_string()
+                })?;
+                Ok(join_gemini_generate_content_endpoint(
+                    &self.base_url,
+                    &model,
+                    request_stream(self.protocol, request),
+                ))
+            }
+        }
+    }
+
+    pub(super) fn route_model(&self, request: &Value) -> Result<Option<String>, String> {
+        if self.protocol != BridgeProtocol::GeminiGenerateContent {
+            return Ok(None);
+        }
+        let model = gemini_model_from_request(request)
+            .ok_or_else(|| "Gemini upstream request is missing route model metadata".to_string())?;
+        Ok(Some(model))
+    }
+
+    pub(super) fn is_google_code_assist(&self) -> bool {
+        self.kind == UpstreamKind::GoogleCodeAssist
+    }
 }
 
 pub(super) fn upstream_endpoint(
@@ -86,35 +153,25 @@ pub(super) fn upstream_endpoint(
             ),
         ));
     }
-    if protocol == BridgeProtocol::GeminiGenerateContent {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            concat!(
-                "Gemini GenerateContent is supported as a client protocol only; ",
-                "choose an OpenAI-compatible Gemini endpoint as the bridge target"
-            )
-            .to_string(),
-        ));
-    }
-
-    let url = match protocol {
-        BridgeProtocol::OpenAiResponses => {
-            join_protocol_endpoint(base_url, "responses", endpoint.append_v1_path)
-        }
-        BridgeProtocol::OpenAiChat => {
-            join_protocol_endpoint(base_url, "chat/completions", endpoint.append_v1_path)
-        }
-        BridgeProtocol::AnthropicMessages => {
-            join_protocol_endpoint(base_url, "messages", endpoint.append_v1_path)
-        }
-        BridgeProtocol::GeminiGenerateContent => unreachable!("Gemini target is rejected above"),
+    let kind =
+        if profile.provider == "gemini" && catalog::endpoint_id(endpoint) == "google-accounts" {
+            UpstreamKind::GoogleCodeAssist
+        } else {
+            UpstreamKind::Standard
+        };
+    let protocol = if kind == UpstreamKind::GoogleCodeAssist {
+        BridgeProtocol::GeminiGenerateContent
+    } else {
+        protocol
     };
     Ok(UpstreamEndpoint {
-        url,
+        base_url: base_url.to_string(),
         protocol,
         profile,
         headers: endpoint.headers.clone(),
         auth_header: endpoint.auth_header,
+        kind,
+        append_v1_path: endpoint.append_v1_path,
     })
 }
 
@@ -123,6 +180,66 @@ fn join_protocol_endpoint(base_url: &str, endpoint: &str, append_v1_path: bool) 
         format!("{base_url}/{endpoint}")
     } else {
         format!("{base_url}/v1/{endpoint}")
+    }
+}
+
+fn join_gemini_generate_content_endpoint(base_url: &str, model: &str, stream: bool) -> String {
+    let base_url = base_url.trim_end_matches('/');
+    let base_url = if gemini_base_url_has_version(base_url) {
+        base_url.to_string()
+    } else {
+        format!("{base_url}/v1beta")
+    };
+    let action = if stream {
+        "streamGenerateContent?alt=sse"
+    } else {
+        "generateContent"
+    };
+    format!("{base_url}/models/{model}:{action}")
+}
+
+fn join_code_assist_endpoint(base_url: &str, stream: bool) -> String {
+    let method = if stream {
+        "streamGenerateContent?alt=sse"
+    } else {
+        "generateContent"
+    };
+    format!("{}/v1internal:{method}", base_url.trim_end_matches('/'))
+}
+
+fn gemini_base_url_has_version(base_url: &str) -> bool {
+    let last = base_url.rsplit('/').next().unwrap_or_default();
+    matches!(last, "v1" | "v1beta" | "v1alpha")
+}
+
+fn gemini_model_from_request(request: &Value) -> Option<String> {
+    request
+        .get("__va_model")
+        .or_else(|| request.get("model"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.strip_prefix("models/").unwrap_or(value))
+        .filter(|value| {
+            !value.contains('/')
+                && !value.contains('?')
+                && !value.contains('#')
+                && !value.contains(':')
+        })
+        .map(ToOwned::to_owned)
+}
+
+pub(super) fn request_stream(protocol: BridgeProtocol, request: &Value) -> bool {
+    match protocol {
+        BridgeProtocol::GeminiGenerateContent => request
+            .get("__va_stream")
+            .or_else(|| request.get("stream"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        _ => request
+            .get("stream")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     }
 }
 
@@ -178,11 +295,71 @@ pub(super) fn apply_upstream_auth(
             request = request.header(reqwest::header::AUTHORIZATION, auth);
         }
     }
-    let anthropic_version = headers
-        .get("anthropic-version")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("2023-06-01");
-    Ok(request.header("anthropic-version", anthropic_version))
+    if protocol == BridgeProtocol::AnthropicMessages {
+        let anthropic_version = headers
+            .get("anthropic-version")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("2023-06-01");
+        return Ok(request.header("anthropic-version", anthropic_version));
+    }
+    Ok(request)
+}
+
+pub(super) async fn send_upstream_request_with_rate_limit_retry(
+    mut request: reqwest::RequestBuilder,
+) -> Result<reqwest::Response, reqwest::Error> {
+    let settings = config::ensure_loaded().api_bridge.retry_429.clone();
+    if !settings.enabled || settings.max_retries == Some(0) {
+        return request.send().await;
+    }
+
+    let mut retries = 0_usize;
+    loop {
+        let next_request = request.try_clone();
+        let response = request.send().await?;
+        if response.status() != StatusCode::TOO_MANY_REQUESTS {
+            return Ok(response);
+        }
+        let Some(next_request) = next_request else {
+            return Ok(response);
+        };
+        if settings
+            .max_retries
+            .is_some_and(|max_retries| retries >= max_retries)
+        {
+            return Ok(response);
+        }
+        let delay = rate_limit_retry_delay(response.headers(), &settings);
+        tracing::warn!(
+            target: "server::web_server::api_bridge",
+            retry = retries + 1,
+            max_retries = ?settings.max_retries,
+            delay_seconds = delay.as_secs(),
+            "Upstream returned 429; retrying after backoff"
+        );
+        drop(response);
+        tokio::time::sleep(delay).await;
+        retries += 1;
+        request = next_request;
+    }
+}
+
+fn rate_limit_retry_delay(
+    headers: &reqwest::header::HeaderMap,
+    settings: &Retry429Config,
+) -> Duration {
+    retry_after_delay(headers).unwrap_or_else(|| Duration::from_secs(settings.delay_seconds))
+}
+
+fn retry_after_delay(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    let seconds = headers
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()?;
+    Some(Duration::from_secs(seconds))
 }
 
 fn authorization_header(headers: &InboundHeaderMap) -> Option<String> {
@@ -246,8 +423,16 @@ pub(super) fn redacted_url(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use axum::http::{header, HeaderMap, HeaderValue};
+    use common::config::Retry429Config;
+    use common::profiles::schema::{AuthMode, ProfileDef, ProviderSettings};
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::time::Duration;
 
-    use super::{apply_upstream_auth, join_protocol_endpoint, BridgeProtocol};
+    use super::{
+        apply_upstream_auth, join_gemini_generate_content_endpoint, join_protocol_endpoint,
+        rate_limit_retry_delay, request_stream, BridgeProtocol, UpstreamEndpoint, UpstreamKind,
+    };
 
     #[test]
     fn joins_default_v1_for_host_root_endpoints() {
@@ -275,6 +460,62 @@ mod tests {
             ),
             "https://ark.cn-beijing.volces.com/api/v3/responses"
         );
+    }
+
+    #[test]
+    fn joins_gemini_generate_content_paths() {
+        assert_eq!(
+            join_gemini_generate_content_endpoint(
+                "https://generativelanguage.googleapis.com",
+                "gemini-2.5-flash",
+                false,
+            ),
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        );
+        assert_eq!(
+            join_gemini_generate_content_endpoint(
+                "https://generativelanguage.googleapis.com/v1",
+                "gemini-2.5-flash",
+                true,
+            ),
+            "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
+        );
+    }
+
+    #[test]
+    fn reads_gemini_stream_from_route_metadata() {
+        assert!(request_stream(
+            BridgeProtocol::GeminiGenerateContent,
+            &json!({ "__va_stream": true })
+        ));
+        assert!(!request_stream(
+            BridgeProtocol::GeminiGenerateContent,
+            &json!({ "__va_stream": false, "stream": true })
+        ));
+    }
+
+    #[test]
+    fn gemini_request_url_uses_route_metadata() {
+        let endpoint = UpstreamEndpoint {
+            base_url: "https://generativelanguage.googleapis.com".to_string(),
+            protocol: BridgeProtocol::GeminiGenerateContent,
+            profile: test_profile(),
+            headers: BTreeMap::new(),
+            auth_header: false,
+            kind: UpstreamKind::Standard,
+            append_v1_path: true,
+        };
+
+        assert_eq!(
+            endpoint
+                .request_url(&json!({
+                    "__va_model": "models/gemini-2.5-flash",
+                    "__va_stream": true,
+                }))
+                .unwrap(),
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
+        );
+        assert!(endpoint.request_url(&json!({ "contents": [] })).is_err());
     }
 
     #[test]
@@ -369,5 +610,86 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("2023-06-01")
         );
+    }
+
+    #[test]
+    fn gemini_auth_uses_google_api_key_header() {
+        let request = apply_upstream_auth(
+            reqwest::Client::new().post(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini:generateContent",
+            ),
+            BridgeProtocol::GeminiGenerateContent,
+            false,
+            &HeaderMap::new(),
+            Some("gemini-key"),
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+
+        assert_eq!(
+            request
+                .headers()
+                .get("x-goog-api-key")
+                .and_then(|value| value.to_str().ok()),
+            Some("gemini-key")
+        );
+        assert!(request.headers().get("anthropic-version").is_none());
+    }
+
+    #[test]
+    fn rate_limit_retry_delay_uses_retry_after_seconds() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::RETRY_AFTER,
+            reqwest::header::HeaderValue::from_static("5"),
+        );
+
+        assert_eq!(
+            rate_limit_retry_delay(&headers, &Retry429Config::default()),
+            Duration::from_secs(5)
+        );
+    }
+
+    #[test]
+    fn rate_limit_retry_delay_keeps_retry_after_seconds() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::RETRY_AFTER,
+            reqwest::header::HeaderValue::from_static("120"),
+        );
+
+        assert_eq!(
+            rate_limit_retry_delay(&headers, &Retry429Config::default()),
+            Duration::from_secs(120)
+        );
+    }
+
+    #[test]
+    fn rate_limit_retry_delay_falls_back_to_configured_seconds() {
+        let headers = reqwest::header::HeaderMap::new();
+        let settings = Retry429Config {
+            delay_seconds: 7,
+            ..Retry429Config::default()
+        };
+
+        assert_eq!(
+            rate_limit_retry_delay(&headers, &settings),
+            Duration::from_secs(7)
+        );
+    }
+
+    fn test_profile() -> ProfileDef {
+        ProfileDef {
+            id: "profile-test".to_string(),
+            label: "Profile Test".to_string(),
+            provider: "custom".to_string(),
+            auth_mode: AuthMode::ApiKey,
+            api_types: vec!["gemini".to_string()],
+            credentials: BTreeMap::new(),
+            overrides: BTreeMap::new(),
+            use_settings_proxy: false,
+            provider_settings: ProviderSettings::default(),
+        }
     }
 }

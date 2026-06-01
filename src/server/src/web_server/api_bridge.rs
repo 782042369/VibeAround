@@ -12,6 +12,7 @@ use va_ai_api_bridge::{
 
 mod completion;
 mod content_policy;
+mod google_code_assist;
 mod model_mapping;
 mod normalization;
 mod passthrough;
@@ -20,8 +21,8 @@ mod routes;
 mod stream;
 mod upstream;
 
-use completion::translated_completion_response;
-use content_policy::validate_request_content;
+use completion::{translated_completion_response, UpstreamResponseTransform};
+use content_policy::{sanitize_request_content, ContentSanitization};
 use model_mapping::{bridge_model_mapping, bridge_route_preference};
 use normalization::normalize_target_request;
 use passthrough::{buffered_passthrough_response, passthrough_response};
@@ -33,7 +34,10 @@ pub use routes::{
     local_models_handler, local_responses_handler,
 };
 use stream::translated_stream_response;
-use upstream::{apply_upstream_auth, redacted_url, upstream_endpoint, upstream_error_response};
+use upstream::{
+    apply_upstream_auth, redacted_url, request_stream, send_upstream_request_with_rate_limit_retry,
+    upstream_endpoint, upstream_error_response, ResolvedUpstreamRoute,
+};
 
 use super::AppState;
 
@@ -70,7 +74,7 @@ pub(super) async fn bridge_handler(
 
     let mut agent_request = original_request;
 
-    if client_protocol == upstream.protocol {
+    if client_protocol == upstream.protocol && !upstream.is_google_code_assist() {
         let requested_agent_model = wire_model(&agent_request);
         let model_mapping = bridge_model_mapping(
             &upstream.profile,
@@ -82,6 +86,36 @@ pub(super) async fn bridge_handler(
         if let Some(mapping) = &model_mapping {
             apply_wire_model(&mut agent_request, &mapping.upstream_model);
         }
+        if let Ok(mut content_request) = upstream
+            .protocol
+            .decode_agent_request(agent_request.clone())
+        {
+            let sanitization =
+                sanitize_request_content(&upstream.profile, &target_api_type, &mut content_request);
+            log_content_sanitization(
+                &profile_id,
+                &target_api_type,
+                client_protocol,
+                upstream.protocol,
+                sanitization,
+            );
+            if sanitization.changed() {
+                agent_request = match upstream.protocol.encode_upstream_request(&content_request) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        return json_error(StatusCode::UNPROCESSABLE_ENTITY, &error.to_string());
+                    }
+                };
+            }
+        }
+        let gemini_route = if upstream.protocol == BridgeProtocol::GeminiGenerateContent {
+            match resolve_upstream_route(&upstream, &agent_request) {
+                Ok(route) => Some(route),
+                Err(response) => return response,
+            }
+        } else {
+            None
+        };
         if let Err(message) = normalize_target_request(&mut agent_request, upstream.protocol) {
             return json_error(StatusCode::UNPROCESSABLE_ENTITY, &message);
         }
@@ -96,57 +130,24 @@ pub(super) async fn bridge_handler(
         } else if upstream.protocol == BridgeProtocol::AnthropicMessages {
             provider_adapter.prepare_anthropic_request(&mut agent_request);
         }
-        if let Ok(mut validation_request) = upstream
-            .protocol
-            .decode_agent_request(agent_request.clone())
-        {
-            if let Some(mapping) = &model_mapping {
-                validation_request.model = Some(mapping.upstream_model.clone());
-            }
-            if let Err(message) =
-                validate_request_content(&upstream.profile, &target_api_type, &validation_request)
-            {
-                return json_error(StatusCode::UNPROCESSABLE_ENTITY, &message);
-            }
-        }
-        let stream = agent_request
-            .get("stream")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let body = match serde_json::to_vec(&agent_request) {
-            Ok(body) => body,
-            Err(e) => {
-                return json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &format!("failed to serialize bridge request: {e}"),
-                );
-            }
+        let route = match gemini_route {
+            Some(route) => route,
+            None => match resolve_upstream_route(&upstream, &agent_request) {
+                Ok(route) => route,
+                Err(response) => return response,
+            },
         };
-        let upstream_headers = match merged_upstream_headers(
-            &upstream.headers,
-            bridge_preference
-                .as_ref()
-                .map(|preference| &preference.headers),
-        ) {
-            Ok(headers) => headers,
-            Err(error) => return json_error(StatusCode::BAD_REQUEST, &error.to_string()),
-        };
-        let upstream_client = match upstream_http_client(&state, &upstream.profile) {
-            Ok(client) => client,
-            Err(message) => return json_error(StatusCode::BAD_REQUEST, &message),
-        };
-        let request = upstream_client
-            .post(&upstream.url)
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .headers(upstream_headers)
-            .body(body);
-        let request = match apply_upstream_auth(
-            request,
-            upstream.protocol,
-            upstream.auth_header,
+        let request = match build_upstream_request(
+            &state,
+            &upstream,
+            &route,
+            agent_request,
+            bridge_preference.as_ref(),
             &headers,
             manual_profile_api_key.as_deref(),
-        ) {
+        )
+        .await
+        {
             Ok(request) => request,
             Err(response) => return response,
         };
@@ -157,12 +158,12 @@ pub(super) async fn bridge_handler(
             route_scope = ?route_scope,
             manual_scope = ?manual_scope,
             target_api_type = %target_api_type,
-            upstream = %redacted_url(&upstream.url),
-            stream = stream,
+            upstream = %redacted_url(&route.url),
+            stream = route.stream,
             "API bridge passthrough forwarding request"
         );
 
-        let response = match request.send().await {
+        let response = match send_upstream_request_with_rate_limit_retry(request).await {
             Ok(response) => response,
             Err(e) => {
                 return json_error(
@@ -171,7 +172,7 @@ pub(super) async fn bridge_handler(
                 );
             }
         };
-        if !stream {
+        if !route.stream {
             return buffered_passthrough_response(response).await;
         }
         return passthrough_response(response);
@@ -190,12 +191,29 @@ pub(super) async fn bridge_handler(
     if let Some(mapping) = &model_mapping {
         universal_request.model = Some(mapping.upstream_model.clone());
     }
+    let sanitization =
+        sanitize_request_content(&upstream.profile, &target_api_type, &mut universal_request);
+    log_content_sanitization(
+        &profile_id,
+        &target_api_type,
+        client_protocol,
+        upstream.protocol,
+        sanitization,
+    );
     let mut upstream_request = match upstream
         .protocol
         .encode_upstream_request(&universal_request)
     {
         Ok(request) => request,
         Err(error) => return json_error(StatusCode::UNPROCESSABLE_ENTITY, &error.to_string()),
+    };
+    let gemini_route = if upstream.protocol == BridgeProtocol::GeminiGenerateContent {
+        match resolve_upstream_route(&upstream, &upstream_request) {
+            Ok(route) => Some(route),
+            Err(response) => return response,
+        }
+    } else {
+        None
     };
     if let Err(message) = normalize_target_request(&mut upstream_request, upstream.protocol) {
         return json_error(StatusCode::UNPROCESSABLE_ENTITY, &message);
@@ -211,56 +229,24 @@ pub(super) async fn bridge_handler(
     } else if upstream.protocol == BridgeProtocol::AnthropicMessages {
         provider_adapter.prepare_anthropic_request(&mut upstream_request);
     }
-    if let Ok(validation_request) = upstream
-        .protocol
-        .decode_agent_request(upstream_request.clone())
-    {
-        if let Err(message) =
-            validate_request_content(&upstream.profile, &target_api_type, &validation_request)
-        {
-            return json_error(StatusCode::UNPROCESSABLE_ENTITY, &message);
-        }
-    }
-    let stream = upstream_request
-        .get("stream")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let body = match serde_json::to_vec(&upstream_request) {
-        Ok(body) => body,
-        Err(e) => {
-            return json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("failed to serialize bridge request: {e}"),
-            );
-        }
+    let route = match gemini_route {
+        Some(route) => route,
+        None => match resolve_upstream_route(&upstream, &upstream_request) {
+            Ok(route) => route,
+            Err(response) => return response,
+        },
     };
-
-    let upstream_headers = match merged_upstream_headers(
-        &upstream.headers,
-        bridge_preference
-            .as_ref()
-            .map(|preference| &preference.headers),
-    ) {
-        Ok(headers) => headers,
-        Err(error) => return json_error(StatusCode::BAD_REQUEST, &error.to_string()),
-    };
-
-    let upstream_client = match upstream_http_client(&state, &upstream.profile) {
-        Ok(client) => client,
-        Err(message) => return json_error(StatusCode::BAD_REQUEST, &message),
-    };
-    let request = upstream_client
-        .post(&upstream.url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .headers(upstream_headers)
-        .body(body);
-    let request = match apply_upstream_auth(
-        request,
-        upstream.protocol,
-        upstream.auth_header,
+    let request = match build_upstream_request(
+        &state,
+        &upstream,
+        &route,
+        upstream_request,
+        bridge_preference.as_ref(),
         &headers,
         manual_profile_api_key.as_deref(),
-    ) {
+    )
+    .await
+    {
         Ok(request) => request,
         Err(response) => return response,
     };
@@ -271,14 +257,14 @@ pub(super) async fn bridge_handler(
         route_scope = ?route_scope,
         manual_scope = ?manual_scope,
         target_api_type = %target_api_type,
-        upstream = %redacted_url(&upstream.url),
+        upstream = %redacted_url(&route.url),
         bridge_model = ?model_mapping.as_ref().map(|mapping| mapping.upstream_model.as_str()),
         agent_model = ?model_mapping.as_ref().map(|mapping| mapping.agent_model.as_str()),
-        stream = stream,
+        stream = route.stream,
         "API bridge forwarding request"
     );
 
-    let response = match request.send().await {
+    let response = match send_upstream_request_with_rate_limit_retry(request).await {
         Ok(response) => response,
         Err(e) => {
             return json_error(
@@ -292,13 +278,20 @@ pub(super) async fn bridge_handler(
         return upstream_error_response(response).await;
     }
 
-    if stream {
+    let response_transform = if upstream.is_google_code_assist() {
+        UpstreamResponseTransform::GoogleCodeAssist
+    } else {
+        UpstreamResponseTransform::Identity
+    };
+
+    if route.stream {
         translated_stream_response(
             response,
             upstream.protocol,
             client_protocol,
             provider_adapter,
             model_mapping.map(|mapping| mapping.agent_model),
+            response_transform,
         )
     } else {
         translated_completion_response(
@@ -307,6 +300,7 @@ pub(super) async fn bridge_handler(
             client_protocol,
             &mut provider_adapter,
             model_mapping.map(|mapping| mapping.agent_model),
+            response_transform,
         )
         .await
     }
@@ -346,11 +340,13 @@ pub(super) async fn models_handler(
         .map(|model| {
             let metadata =
                 bridge_model_metadata(&upstream.profile, &target_api_type, &model.upstream_model);
-            let input_modalities = if metadata.image_input {
-                vec!["text", "image"]
-            } else {
-                vec!["text"]
-            };
+            let mut input_modalities = vec!["text"];
+            if metadata.image_input {
+                input_modalities.push("image");
+            }
+            if metadata.file_input {
+                input_modalities.push("file");
+            }
             json!({
                 "id": model.agent_model.as_str(),
                 "type": "model",
@@ -398,6 +394,95 @@ fn upstream_http_client(state: &AppState, profile: &ProfileDef) -> Result<reqwes
         return Ok(state.preview_client.clone());
     }
     proxy_http_client(&cfg.proxy)
+}
+
+async fn build_upstream_request(
+    state: &AppState,
+    upstream: &upstream::UpstreamEndpoint,
+    route: &ResolvedUpstreamRoute,
+    request_body: Value,
+    bridge_preference: Option<&common::agent_state::ProfileBridgePreference>,
+    headers: &HeaderMap,
+    manual_profile_api_key: Option<&str>,
+) -> Result<reqwest::RequestBuilder, Response> {
+    let upstream_headers = match merged_upstream_headers(
+        &upstream.headers,
+        bridge_preference.map(|preference| &preference.headers),
+    ) {
+        Ok(headers) => headers,
+        Err(error) => return Err(json_error(StatusCode::BAD_REQUEST, &error.to_string())),
+    };
+    let upstream_client = match upstream_http_client(state, &upstream.profile) {
+        Ok(client) => client,
+        Err(message) => return Err(json_error(StatusCode::BAD_REQUEST, &message)),
+    };
+
+    let (body, bearer_token) = if upstream.is_google_code_assist() {
+        let token = google_code_assist::bearer_token(&upstream_client).await?;
+        let project = google_code_assist::resolve_project_id(
+            &upstream_client,
+            &upstream.base_url,
+            &upstream.profile,
+            &token,
+        )
+        .await?;
+        let model = route.model.as_deref().ok_or_else(|| {
+            json_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "Gemini Code Assist upstream request is missing model metadata",
+            )
+        })?;
+        let request_body =
+            google_code_assist::wrap_generate_content_request(request_body, model, project)
+                .map_err(|message| json_error(StatusCode::UNPROCESSABLE_ENTITY, &message))?;
+        let body = serde_json::to_vec(&request_body).map_err(|error| {
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("failed to serialize bridge request: {error}"),
+            )
+        })?;
+        (body, Some(token))
+    } else {
+        let body = serde_json::to_vec(&request_body).map_err(|error| {
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("failed to serialize bridge request: {error}"),
+            )
+        })?;
+        (body, None)
+    };
+
+    let request = upstream_client
+        .post(&route.url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .headers(upstream_headers)
+        .body(body);
+
+    if let Some(token) = bearer_token {
+        return Ok(request.bearer_auth(token));
+    }
+
+    apply_upstream_auth(
+        request,
+        upstream.protocol,
+        upstream.auth_header,
+        headers,
+        manual_profile_api_key,
+    )
+}
+
+fn resolve_upstream_route(
+    upstream: &upstream::UpstreamEndpoint,
+    request: &Value,
+) -> Result<ResolvedUpstreamRoute, Response> {
+    let stream = request_stream(upstream.protocol, request);
+    let model = upstream
+        .route_model(request)
+        .map_err(|message| json_error(StatusCode::UNPROCESSABLE_ENTITY, &message))?;
+    let url = upstream
+        .request_url(request)
+        .map_err(|message| json_error(StatusCode::UNPROCESSABLE_ENTITY, &message))?;
+    Ok(ResolvedUpstreamRoute { stream, url, model })
 }
 
 fn proxy_http_client(proxy: &config::HttpProxyConfig) -> Result<reqwest::Client, String> {
@@ -502,6 +587,28 @@ fn reasoning_effort_enabled(value: &str) -> bool {
     )
 }
 
+fn log_content_sanitization(
+    profile_id: &str,
+    target_api_type: &str,
+    client_protocol: BridgeProtocol,
+    upstream_protocol: BridgeProtocol,
+    sanitization: ContentSanitization,
+) {
+    if !sanitization.changed() {
+        return;
+    }
+    tracing::warn!(
+        target: "server::web_server::api_bridge",
+        profile_id = %profile_id,
+        target_api_type = %target_api_type,
+        client_protocol = ?client_protocol,
+        upstream_protocol = ?upstream_protocol,
+        image_omitted = sanitization.image_omitted,
+        file_omitted = sanitization.file_omitted,
+        "API bridge omitted unsupported request content before upstream forwarding"
+    );
+}
+
 fn client_api_type_from_scope(scope: &str) -> Option<&str> {
     ["claude", "codex", "gemini", "opencode", "pi"]
         .iter()
@@ -526,13 +633,19 @@ fn validate_manual_scope(scope: &str) -> Result<(), Response> {
 
 fn apply_wire_model(request: &mut Value, model: &str) {
     if let Some(object) = request.as_object_mut() {
-        object.insert("model".to_string(), Value::String(model.to_string()));
+        if object.contains_key("__va_model") {
+            object.insert("__va_model".to_string(), Value::String(model.to_string()));
+        }
+        if object.contains_key("model") || !object.contains_key("__va_model") {
+            object.insert("model".to_string(), Value::String(model.to_string()));
+        }
     }
 }
 
 fn wire_model(request: &Value) -> Option<String> {
     request
         .get("model")
+        .or_else(|| request.get("__va_model"))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())

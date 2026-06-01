@@ -7,7 +7,7 @@ use super::catalog;
 use super::codex_metadata::{self, CodexModelCatalogSpec};
 use super::connections::ProfileBridgeModelRoute;
 use super::render::{ConfigEnvTarget, RenderedProfile, RenderedSettingsFile};
-use super::schema::ProfileDef;
+use super::schema::{AuthMode, ProfileDef};
 use crate::config;
 
 pub(super) fn render_bridge_launch(
@@ -108,8 +108,15 @@ fn resolve_bridge_settings(
         .credentials
         .get("api_key")
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| anyhow!("profile '{}' has no api_key credential", profile.id))?
-        .clone();
+        .cloned()
+        .or_else(|| {
+            matches!(
+                profile.auth_mode,
+                AuthMode::OauthViaCli | AuthMode::GoogleOauth
+            )
+            .then(|| "vibearound-local-bridge".to_string())
+        })
+        .ok_or_else(|| anyhow!("profile '{}' has no api_key credential", profile.id))?;
     let profile_model = profile
         .overrides
         .get(target_api_type)
@@ -766,6 +773,82 @@ mod tests {
     }
 
     #[test]
+    fn codex_bridge_launch_can_target_native_gemini_api() {
+        let mut profile = gemini_profile();
+        profile.api_types = vec!["gemini".to_string()];
+        profile.overrides.clear();
+        profile.overrides.insert(
+            "gemini".to_string(),
+            ApiTypeOverrides {
+                endpoint_id: None,
+                base_url: None,
+                model: Some("gemini-3.1-pro".to_string()),
+                reasoning_effort: Some("medium".to_string()),
+                capabilities: None,
+            },
+        );
+
+        let rendered = render_bridge_launch(
+            &profile,
+            "codex",
+            "launch-test",
+            "openai-responses",
+            "gemini",
+            None,
+            None,
+            &[],
+        )
+        .expect("codex native gemini bridge launch renders");
+
+        assert!(rendered.command_args.iter().any(|arg| {
+            arg == "model_providers.gemini.base_url='http://127.0.0.1:12358/va/local-api/gemini-test/codex-openai-responses/gemini/v1'"
+        }));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model='gemini-3.1-pro'"));
+        assert!(rendered
+            .env
+            .contains(&("OPENAI_API_KEY".to_string(), "test-key".to_string())));
+    }
+
+    #[test]
+    fn oauth_bridge_launch_uses_local_dummy_key() {
+        let mut profile = gemini_profile();
+        profile.auth_mode = AuthMode::GoogleOauth;
+        profile.credentials.clear();
+        profile.api_types = vec!["gemini".to_string()];
+        profile.overrides.clear();
+        profile.overrides.insert(
+            "gemini".to_string(),
+            ApiTypeOverrides {
+                endpoint_id: Some("google-accounts".to_string()),
+                base_url: None,
+                model: Some("gemini-3.1-pro".to_string()),
+                reasoning_effort: Some("medium".to_string()),
+                capabilities: None,
+            },
+        );
+
+        let rendered = render_bridge_launch(
+            &profile,
+            "codex",
+            "launch-test",
+            "openai-responses",
+            "gemini",
+            None,
+            None,
+            &[],
+        )
+        .expect("oauth bridge launch renders");
+
+        assert!(rendered.env.contains(&(
+            "OPENAI_API_KEY".to_string(),
+            "vibearound-local-bridge".to_string()
+        )));
+    }
+
+    #[test]
     fn claude_bridge_launch_uses_standard_env_shape() {
         for profile in [dashscope_profile(), deepseek_profile()] {
             let rendered = render_bridge_launch(
@@ -843,7 +926,7 @@ mod tests {
         overrides.insert(
             "openai-chat".to_string(),
             ApiTypeOverrides {
-                endpoint_id: Some("openai-compatible".to_string()),
+                endpoint_id: Some("gemini-api".to_string()),
                 base_url: None,
                 model: Some("gemini-3.1-pro".to_string()),
                 reasoning_effort: Some("medium".to_string()),

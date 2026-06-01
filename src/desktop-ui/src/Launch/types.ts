@@ -5,7 +5,7 @@
  * snake_case to match the catalog JSON the user can read on disk.
  */
 
-export type AuthMode = "api_key" | "oauth_via_cli";
+export type AuthMode = "api_key" | "oauth_via_cli" | "google_oauth";
 export type CompatibilityBridgeMode = "auto" | "on" | "off";
 export type ConnectionAgentId = "claude" | "codex" | "gemini" | "opencode" | "pi";
 
@@ -169,7 +169,7 @@ export function apiTypeLabel(api_type: string): string {
     case "openai-responses":
       return "OpenAI Responses";
     case "gemini":
-      return "Gemini API";
+      return "Gemini GenerateContent";
     default:
       return api_type;
   }
