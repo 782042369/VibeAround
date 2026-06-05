@@ -59,16 +59,13 @@ async fn build_channels(
         .into_iter()
         .map(|s| crate::api_types::ChannelRuntime {
             kind: s.kind,
+            version: s.version,
             status: s.status.as_str(),
             reason: if s.reason.is_empty() {
                 None
             } else {
                 Some(s.reason)
             },
-            crash_count: s.crash_count,
-            last_seen_age_secs: s.last_seen_age_secs,
-            restart_in_secs: s.restart_in_secs,
-            started_at: s.started_at,
         })
         .collect()
 }
