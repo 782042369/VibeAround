@@ -44,16 +44,16 @@ export function ServiceIconBadge({
 
   return (
     <span
-      className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card"
+      className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center"
       title={`${label}: ${status}`}
     >
-      <span className="flex h-full w-full items-center justify-center rounded-[inherit] bg-background">
+      <span className="flex h-full w-full items-center justify-center">
         {meta.src ? (
           <img
             src={meta.src}
             alt=""
             draggable={false}
-            className="h-[68%] w-[68%] object-contain"
+            className="h-[82%] w-[82%] object-contain"
           />
         ) : (
           <span className="text-[11px] font-semibold text-primary">
@@ -90,7 +90,7 @@ export function AgentIconBadge({
         kind="cli"
         id={id}
         label={label}
-        framed
+        framed={false}
         className="h-7 w-7"
       />
       <span

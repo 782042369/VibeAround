@@ -84,17 +84,14 @@ function RuntimeStatusItems({
   }
 
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-3 flex flex-wrap items-center gap-2">
       {items.map((item) => (
         <span
           key={`${item.kind}-${item.id}`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/80 px-1.5 py-1"
+          className="inline-flex"
           title={`${item.name}: ${item.status}`}
         >
           {item.icon}
-          <span className="max-w-[84px] truncate text-[11px] text-muted-foreground">
-            {item.name}
-          </span>
         </span>
       ))}
     </div>
