@@ -27,14 +27,10 @@ const TUNNEL_ICONS: Record<string, ServiceIconMeta> = {
 export function ServiceIconBadge({
   id,
   kind,
-  label,
-  status,
   tone,
 }: {
   id: string;
   kind: "channel" | "tunnel";
-  label: string;
-  status: string;
   tone: Tone;
 }) {
   const meta =
@@ -43,10 +39,7 @@ export function ServiceIconBadge({
       : TUNNEL_ICONS[id] ?? { src: "", fallback: id.slice(0, 1).toUpperCase() };
 
   return (
-    <span
-      className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center"
-      title={`${label}: ${status}`}
-    >
+    <span className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center">
       <span className="flex h-full w-full items-center justify-center">
         {meta.src ? (
           <img
@@ -74,18 +67,16 @@ export function ServiceIconBadge({
 export function AgentIconBadge({
   cliKind,
   label,
-  status,
   tone,
 }: {
   cliKind: string | null;
   label: string;
-  status: string;
   tone: Tone;
 }) {
   const id = cliKind?.toLowerCase() ?? "agent";
 
   return (
-    <span className="relative inline-flex h-7 w-7 shrink-0" title={`${label}: ${status}`}>
+    <span className="relative inline-flex h-7 w-7 shrink-0">
       <BrandIcon
         kind="cli"
         id={id}

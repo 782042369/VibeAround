@@ -15,20 +15,13 @@ import {
   RuntimeSection,
 } from "./status-dashboard/primitives";
 import {
-  AgentIconBadge,
-  ServiceIconBadge,
-} from "./status-dashboard/serviceIcon";
-import {
   RuntimeStatusCard,
-  type RuntimeStatusItem,
 } from "./status-dashboard/statusCard";
 import {
-  agentDisplayName,
-  capitalize,
-  channelDisplayName,
-  channelPresentation,
-  tunnelPresentation,
-} from "./status-dashboard/presentation";
+  buildAgentStatusItems,
+  buildChannelStatusItems,
+  buildTunnelStatusItems,
+} from "./status-dashboard/statusItems";
 import {
   AgentRuntimeRow,
 } from "./status-dashboard/runtimeRows";
@@ -95,65 +88,22 @@ export function StatusDashboard({
           value: t("Off"),
           detail: t("No active agents"),
         };
-  const tunnelStatuses: RuntimeStatusItem[] = tunnels.tunnels.map((tunnel) => {
-    const presentation = tunnelPresentation(tunnel.status, t);
-    return {
-      id: tunnel.provider,
-      kind: "tunnel",
-      name: t("{{provider}} tunnel", { provider: capitalize(tunnel.provider) }),
-      status: presentation.label,
-      tone: presentation.tone,
-      icon: (
-        <ServiceIconBadge
-          id={tunnel.provider}
-          kind="tunnel"
-          label={t("{{provider}} tunnel", { provider: capitalize(tunnel.provider) })}
-          status={presentation.label}
-          tone={presentation.tone}
-        />
-      ),
-    };
+  const tunnelStatuses = buildTunnelStatusItems({
+    tunnels: tunnels.tunnels,
+    kill: tunnels.kill,
+    t,
   });
-  const channelStatuses: RuntimeStatusItem[] = channels.channels.map((channel) => {
-    const presentation = channelPresentation(channel.status, t);
-    const name = channelDisplayName(channel.kind);
-    return {
-      id: channel.kind,
-      kind: "channel",
-      name,
-      status: presentation.label,
-      tone: presentation.tone,
-      icon: (
-        <ServiceIconBadge
-          id={channel.kind}
-          kind="channel"
-          label={name}
-          status={presentation.label}
-          tone={presentation.tone}
-        />
-      ),
-    };
+  const channelStatuses = buildChannelStatusItems({
+    channels: channels.channels,
+    start: channels.start,
+    stop: channels.stop,
+    restart: channels.restart,
+    t,
   });
-  const agentStatuses: RuntimeStatusItem[] = agents.agents.map((agent) => {
-    const failed = Boolean(agent.failed);
-    const status = failed ? t("Failed") : agent.busy ? t("Busy") : t("Idle");
-    const tone: Tone = failed ? "danger" : agent.busy ? "busy" : "good";
-    const name = agentDisplayName(agent, t);
-    return {
-      id: agent.route_key,
-      kind: "agent",
-      name,
-      status,
-      tone,
-      icon: (
-        <AgentIconBadge
-          cliKind={agent.cli_kind}
-          label={name}
-          status={status}
-          tone={tone}
-        />
-      ),
-    };
+  const agentStatuses = buildAgentStatusItems({
+    agents: agents.agents,
+    kill: agents.kill,
+    t,
   });
 
   return (
