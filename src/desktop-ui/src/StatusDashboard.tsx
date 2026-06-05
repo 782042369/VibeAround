@@ -3,13 +3,11 @@ import {
   ExternalLink,
   Globe,
   MessageSquare,
-  RefreshCw,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
 import { Button } from "@/components/ui/button";
 import { DAEMON_PORT, openDashboardUrl } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import {
   EmptyRuntime,
   RuntimeSection,
@@ -31,7 +29,6 @@ export function StatusDashboard({
   channels,
   tunnels,
   agents,
-  onRefresh,
 }: StatusDashboardProps) {
   const { t } = useI18n();
   const tunnelIssues = tunnels.tunnels.filter(
@@ -48,7 +45,6 @@ export function StatusDashboard({
     (channel) => channel.status === "running" || channel.status === "spawning",
   ).length;
   const runningAgents = agents.agents.length;
-  const anyLoading = channels.loading || tunnels.loading || agents.loading;
   const tunnelTone = runtimeTone(tunnelIssues, runningTunnels);
   const channelTone = runtimeTone(channelIssues, runningChannels);
   const agentTone = runtimeTone(agentIssues, runningAgents);
@@ -123,18 +119,6 @@ export function StatusDashboard({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onRefresh}
-              className="h-8 gap-1.5 text-xs"
-            >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5", anyLoading && "animate-spin")}
-              />
-              {t("Refresh")}
-            </Button>
             <Button
               type="button"
               variant="ghost"

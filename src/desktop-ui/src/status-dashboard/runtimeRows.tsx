@@ -10,7 +10,6 @@ import {
   capitalize,
   channelDisplayName,
   channelPresentation,
-  formatDuration,
   shortId,
   tunnelDetail,
   tunnelPresentation,
@@ -31,11 +30,6 @@ export function TunnelRuntimeRow({
   const details = [
     tunnel.provider,
     tunnel.url ?? tunnelDetail(tunnel.status),
-    tunnel.uptime_secs > 0
-      ? t("Uptime {{duration}}", {
-          duration: formatDuration(tunnel.uptime_secs),
-        })
-      : null,
   ].filter(Boolean);
 
   return (
@@ -119,22 +113,7 @@ export function ChannelRuntimeRow({
 }) {
   const presentation = channelPresentation(channel.status, t);
   const running = channel.status === "running" || channel.status === "spawning";
-  const details = [
-    channel.reason,
-    channel.restart_in_secs > 0
-      ? t("Restarts in {{duration}}", {
-          duration: formatDuration(channel.restart_in_secs),
-        })
-      : null,
-    channel.crash_count > 0
-      ? t("{{count}} crashes", { count: channel.crash_count })
-      : null,
-    channel.last_seen_age_secs > 0
-      ? t("Last seen {{duration}} ago", {
-          duration: formatDuration(channel.last_seen_age_secs),
-        })
-      : null,
-  ].filter(Boolean);
+  const details = [channel.reason].filter(Boolean);
 
   return (
     <RuntimeRow

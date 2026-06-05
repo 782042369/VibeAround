@@ -11,7 +11,6 @@ import {
   capitalize,
   channelDisplayName,
   channelPresentation,
-  formatDuration,
   shortId,
   tunnelDetail,
   tunnelPresentation,
@@ -34,6 +33,30 @@ export function buildTunnelStatusItems({
     const name = t("{{provider}} tunnel", {
       provider: capitalize(tunnel.provider),
     });
+    const details: RuntimeStatusItem["details"] = [
+      { label: t("Type"), value: t("Remote access") },
+      { label: t("Name"), value: name },
+      { label: t("Provider"), value: tunnel.provider },
+      { label: t("Status"), value: presentation.label },
+    ];
+    if (tunnel.url) {
+      details.push({
+        label: t("URL"),
+        value: (
+          <button
+            type="button"
+            className="text-primary underline-offset-2 hover:underline"
+            onClick={() => void openDashboardUrl(tunnel.url!)}
+          >
+            {tunnel.url}
+          </button>
+        ),
+      });
+    }
+    const reason = tunnelDetail(tunnel.status);
+    if (reason) {
+      details.push({ label: t("Reason"), value: reason });
+    }
 
     return {
       id: tunnel.provider,
@@ -48,37 +71,7 @@ export function buildTunnelStatusItems({
           tone={presentation.tone}
         />
       ),
-      details: [
-        { label: t("Type"), value: t("Remote access") },
-        { label: t("Name"), value: name },
-        { label: t("Provider"), value: tunnel.provider },
-        { label: t("Status"), value: presentation.label },
-        {
-          label: t("URL"),
-          value: tunnel.url ? (
-            <button
-              type="button"
-              className="text-primary underline-offset-2 hover:underline"
-              onClick={() => void openDashboardUrl(tunnel.url!)}
-            >
-              {tunnel.url}
-            </button>
-          ) : (
-            t("Not available")
-          ),
-        },
-        {
-          label: t("Uptime"),
-          value:
-            tunnel.uptime_secs > 0
-              ? formatDuration(tunnel.uptime_secs)
-              : t("Not available"),
-        },
-        {
-          label: t("Message"),
-          value: tunnelDetail(tunnel.status) ?? t("No issues reported"),
-        },
-      ],
+      details,
       actions: (
         <>
           {tunnel.url && (
@@ -126,6 +119,15 @@ export function buildChannelStatusItems({
     const presentation = channelPresentation(channel.status, t);
     const name = channelDisplayName(channel.kind);
     const running = channel.status === "running" || channel.status === "spawning";
+    const details: RuntimeStatusItem["details"] = [
+      { label: t("Type"), value: t("Messaging app") },
+      { label: t("Name"), value: name },
+      { label: t("Plugin version"), value: channel.version ?? t("Unknown") },
+      { label: t("Status"), value: presentation.label },
+    ];
+    if (channel.reason) {
+      details.push({ label: t("Reason"), value: channel.reason });
+    }
 
     return {
       id: channel.kind,
@@ -140,30 +142,7 @@ export function buildChannelStatusItems({
           tone={presentation.tone}
         />
       ),
-      details: [
-        { label: t("Type"), value: t("Messaging app") },
-        { label: t("Name"), value: name },
-        { label: t("Plugin version"), value: t("Not reported") },
-        { label: t("Status"), value: presentation.label },
-        { label: t("Crashes"), value: String(channel.crash_count) },
-        {
-          label: t("Last seen"),
-          value:
-            channel.last_seen_age_secs > 0
-              ? t("{{duration}} ago", {
-                  duration: formatDuration(channel.last_seen_age_secs),
-                })
-              : t("Just now"),
-        },
-        {
-          label: t("Restart in"),
-          value:
-            channel.restart_in_secs > 0
-              ? formatDuration(channel.restart_in_secs)
-              : t("Not scheduled"),
-        },
-        { label: t("Message"), value: channel.reason ?? t("No issues reported") },
-      ],
+      details,
       actions: (
         <>
           {running ? (
@@ -216,6 +195,29 @@ export function buildAgentStatusItems({
     const status = failed ? t("Failed") : agent.busy ? t("Busy") : t("Idle");
     const tone: Tone = failed ? "danger" : agent.busy ? "busy" : "good";
     const name = agentDisplayName(agent, t);
+    const details: RuntimeStatusItem["details"] = [
+      { label: t("Type"), value: t("Coding Agent") },
+      { label: t("Name"), value: name },
+      { label: t("Status"), value: status },
+      { label: t("CLI"), value: agent.cli_kind ?? t("Unknown") },
+      { label: t("Version"), value: agent.agent_version ?? t("Unknown") },
+      {
+        label: t("Workspace"),
+        value: agent.workspace ? basename(agent.workspace) : t("Unknown"),
+      },
+      {
+        label: t("Session"),
+        value: agent.session_id ? shortId(agent.session_id) : t("Unknown"),
+      },
+      { label: t("Route"), value: agent.route_key },
+      {
+        label: t("Subagents"),
+        value: String(agent.subagents.length + agent.multi_agent_turns.length),
+      },
+    ];
+    if (agent.failed) {
+      details.push({ label: t("Reason"), value: agent.failed });
+    }
 
     return {
       id: agent.route_key,
@@ -230,27 +232,7 @@ export function buildAgentStatusItems({
           tone={tone}
         />
       ),
-      details: [
-        { label: t("Type"), value: t("Coding Agent") },
-        { label: t("Name"), value: name },
-        { label: t("Status"), value: status },
-        { label: t("CLI"), value: agent.cli_kind ?? t("Not reported") },
-        { label: t("Version"), value: agent.agent_version ?? t("Not reported") },
-        {
-          label: t("Workspace"),
-          value: agent.workspace ? basename(agent.workspace) : t("Not reported"),
-        },
-        {
-          label: t("Session"),
-          value: agent.session_id ? shortId(agent.session_id) : t("Not reported"),
-        },
-        { label: t("Route"), value: agent.route_key },
-        {
-          label: t("Subagents"),
-          value: String(agent.subagents.length + agent.multi_agent_turns.length),
-        },
-        { label: t("Message"), value: agent.failed ?? t("No issues reported") },
-      ],
+      details,
       actions: !failed ? (
         <Button
           type="button"

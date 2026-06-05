@@ -292,7 +292,6 @@ function Dashboard() {
           channels={channels}
           tunnels={tunnels}
           agents={agents}
-          onRefresh={refreshAll}
         />
       )}
     </div>
