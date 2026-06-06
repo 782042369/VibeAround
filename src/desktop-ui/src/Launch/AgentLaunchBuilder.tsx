@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   FolderOpen,
@@ -146,6 +146,9 @@ export function AgentLaunchBuilder({
   const [sessionChoice, setSessionChoice] = useState<SessionChoice>(null);
   const [settingsAgent, setSettingsAgent] = useState<AgentSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const postLaunchSessionRefreshTimers = useRef<ReturnType<
+    typeof setTimeout
+  >[]>([]);
 
   const enabledAgents = useMemo(
     () => (prefs ? new Set(prefs.enabledAgents) : null),
@@ -253,6 +256,80 @@ export function AgentLaunchBuilder({
   }, [prefs, agentId, onError]);
 
   const currentAgentWorkspace = prefs ? agentWorkspace(prefs, agentId) : "";
+  const latestSessionScope = useRef({ agentId: "", workspace: "" });
+
+  useEffect(() => {
+    latestSessionScope.current = {
+      agentId,
+      workspace: currentAgentWorkspace,
+    };
+  }, [agentId, currentAgentWorkspace]);
+
+  const clearPostLaunchSessionRefreshTimers = useCallback(() => {
+    for (const timer of postLaunchSessionRefreshTimers.current) {
+      clearTimeout(timer);
+    }
+    postLaunchSessionRefreshTimers.current = [];
+  }, []);
+
+  useEffect(
+    () => () => clearPostLaunchSessionRefreshTimers(),
+    [clearPostLaunchSessionRefreshTimers],
+  );
+
+  const refreshPostLaunchSessions = useCallback(
+    async (launchedAgentId: string, launchedWorkspace: string) => {
+      if (
+        !launchedAgentId ||
+        !launchedWorkspace ||
+        !agentSupportsSessionResume(launchedAgentId)
+      ) {
+        return;
+      }
+
+      try {
+        const items = await listLaunchSessions(
+          launchedAgentId,
+          launchedWorkspace,
+          showArchivedSessions,
+        );
+        const latest = latestSessionScope.current;
+        if (latest.agentId !== launchedAgentId) return;
+
+        setWorkspaceSessionCounts((current) => ({
+          ...current,
+          [launchedWorkspace]: items.filter((item) => !item.archived).length,
+        }));
+
+        if (latest.workspace !== launchedWorkspace) return;
+
+        setSessions(items);
+        setSessionChoice((current) =>
+          current?.kind === "session" &&
+          items.some((item) => item.sessionId === current.sessionId)
+            ? current
+            : null,
+        );
+      } catch {
+        // A launched CLI may not have written its session yet. Ignore and let
+        // the next scheduled refresh or a normal remount pick it up.
+      }
+    },
+    [showArchivedSessions],
+  );
+
+  const schedulePostLaunchSessionRefresh = useCallback(
+    (launchedAgentId: string, launchedWorkspace: string) => {
+      clearPostLaunchSessionRefreshTimers();
+      for (const delayMs of [5000, 10000, 15000]) {
+        const timer = setTimeout(() => {
+          void refreshPostLaunchSessions(launchedAgentId, launchedWorkspace);
+        }, delayMs);
+        postLaunchSessionRefreshTimers.current.push(timer);
+      }
+    },
+    [clearPostLaunchSessionRefreshTimers, refreshPostLaunchSessions],
+  );
 
   useEffect(() => {
     if (!agentId || !currentAgentWorkspace) {
@@ -610,6 +687,8 @@ export function AgentLaunchBuilder({
 
   async function launchSelected() {
     if (!agentId) return;
+    const launchedAgentId = agentId;
+    const launchedWorkspace = currentAgentWorkspace;
     setBusy(true);
     onError(null);
     try {
@@ -617,19 +696,20 @@ export function AgentLaunchBuilder({
         if (profileChoice.kind === "profile") {
           await launchProfileResume(
             profileChoice.profileId,
-            agentId,
+            launchedAgentId,
             selectedSession.sessionId,
           );
         } else {
-          await launchDirectResume(agentId, selectedSession.sessionId);
+          await launchDirectResume(launchedAgentId, selectedSession.sessionId);
         }
         onToast(t("Resume launch opened"));
       } else {
         if (profileChoice.kind === "profile") {
-          await launchProfile(profileChoice.profileId, agentId);
+          await launchProfile(profileChoice.profileId, launchedAgentId);
         } else {
-          await launchDirect(agentId);
+          await launchDirect(launchedAgentId);
         }
+        schedulePostLaunchSessionRefresh(launchedAgentId, launchedWorkspace);
         onToast(t("Quick launch opened"));
       }
     } catch (error) {
