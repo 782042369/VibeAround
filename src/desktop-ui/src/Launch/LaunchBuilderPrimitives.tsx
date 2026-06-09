@@ -465,7 +465,7 @@ export function WorkspaceActionsMenu({
           onSelect={() => onDelete(workspace)}
         >
           <Trash2 className="h-3 w-3" />
-          {t("Delete")}
+          {t("Remove workspace")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

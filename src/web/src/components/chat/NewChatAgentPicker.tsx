@@ -25,12 +25,10 @@ function launchProfilesForAgent(profiles: ProfileLaunchOption[], agentId: string
   });
 }
 
-function SectionDivider({ label }: { label: string }) {
+function SectionTitle({ label }: { label: string }) {
   return (
-    <div className="mb-2 flex items-center justify-center gap-2 px-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
-      <span className="h-px w-14 bg-border/70 sm:w-20" aria-hidden="true" />
-      <span>{label}</span>
-      <span className="h-px w-14 bg-border/70 sm:w-20" aria-hidden="true" />
+    <div className="mb-2 px-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+      {label}
     </div>
   );
 }
@@ -70,7 +68,7 @@ export function NewChatAgentPicker({
   return (
     <>
       <section className={cn("w-full", className)}>
-        <SectionDivider label={t("Agent")} />
+        <SectionTitle label={t("Agent")} />
         <div className="flex flex-wrap items-center gap-1.5">
           {agents.length === 0 ? (
             <div
@@ -109,7 +107,7 @@ export function NewChatAgentPicker({
       </section>
 
       <section className={cn("w-full", className)}>
-        <SectionDivider label={t("Profile")} />
+        <SectionTitle label={t("Profile")} />
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"

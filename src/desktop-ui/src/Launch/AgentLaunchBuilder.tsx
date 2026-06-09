@@ -554,7 +554,7 @@ export function AgentLaunchBuilder({
   }
 
   async function removeWorkspace(path: string, label: string) {
-    if (!window.confirm(t('Delete workspace "{{label}}"?', { label }))) return;
+    if (!window.confirm(t('Remove workspace "{{label}}"?', { label }))) return;
     setBusy(true);
     onError(null);
     try {
