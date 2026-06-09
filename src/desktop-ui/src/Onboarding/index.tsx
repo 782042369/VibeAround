@@ -302,13 +302,13 @@ export default function Onboarding() {
     if (!loaded || activeStep !== "agents" || agents.length === 0 || startkit.running) return;
     const agentIds = agents.map((agent) => agent.id).sort();
     const pendingAgentIds = agentIds.filter((agentId) => {
-      const signature = itemCheckSignature(agentId, downloadSource, toolchainMode);
+      const signature = itemCheckSignature(agentId, "local", toolchainMode);
       return !checkedAgentLocalSignaturesRef.current.has(signature);
     });
     if (pendingAgentIds.length === 0) return;
     for (const agentId of pendingAgentIds) {
       checkedAgentLocalSignaturesRef.current.add(
-        itemCheckSignature(agentId, downloadSource, toolchainMode),
+        itemCheckSignature(agentId, "local", toolchainMode),
       );
     }
     for (const agentId of pendingAgentIds) {
@@ -338,7 +338,6 @@ export default function Onboarding() {
     activeStep,
     agentStatusChoices,
     agents,
-    downloadSource,
     loaded,
     settings,
     startkit.running,
@@ -436,13 +435,13 @@ export default function Onboarding() {
       .filter((id) => id !== "none")
       .sort();
     const pendingTunnelIds = tunnelIds.filter((id) => {
-      const signature = itemCheckSignature(id, downloadSource, toolchainMode, "tunnel");
+      const signature = itemCheckSignature(id, "tunnel", toolchainMode);
       return !checkedTunnelSignaturesRef.current.has(signature);
     });
     if (pendingTunnelIds.length === 0) return;
     for (const id of pendingTunnelIds) {
       checkedTunnelSignaturesRef.current.add(
-        itemCheckSignature(id, downloadSource, toolchainMode, "tunnel"),
+        itemCheckSignature(id, "tunnel", toolchainMode),
       );
     }
 
@@ -472,7 +471,6 @@ export default function Onboarding() {
   }, [
     activeStep,
     agentStatusChoices,
-    downloadSource,
     loaded,
     settings,
     toolchainMode,
