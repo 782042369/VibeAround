@@ -12,6 +12,55 @@ import type {
   StartkitScanReport,
 } from "../types";
 
+function pendingReportsFromPlan(
+  plan: StartkitPlan,
+  previous: StartkitItemReport[],
+): StartkitItemReport[] {
+  return plan.items.map(
+    (item) =>
+      previous.find((report) => report.id === item.id) ?? {
+        id: item.id,
+        label: item.label,
+        group: item.group,
+        category: item.category,
+        status: "pending",
+        severity: item.severity,
+        actions: [],
+        secret: item.secret,
+        settingsKey: item.settingsKey,
+      },
+  );
+}
+
+function applyProgress(
+  previous: StartkitItemReport[],
+  payload: StartkitProgressEvent,
+): StartkitItemReport[] {
+  const next = [...previous];
+  const index = next.findIndex((report) => report.id === payload.id);
+  const base: StartkitItemReport =
+    payload.report ??
+    (index >= 0
+      ? {
+          ...next[index],
+          status: payload.status,
+          message: payload.message,
+        }
+      : {
+          id: payload.id,
+          label: payload.label,
+          group: "startkit",
+          category: "startkit",
+          status: payload.status,
+          message: payload.message,
+          actions: [],
+          secret: false,
+        });
+  if (index >= 0) next[index] = base;
+  else next.push(base);
+  return next;
+}
+
 interface UseStartkitFlowResult {
   plan: StartkitPlan | null;
   reports: StartkitItemReport[];
@@ -48,20 +97,7 @@ export function useStartkitFlow(): UseStartkitFlowResult {
       const nextPlan = await invoke<StartkitPlan>("startkit_plan", { choices });
       setPlan(nextPlan);
       setReports((previous) =>
-        nextPlan.items.map(
-          (item) =>
-            previous.find((report) => report.id === item.id) ?? {
-              id: item.id,
-              label: item.label,
-              group: item.group,
-              category: item.category,
-              status: "pending",
-              severity: item.severity,
-              actions: [],
-              secret: item.secret,
-              settingsKey: item.settingsKey,
-            },
-        ),
+        pendingReportsFromPlan(nextPlan, previous),
       );
     } catch (err) {
       setError(String(err));
@@ -71,18 +107,40 @@ export function useStartkitFlow(): UseStartkitFlowResult {
   const scan = useCallback(async (settings: Settings, choices: StartkitChoices) => {
     setScanning(true);
     setError(null);
+    setComplete(false);
+    setFinalStatus(null);
+    for (const unlisten of unlistenRefs.current) unlisten();
+    unlistenRefs.current = [];
+    let scanProgressUnlisten: UnlistenFn | null = null;
+
     try {
+      scanProgressUnlisten = await listen<StartkitProgressEvent>(
+        "startkit-progress",
+        (event) => {
+          setReports((previous) => applyProgress(previous, event.payload));
+        },
+      );
+      unlistenRefs.current = [scanProgressUnlisten];
+
+      const pendingPlan = await invoke<StartkitPlan>("startkit_plan", { choices });
+      setPlan(pendingPlan);
+      setReports((previous) =>
+        pendingReportsFromPlan(pendingPlan, previous),
+      );
+
       const report = await invoke<StartkitScanReport>("startkit_scan", {
         settings,
         choices,
       });
       setPlan(report.plan);
       setReports(report.reports);
-      setComplete(false);
-      setFinalStatus(null);
     } catch (err) {
       setError(String(err));
     } finally {
+      scanProgressUnlisten?.();
+      unlistenRefs.current = unlistenRefs.current.filter(
+        (unlisten) => unlisten !== scanProgressUnlisten,
+      );
       setScanning(false);
     }
   }, []);
@@ -100,32 +158,7 @@ export function useStartkitFlow(): UseStartkitFlowResult {
       const unlistenProgress = await listen<StartkitProgressEvent>(
         "startkit-progress",
         (event) => {
-          const payload = event.payload;
-          setReports((previous) => {
-            const next = [...previous];
-            const index = next.findIndex((report) => report.id === payload.id);
-            const base: StartkitItemReport =
-              payload.report ??
-              (index >= 0
-                ? {
-                    ...next[index],
-                    status: payload.status,
-                    message: payload.message,
-                  }
-                : {
-                    id: payload.id,
-                    label: payload.label,
-                    group: "startkit",
-                    category: "startkit",
-                    status: payload.status,
-                    message: payload.message,
-                    actions: [],
-                    secret: false,
-                  });
-            if (index >= 0) next[index] = base;
-            else next.push(base);
-            return next;
-          });
+          setReports((previous) => applyProgress(previous, event.payload));
         },
       );
 
@@ -176,4 +209,3 @@ export function useStartkitFlow(): UseStartkitFlowResult {
     finish,
   };
 }
-

@@ -106,7 +106,7 @@ function LatestPackageVersion($package) {
   $npm = NpmCommand
   if (-not $name -or -not $npm) { return $null }
   $registry = if ($env:STARTKIT_NPM_REGISTRY) { $env:STARTKIT_NPM_REGISTRY } else { "https://registry.npmjs.org" }
-  $value = (& $npm view $name version --registry $registry 2>$null | Select-Object -Last 1) -join ""
+  $value = (& $npm --fetch-timeout=5000 --fetch-retries=0 --fetch-retry-maxtimeout=5000 view $name version --registry $registry 2>$null | Select-Object -Last 1) -join ""
   if ($LASTEXITCODE -eq 0 -and $value) { return $value }
   return $null
 }

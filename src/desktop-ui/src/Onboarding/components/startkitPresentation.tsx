@@ -201,6 +201,10 @@ export function installProgressLabel(
   if (total === 0) return groupActivityLabel(reports, t);
   const done = work.filter((report) => report.status === "ok").length;
   const current = Math.min(done + 1, total);
+  const running = reports.find((report) => report.status === "running");
+  if (running && reportActivityKey(running) === "checking") {
+    return t("Checking {{current}}/{{total}}", { current, total });
+  }
   return t("Installing {{current}}/{{total}}", { current, total });
 }
 

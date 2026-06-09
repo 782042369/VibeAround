@@ -91,7 +91,8 @@ latest_package_version() {
   package="$(package_name "$1")"
   npm="$(npm_bin || true)"
   [ -n "$npm" ] || return 1
-  "$npm" view "$package" version --registry "${STARTKIT_NPM_REGISTRY:-https://registry.npmjs.org}" 2>/dev/null | tail -n 1
+  "$npm" --fetch-timeout=5000 --fetch-retries=0 --fetch-retry-maxtimeout=5000 \
+    view "$package" version --registry "${STARTKIT_NPM_REGISTRY:-https://registry.npmjs.org}" 2>/dev/null | tail -n 1
 }
 
 is_managed_candidate() {

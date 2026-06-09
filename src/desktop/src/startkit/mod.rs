@@ -7,11 +7,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Runtime, State};
@@ -342,11 +342,12 @@ pub fn startkit_plan(choices: StartkitChoices) -> Result<StartkitPlan, String> {
 }
 
 #[tauri::command]
-pub async fn startkit_scan(
+pub async fn startkit_scan<R: Runtime>(
+    app: AppHandle<R>,
     settings: Value,
     choices: StartkitChoices,
 ) -> Result<StartkitScanReport, String> {
-    scan(&settings, &choices, None)
+    scan_with_progress(Some(&app), &settings, &choices, None)
         .await
         .map_err(|e| e.to_string())
 }
@@ -413,6 +414,15 @@ pub async fn scan(
     choices: &StartkitChoices,
     platform: Option<&str>,
 ) -> anyhow::Result<StartkitScanReport> {
+    scan_with_progress::<tauri::Wry>(None, settings, choices, platform).await
+}
+
+async fn scan_with_progress<R: Runtime>(
+    app: Option<&AppHandle<R>>,
+    settings: &Value,
+    choices: &StartkitChoices,
+    platform: Option<&str>,
+) -> anyhow::Result<StartkitScanReport> {
     let manifest = load_manifest()?;
     let platform = platform.unwrap_or(current_platform());
     let plan = plan_from_manifest(&manifest, choices, platform)?;
@@ -421,7 +431,26 @@ pub async fn scan(
 
     for item_id in &plan.item_ids {
         let item = find_item(&manifest, item_id)?;
-        reports.push(scan_item(&manifest, &paths, item, settings, choices, platform).await);
+        if let Some(app) = app {
+            emit_progress(
+                app,
+                item,
+                StartkitItemStatus::Running,
+                Some("Checking".to_string()),
+                None,
+            );
+        }
+        let report = scan_item(&manifest, &paths, item, settings, choices, platform).await;
+        if let Some(app) = app {
+            emit_progress(
+                app,
+                item,
+                report.status.clone(),
+                report.message.clone(),
+                Some(report.clone()),
+            );
+        }
+        reports.push(report);
     }
 
     Ok(StartkitScanReport { plan, reports })

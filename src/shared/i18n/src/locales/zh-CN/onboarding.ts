@@ -158,6 +158,7 @@ export const zhCNOnboarding: Record<string, string> = {
   "Setup finished with issues": "安装完成，但有问题",
   "Setup run finished": "安装完成",
   "Ready to install": "准备安装",
+  "Checking {{current}}/{{total}}": "正在检测 {{current}}/{{total}}",
   "Installing {{current}}/{{total}}": "正在安装 {{current}}/{{total}}",
   "Preparing setup plan": "正在生成安装清单",
   "The environment check starts automatically.": "检测会自动开始。",
