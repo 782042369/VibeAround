@@ -87,10 +87,10 @@ export default function Onboarding() {
   const [finishing, setFinishing] = useState(false);
 
   const startkit = useStartkitFlow();
-  const autoScanSignatureRef = useRef<string | null>(null);
   const checkedAgentSignaturesRef = useRef<Set<string>>(new Set());
   const checkedAgentUpdateSignaturesRef = useRef<Set<string>>(new Set());
   const checkedPluginSignaturesRef = useRef<Set<string>>(new Set());
+  const checkedAgentSdkSignaturesRef = useRef<Set<string>>(new Set());
   const refreshedPluginsAfterInstallRef = useRef(false);
   const [agentInstallReports, setAgentInstallReports] = useState<
     StartkitItemReport[]
@@ -99,6 +99,10 @@ export default function Onboarding() {
   const [pluginUpdateReports, setPluginUpdateReports] = useState<
     StartkitItemReport[]
   >([]);
+  const [agentSdkReports, setAgentSdkReports] = useState<StartkitItemReport[]>(
+    [],
+  );
+  const [agentSdkScanning, setAgentSdkScanning] = useState(false);
 
   useOnboardingInitialLoad({
     setSettings,
@@ -196,7 +200,6 @@ export default function Onboarding() {
     ],
   );
 
-  const scanSignature = useMemo(() => JSON.stringify(choices), [choices]);
   const agentStatusChoices = useMemo<StartkitChoices>(
     () => ({
       agents: [],
@@ -250,21 +253,42 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (!loaded || activeStep !== "install" || startkit.running) return;
-    if (autoScanSignatureRef.current === scanSignature) return;
-    autoScanSignatureRef.current = scanSignature;
+    const agentIds = Array.from(enabledAgents).sort();
+    const pendingAgentIds = agentIds.filter((agentId) => {
+      const signature = itemCheckSignature(agentId, "agent-sdk");
+      return !checkedAgentSdkSignaturesRef.current.has(signature);
+    });
+    if (pendingAgentIds.length === 0) return;
+    for (const agentId of pendingAgentIds) {
+      checkedAgentSdkSignaturesRef.current.add(
+        itemCheckSignature(agentId, "agent-sdk"),
+      );
+    }
 
-    const timer = window.setTimeout(() => {
-      void startkit.scan(finalSettings, choices);
-    }, 250);
-    return () => window.clearTimeout(timer);
+    setAgentSdkScanning(true);
+    void invoke<StartkitItemReport[]>("scan_agent_sdk_status", {
+      choices: {
+        ...agentStatusChoices,
+        agents: pendingAgentIds,
+      },
+    })
+      .then((reports) => {
+        setAgentSdkReports((previous) =>
+          mergeReportsById(previous, reports),
+        );
+      })
+      .catch((error) => {
+        console.error("failed to scan agent SDK status", error);
+      })
+      .finally(() => {
+        setAgentSdkScanning(false);
+      });
   }, [
     activeStep,
+    agentStatusChoices,
+    enabledAgents,
     loaded,
-    scanSignature,
     startkit.running,
-    startkit.scan,
-    finalSettings,
-    choices,
   ]);
 
   useEffect(() => {
@@ -479,9 +503,29 @@ export default function Onboarding() {
     }
   }, [finalSettings, startkit.finish]);
 
+  const cachedInstallReports = useMemo(() => {
+    const selectedAgents = new Set(choices.agents);
+    const selectedChannels = new Set(choices.channels);
+    return [
+      ...agentInstallReports.filter((report) => {
+        const agentId = agentIdFromReport(report);
+        return agentId ? selectedAgents.has(agentId) : false;
+      }),
+      ...agentSdkReports.filter((report) => {
+        const agentId = agentIdFromSdkReport(report);
+        return agentId ? selectedAgents.has(agentId) : false;
+      }),
+      ...pluginUpdateReports.filter((report) => {
+        const pluginId = pluginIdFromReport(report);
+        return pluginId ? selectedChannels.has(pluginId) : false;
+      }),
+    ];
+  }, [agentInstallReports, agentSdkReports, choices.agents, choices.channels, pluginUpdateReports]);
+  const installReports =
+    startkit.running || startkit.complete ? startkit.reports : cachedInstallReports;
   const groupedReports = useMemo(
-    () => groupReports(startkit.plan?.items ?? [], startkit.reportById),
-    [startkit.plan, startkit.reportById],
+    () => groupReportsFromReports(installReports),
+    [installReports],
   );
   const agentReportsById = useMemo(() => {
     const reports = new Map(agentInstallReports.map((report) => [report.id, report]));
@@ -490,19 +534,14 @@ export default function Onboarding() {
     }
     return reports;
   }, [agentInstallReports, startkit.reportById]);
-  const hasScanned = startkit.reports.some((report) => report.status !== "pending");
-  const hasAgentUpdateWork = agentInstallReports.some(
-    (report) =>
-      report.status === "outdated" &&
-      choices.agents.includes(report.id.replace(/^agents\./, "").replace(/\.cli$/, "")),
-  );
-  const hasInstallWork =
-    startkit.reports.some(reportNeedsInstall) || hasAgentUpdateWork;
-  const hasBlockingReport = startkit.reports.some((report) =>
+  const hasScanned = installReports.some((report) => report.status !== "pending");
+  const hasInstallWork = installReports.some(reportNeedsInstall);
+  const hasBlockingReport = installReports.some((report) =>
     ["blocked", "error"].includes(report.status),
   );
   const canContinueFromInstall =
-    startkit.complete || (hasScanned && !hasInstallWork && !hasBlockingReport);
+    startkit.complete ||
+    (hasScanned && !agentSdkScanning && !hasInstallWork && !hasBlockingReport);
   const activeIndex = WIZARD_STEPS.findIndex((step) => step.id === activeStep);
 
   const goNext = useCallback(() => {
@@ -539,7 +578,7 @@ export default function Onboarding() {
           run: () => {},
         };
       }
-      if (startkit.scanning && !hasScanned) {
+      if (agentSdkScanning && !hasScanned) {
         return {
           label: t("Checking..."),
           icon: <Loader2 className="h-4 w-4 animate-spin" />,
@@ -558,7 +597,7 @@ export default function Onboarding() {
       return {
         label: t("Install selected"),
         icon: <Download className="h-4 w-4" />,
-        disabled: startkit.scanning,
+        disabled: agentSdkScanning,
         run: () => void startkit.start(finalSettings, choices),
       };
     }
@@ -584,6 +623,7 @@ export default function Onboarding() {
     };
   }, [
     activeStep,
+    agentSdkScanning,
     canContinueFromInstall,
     choices,
     finalSettings,
@@ -653,7 +693,7 @@ export default function Onboarding() {
           agents={agents}
           enabledAgents={enabledAgents}
           reportsById={agentReportsById}
-          scanning={activeStep === "install" ? startkit.scanning : agentStatusScanning}
+          scanning={activeStep === "install" ? agentSdkScanning : agentStatusScanning}
           onToggleAgent={toggleAgent}
           pluginRegistry={pluginRegistry}
           discoveredPlugins={discoveredPlugins}
@@ -664,7 +704,7 @@ export default function Onboarding() {
           tunnelProvider={tunnelProvider}
           onTunnelProvider={setTunnelProvider}
           groupedReports={groupedReports}
-          reports={startkit.reports}
+          reports={installReports}
           running={startkit.running}
           complete={startkit.complete}
           finalStatus={startkit.finalStatus}
@@ -730,6 +770,32 @@ function markReportsUpdating(
 function agentIdFromReport(report: StartkitItemReport): string | null {
   const match = /^agents\.(.+)\.cli$/.exec(report.id);
   return match?.[1] ?? null;
+}
+
+function agentIdFromSdkReport(report: StartkitItemReport): string | null {
+  const match = /^agents\.(.+)\.sdk$/.exec(report.id);
+  return match?.[1] ?? null;
+}
+
+function pluginIdFromReport(report: StartkitItemReport): string | null {
+  const match = /^channels\.plugins\.(.+)$/.exec(report.id);
+  return match?.[1] ?? null;
+}
+
+function groupReportsFromReports(reports: StartkitItemReport[]) {
+  const reportById = new Map(reports.map((report) => [report.id, report]));
+  return groupReports(
+    reports.map((report) => ({
+      id: report.id,
+      group: report.group,
+      label: report.label,
+      category: report.category,
+      severity: report.severity,
+      secret: report.secret,
+      settingsKey: report.settingsKey,
+    })),
+    reportById,
+  );
 }
 
 function itemCheckSignature(id: string, ...parts: string[]): string {

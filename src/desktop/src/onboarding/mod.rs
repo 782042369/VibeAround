@@ -303,6 +303,52 @@ pub async fn check_plugin_updates(
     Ok(reports)
 }
 
+#[tauri::command]
+pub async fn scan_agent_sdk_status(
+    choices: StartkitChoices,
+) -> Result<Vec<StartkitItemReport>, String> {
+    Ok(choices
+        .agents
+        .iter()
+        .filter_map(|agent_id| {
+            let agent = common::resources::agent_by_id(agent_id)?;
+            let npm_pkg = agent.acp.npm_package.as_deref()?;
+            let default_bin_name = common::agent::npm_package_bin_name(npm_pkg);
+            let bin_name = agent.acp.bin_name.as_deref().unwrap_or(&default_bin_name);
+            let installed = common::agent::npm_package_installed(npm_pkg, bin_name);
+            Some(StartkitItemReport {
+                id: format!("agents.{agent_id}.sdk"),
+                label: format!("{} ACP adapter", agent.display_name),
+                group: "agents".to_string(),
+                category: "agent_sdk".to_string(),
+                status: if installed {
+                    StartkitItemStatus::Ok
+                } else {
+                    StartkitItemStatus::Missing
+                },
+                severity: Some("blocker".to_string()),
+                version: None,
+                latest_version: None,
+                path: common::process::env::resolve_acp_agent_bin(bin_name)
+                    .ok()
+                    .map(|path| path.to_string_lossy().to_string()),
+                message: Some(if installed {
+                    "ACP adapter is installed".to_string()
+                } else {
+                    "ACP adapter is not installed".to_string()
+                }),
+                actions: if installed {
+                    Vec::new()
+                } else {
+                    vec!["install".to_string()]
+                },
+                secret: false,
+                settings_key: None,
+            })
+        })
+        .collect())
+}
+
 async fn agent_install_report(
     agent: common::resources::AgentDef,
     toolchain_mode: &str,
@@ -403,9 +449,7 @@ async fn agent_update_report(
 async fn plugin_update_report(plugin_id: String) -> Option<StartkitItemReport> {
     let plugin_def = common::resources::plugin_by_id(&plugin_id)?;
     let discovered = common::plugins::find_user(&plugin_id);
-    let local_version = discovered
-        .as_ref()
-        .map(|plugin| plugin.manifest.version.clone());
+    let local_version = discovered.as_ref().map(|plugin| plugin.installed_version());
 
     let mut report = StartkitItemReport {
         id: format!("channels.plugins.{plugin_id}"),
@@ -589,27 +633,47 @@ async fn npm_latest_version(package: &str, source: &str) -> anyhow::Result<Optio
 }
 
 async fn github_plugin_version(github_url: &str) -> anyhow::Result<Option<String>> {
-    let Some(url) = github_raw_plugin_manifest_url(github_url) else {
+    let Some(package_url) = github_raw_file_url(github_url, "package.json") else {
         return Ok(None);
     };
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .build()
         .context("build plugin metadata client")?;
-    let value: serde_json::Value = client
+    if let Some(version) = github_json_version(&client, &package_url).await? {
+        return Ok(Some(version));
+    }
+
+    let Some(manifest_url) = github_raw_file_url(github_url, "plugin.json") else {
+        return Ok(None);
+    };
+    github_json_version(&client, &manifest_url).await
+}
+
+async fn github_json_version(
+    client: &reqwest::Client,
+    url: &str,
+) -> anyhow::Result<Option<String>> {
+    let response = client
         .get(url)
         .header("accept", "application/json")
         .send()
         .await
-        .context("fetch plugin manifest")?
+        .with_context(|| format!("fetch plugin metadata {url}"))?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    let value: serde_json::Value = response
         .error_for_status()
-        .context("plugin manifest status")?
+        .with_context(|| format!("plugin metadata status {url}"))?
         .json()
         .await
-        .context("parse plugin manifest")?;
+        .with_context(|| format!("parse plugin metadata {url}"))?;
     Ok(value
         .get("version")
         .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
         .map(str::to_string))
 }
 
@@ -694,7 +758,7 @@ fn extract_semver(value: &str) -> Option<String> {
     None
 }
 
-fn github_raw_plugin_manifest_url(github_url: &str) -> Option<String> {
+fn github_raw_file_url(github_url: &str, file_name: &str) -> Option<String> {
     let trimmed = github_url.trim().trim_end_matches(".git");
     let marker = "github.com/";
     let (_, rest) = trimmed.split_once(marker)?;
@@ -702,7 +766,7 @@ fn github_raw_plugin_manifest_url(github_url: &str) -> Option<String> {
     let owner = segments.next()?;
     let repo = segments.next()?;
     Some(format!(
-        "https://raw.githubusercontent.com/{owner}/{repo}/HEAD/plugin.json"
+        "https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{file_name}"
     ))
 }
 
