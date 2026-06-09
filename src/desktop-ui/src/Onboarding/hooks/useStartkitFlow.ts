@@ -61,6 +61,70 @@ function applyProgress(
   return next;
 }
 
+function needsInstall(report: StartkitItemReport): boolean {
+  return (
+    report.status === "missing" ||
+    report.status === "outdated" ||
+    report.status === "broken" ||
+    report.actions.includes("install")
+  );
+}
+
+function reportsForInstallStart(
+  reports: StartkitItemReport[],
+): StartkitItemReport[] {
+  return reports.map((report) =>
+    needsInstall(report)
+      ? {
+          ...report,
+          status: "running",
+          message:
+            report.status === "outdated"
+              ? "Queued for update"
+              : "Queued for install",
+        }
+      : report,
+  );
+}
+
+function finalizeQueuedReports(
+  reports: StartkitItemReport[],
+  status: string,
+): StartkitItemReport[] {
+  return reports.map((report) => {
+    if (
+      report.status !== "running" ||
+      (report.message !== "Queued for install" &&
+        report.message !== "Queued for update")
+    ) {
+      return report;
+    }
+
+    if (status === "complete" || status === "needs_input") {
+      return {
+        ...report,
+        status: "ok",
+        message: "Installed",
+        actions: [],
+      };
+    }
+
+    if (status === "cancelled") {
+      return {
+        ...report,
+        status: "skipped",
+        message: "Cancelled",
+      };
+    }
+
+    return {
+      ...report,
+      status: "error",
+      message: "Install did not finish",
+    };
+  });
+}
+
 interface UseStartkitFlowResult {
   plan: StartkitPlan | null;
   reports: StartkitItemReport[];
@@ -72,7 +136,11 @@ interface UseStartkitFlowResult {
   reportById: Map<string, StartkitItemReport>;
   refreshPlan: (choices: StartkitChoices) => Promise<void>;
   scan: (settings: Settings, choices: StartkitChoices) => Promise<void>;
-  start: (settings: Settings, choices: StartkitChoices) => Promise<void>;
+  start: (
+    settings: Settings,
+    choices: StartkitChoices,
+    initialReports?: StartkitItemReport[],
+  ) => Promise<void>;
   cancel: () => Promise<void>;
   finish: () => Promise<void>;
 }
@@ -145,11 +213,20 @@ export function useStartkitFlow(): UseStartkitFlowResult {
     }
   }, []);
 
-  const start = useCallback(async (settings: Settings, choices: StartkitChoices) => {
+  const start = useCallback(async (
+    settings: Settings,
+    choices: StartkitChoices,
+    initialReports?: StartkitItemReport[],
+  ) => {
     setRunning(true);
     setComplete(false);
     setFinalStatus(null);
     setError(null);
+    setReports((previous) =>
+      reportsForInstallStart(
+        initialReports && initialReports.length > 0 ? initialReports : previous,
+      ),
+    );
 
     for (const unlisten of unlistenRefs.current) unlisten();
     unlistenRefs.current = [];
@@ -166,6 +243,9 @@ export function useStartkitFlow(): UseStartkitFlowResult {
         "startkit-complete",
         (event) => {
           setFinalStatus(event.payload.status);
+          setReports((previous) =>
+            finalizeQueuedReports(previous, event.payload.status),
+          );
           setComplete(true);
           setRunning(false);
         },

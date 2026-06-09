@@ -471,6 +471,26 @@ pub(crate) async fn scan_tunnel_reports(
     }
 }
 
+pub(crate) async fn scan_computer_reports(
+    settings: &Value,
+    choices: &StartkitChoices,
+) -> anyhow::Result<Vec<StartkitItemReport>> {
+    let manifest = load_manifest()?;
+    let platform = current_platform();
+    let plan = plan_from_manifest(&manifest, choices, platform)?;
+    let item_ids = plan
+        .item_ids
+        .into_iter()
+        .filter(|id| {
+            matches!(
+                id.as_str(),
+                "essentials.node" | "essentials.git" | "environment.shell_path"
+            )
+        })
+        .collect::<Vec<_>>();
+    scan_startkit_item_reports(settings, choices, &item_ids, Duration::from_secs(8)).await
+}
+
 async fn scan_startkit_item_reports(
     settings: &Value,
     choices: &StartkitChoices,
@@ -574,13 +594,6 @@ async fn execute_item_with_cancel(
     let platform = current_platform();
     let paths = StartkitPaths::new(startkit_root());
     let item = find_item(&manifest, item_id)?;
-    if let Some(progress) = progress {
-        progress(
-            item,
-            StartkitItemStatus::Running,
-            Some("Checking".to_string()),
-        );
-    }
     let before = scan_item(&manifest, &paths, item, settings, choices, platform).await;
     let refresh_managed_npm =
         item.managed && item.npm_package.is_some() && choices.toolchain_mode != "system";
@@ -748,7 +761,7 @@ async fn run_channel_plugins_item<R: Runtime>(
                 ..base_report(item)
             });
         }
-        install_acp_adapter_for_agent(app, item, agent_id, cancelled).await?;
+        install_acp_adapter_for_agent(app, agent_id, cancelled).await?;
     }
 
     for channel_id in &choices.channels {
@@ -759,7 +772,7 @@ async fn run_channel_plugins_item<R: Runtime>(
                 ..base_report(item)
             });
         }
-        install_channel_plugin(app, item, channel_id, cancelled).await?;
+        install_channel_plugin(app, channel_id, cancelled).await?;
     }
 
     Ok(StartkitItemReport {
@@ -772,7 +785,6 @@ async fn run_channel_plugins_item<R: Runtime>(
 
 async fn install_acp_adapter_for_agent<R: Runtime>(
     app: &AppHandle<R>,
-    item: &StartkitItem,
     agent_id: &str,
     cancelled: &Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
@@ -782,6 +794,8 @@ async fn install_acp_adapter_for_agent<R: Runtime>(
     let Some(npm_pkg) = agent_def.acp.npm_package.as_deref() else {
         return Ok(());
     };
+    let progress_id = format!("agents.{agent_id}.sdk");
+    let progress_label = format!("{} ACP adapter", agent_def.display_name);
     let default_bin_name = common::agent::npm_package_bin_name(npm_pkg);
     let bin_name = agent_def
         .acp
@@ -790,10 +804,11 @@ async fn install_acp_adapter_for_agent<R: Runtime>(
         .unwrap_or(&default_bin_name);
 
     if common::agent::npm_package_installed(npm_pkg, bin_name) {
-        emit_progress(
+        emit_progress_event(
             app,
-            item,
-            StartkitItemStatus::Running,
+            progress_id,
+            progress_label,
+            StartkitItemStatus::Ok,
             Some(format!(
                 "{} ACP adapter already installed",
                 agent_def.display_name
@@ -803,36 +818,69 @@ async fn install_acp_adapter_for_agent<R: Runtime>(
         return Ok(());
     }
 
-    emit_progress(
+    emit_progress_event(
         app,
-        item,
+        progress_id.clone(),
+        progress_label.clone(),
         StartkitItemStatus::Running,
         Some(format!("Installing {} ACP adapter", agent_def.display_name)),
         None,
     );
 
-    common::agent::auto_install_npm_agent_with_progress_and_cancel(
+    let result = common::agent::auto_install_npm_agent_with_progress_and_cancel(
         npm_pkg,
         |line| {
-            emit_progress(app, item, StartkitItemStatus::Running, Some(line), None);
+            emit_progress_event(
+                app,
+                progress_id.clone(),
+                progress_label.clone(),
+                StartkitItemStatus::Running,
+                Some(line),
+                None,
+            );
         },
         || cancelled.load(Ordering::Relaxed),
     )
-    .await
-    .map(|_| ())
+    .await;
+
+    match result {
+        Ok(_) => {
+            emit_progress_event(
+                app,
+                progress_id,
+                progress_label,
+                StartkitItemStatus::Ok,
+                Some("ACP adapter is installed".to_string()),
+                None,
+            );
+            Ok(())
+        }
+        Err(error) => {
+            emit_progress_event(
+                app,
+                progress_id,
+                progress_label,
+                StartkitItemStatus::Error,
+                Some(error.to_string()),
+                None,
+            );
+            Err(error)
+        }
+    }
 }
 
 async fn install_channel_plugin<R: Runtime>(
     app: &AppHandle<R>,
-    item: &StartkitItem,
     channel_id: &str,
     cancelled: &Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
+    let progress_id = format!("channels.plugins.{channel_id}");
     if crate::onboarding::check_plugin_status(channel_id.to_string()) == "ready" {
-        emit_progress(
+        emit_progress_event(
             app,
-            item,
-            StartkitItemStatus::Running,
+            progress_id,
+            channel_id.to_string(),
+            StartkitItemStatus::Ok,
             Some(format!("{channel_id} plugin already installed")),
             None,
         );
@@ -842,26 +890,58 @@ async fn install_channel_plugin<R: Runtime>(
     let plugin = common::resources::plugin_by_id(channel_id)
         .ok_or_else(|| anyhow!("channel plugin '{channel_id}' not found in registry"))?;
 
-    emit_progress(
+    emit_progress_event(
         app,
-        item,
+        progress_id.clone(),
+        plugin.name.clone(),
         StartkitItemStatus::Running,
         Some(format!("Installing {} plugin", plugin.name)),
         None,
     );
 
-    crate::onboarding::plugin_install::run_install_inner_with_progress(
+    let result = crate::onboarding::plugin_install::run_install_inner_with_progress(
         crate::onboarding::plugin_install::InstallPluginRequest {
             plugin_id: channel_id.to_string(),
             github_url: plugin.github.clone(),
         },
         |line| {
-            emit_progress(app, item, StartkitItemStatus::Running, Some(line), None);
+            emit_progress_event(
+                app,
+                progress_id.clone(),
+                plugin.name.clone(),
+                StartkitItemStatus::Running,
+                Some(line),
+                None,
+            );
         },
         || cancelled.load(Ordering::Relaxed),
     )
-    .await
-    .map(|_| ())
+    .await;
+
+    match result {
+        Ok(_) => {
+            emit_progress_event(
+                app,
+                progress_id,
+                plugin.name.clone(),
+                StartkitItemStatus::Ok,
+                Some("Plugin is installed".to_string()),
+                None,
+            );
+            Ok(())
+        }
+        Err(error) => {
+            emit_progress_event(
+                app,
+                progress_id,
+                plugin.name.clone(),
+                StartkitItemStatus::Error,
+                Some(error.to_string()),
+                None,
+            );
+            Err(error)
+        }
+    }
 }
 
 fn install_phase_message(item: &StartkitItem) -> String {
@@ -880,11 +960,29 @@ fn emit_progress<R: Runtime>(
     message: Option<String>,
     report: Option<StartkitItemReport>,
 ) {
+    emit_progress_event(
+        app,
+        item.id.clone(),
+        item.label.clone(),
+        status,
+        message,
+        report,
+    );
+}
+
+fn emit_progress_event<R: Runtime>(
+    app: &AppHandle<R>,
+    id: String,
+    label: String,
+    status: StartkitItemStatus,
+    message: Option<String>,
+    report: Option<StartkitItemReport>,
+) {
     let _ = app.emit(
         STARTKIT_PROGRESS_EVENT,
         StartkitProgressEvent {
-            id: item.id.clone(),
-            label: item.label.clone(),
+            id,
+            label,
             status,
             message,
             report,

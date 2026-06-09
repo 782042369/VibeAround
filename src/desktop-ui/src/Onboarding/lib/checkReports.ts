@@ -3,6 +3,7 @@ import type {
   AgentSummary,
   DiscoveredChannelPlugin,
   PluginRegistryEntry,
+  StartkitChoices,
   StartkitItemReport,
   TunnelSummary,
 } from "../types";
@@ -130,6 +131,61 @@ export function agentSdkCheckingReport(
     actions: [],
     secret: false,
   };
+}
+
+export function computerCheckingReports(
+  choices: StartkitChoices,
+): StartkitItemReport[] {
+  const reports: StartkitItemReport[] = [];
+  const needsNode =
+    choices.agents.length > 0 ||
+    choices.channels.length > 0 ||
+    choices.tunnel === "localtunnel";
+  const needsGit = choices.agents.length > 0 || choices.channels.length > 0;
+
+  if (needsNode) {
+    reports.push({
+      id: "essentials.node",
+      label: "Node.js",
+      group: "computer",
+      category: "essentials",
+      status: "running",
+      severity: "blocker",
+      message: "Checking local version",
+      actions: [],
+      secret: false,
+    });
+  }
+
+  if (needsGit) {
+    reports.push({
+      id: "essentials.git",
+      label: "Git",
+      group: "computer",
+      category: "essentials",
+      status: "running",
+      severity: "warning",
+      message: "Checking local version",
+      actions: [],
+      secret: false,
+    });
+  }
+
+  if (choices.shellPath) {
+    reports.push({
+      id: "environment.shell_path",
+      label: "Shell PATH",
+      group: "computer",
+      category: "environment",
+      status: "running",
+      severity: "warning",
+      message: "Checking local version",
+      actions: [],
+      secret: false,
+    });
+  }
+
+  return reports;
 }
 
 export function localPluginReport(

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, Notify};
 
-use onboarding::{OnboardingGate, OnboardingInstallState, OnboardingSessions};
+use onboarding::{OnboardingGate, OnboardingSessions};
 use startkit::StartkitRunState;
 
 #[derive(serde::Serialize)]
@@ -188,7 +188,6 @@ fn main() {
         .manage(OnboardingActive(std::sync::atomic::AtomicBool::new(
             onboarding_needed,
         )))
-        .manage(OnboardingInstallState::default())
         .manage(StartkitRunState::default())
         .invoke_handler(tauri::generate_handler![
             get_auth_token,
@@ -212,11 +211,9 @@ fn main() {
             onboarding::check_plugin_updates,
             onboarding::scan_agent_sdk_status,
             onboarding::scan_tunnel_status,
+            onboarding::scan_computer_install_status,
             onboarding::list_tunnels,
             onboarding::list_plugin_registry,
-            onboarding::get_install_manifest,
-            onboarding::start_onboarding_install,
-            onboarding::cancel_onboarding_install,
             startkit::startkit_manifest,
             startkit::startkit_plan,
             startkit::startkit_scan,

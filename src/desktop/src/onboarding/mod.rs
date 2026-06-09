@@ -3,7 +3,6 @@
 //! commands so the desktop-ui frontend can read/write settings and signal completion.
 
 mod agent_integrations;
-mod install_orchestration;
 pub(crate) mod plugin_install;
 mod plugin_session;
 
@@ -22,7 +21,7 @@ pub use plugin_session::PluginSession;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::{Output, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -51,33 +50,6 @@ pub struct OnboardingSessions {
     pub plugin_sessions: Arc<Mutex<HashMap<String, PluginSession>>>,
 }
 
-/// State for the granular onboarding install flow.
-pub struct OnboardingInstallState {
-    pub cancelled: Arc<AtomicBool>,
-    pub child_process: Arc<Mutex<Option<tokio::process::Child>>>,
-    pub log_file: Arc<Mutex<Option<std::fs::File>>>,
-}
-
-impl Default for OnboardingInstallState {
-    fn default() -> Self {
-        Self {
-            cancelled: Arc::new(AtomicBool::new(false)),
-            child_process: Arc::new(Mutex::new(None)),
-            log_file: Arc::new(Mutex::new(None)),
-        }
-    }
-}
-
-/// Progress event emitted to the frontend during onboarding install.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstallProgressEvent {
-    pub id: String,
-    pub label: String,
-    pub status: String,
-    pub message: Option<String>,
-}
-
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUpdateCheckRequest {
@@ -89,14 +61,6 @@ pub struct AgentUpdateCheckRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PluginUpdateCheckRequest {
     pub plugin_ids: Vec<String>,
-}
-
-/// Task info returned by `get_install_manifest`.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstallTaskInfo {
-    pub id: String,
-    pub label: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +335,16 @@ pub async fn scan_tunnel_status(
     choices: StartkitChoices,
 ) -> Result<Vec<StartkitItemReport>, String> {
     crate::startkit::scan_tunnel_reports(&settings, &choices)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn scan_computer_install_status(
+    settings: Value,
+    choices: StartkitChoices,
+) -> Result<Vec<StartkitItemReport>, String> {
+    crate::startkit::scan_computer_reports(&settings, &choices)
         .await
         .map_err(|error| error.to_string())
 }
@@ -914,8 +888,8 @@ pub async fn plugin_auth_cancel(
     Ok(())
 }
 
-/// Called after `start_onboarding_install` completes. Signals the daemon gate
-/// and navigates the user to the dashboard.
+/// Marks onboarding complete, signals the daemon gate, and navigates the user
+/// to the dashboard.
 #[tauri::command]
 pub async fn finish_onboarding<R: Runtime>(
     app: AppHandle<R>,
@@ -948,39 +922,4 @@ pub async fn finish_onboarding<R: Runtime>(
     }
 
     Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Tauri commands — install manifest + orchestrated install
-// ---------------------------------------------------------------------------
-
-/// Returns the list of install tasks for the given settings, so the frontend
-/// can pre-populate the progress list before install starts.
-#[tauri::command]
-pub fn get_install_manifest(
-    settings: Value,
-    scope: Option<install_orchestration::InstallScope>,
-) -> Vec<InstallTaskInfo> {
-    install_orchestration::get_install_manifest(&settings, scope.unwrap_or_default())
-}
-
-/// Orchestrates the full onboarding install sequence. Saves settings, then
-/// installs MCP configs, skills, ACP agents, and channel plugins one by one,
-/// emitting `"onboarding-install-progress"` events for each task.
-#[tauri::command]
-pub async fn start_onboarding_install<R: Runtime>(
-    app: AppHandle<R>,
-    install_state: State<'_, OnboardingInstallState>,
-    settings: Value,
-    scope: Option<install_orchestration::InstallScope>,
-) -> Result<(), String> {
-    install_orchestration::start(app, &install_state, settings, scope.unwrap_or_default()).await
-}
-
-/// Cancel a running onboarding install.
-#[tauri::command]
-pub async fn cancel_onboarding_install(
-    install_state: State<'_, OnboardingInstallState>,
-) -> Result<(), String> {
-    install_orchestration::cancel(&install_state).await
 }

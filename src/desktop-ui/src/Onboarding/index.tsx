@@ -29,6 +29,7 @@ import {
   agentIdFromReport,
   agentIdFromSdkReport,
   agentSdkCheckingReport,
+  computerCheckingReports,
   groupReportsFromReports,
   itemCheckSignature,
   localPluginReport,
@@ -108,6 +109,7 @@ export default function Onboarding() {
   const checkedPluginSignaturesRef = useRef<Set<string>>(new Set());
   const checkedAgentSdkSignaturesRef = useRef<Set<string>>(new Set());
   const checkedTunnelSignaturesRef = useRef<Set<string>>(new Set());
+  const checkedComputerSignaturesRef = useRef<Set<string>>(new Set());
   const refreshedPluginsAfterInstallRef = useRef(false);
   const [agentInstallReports, setAgentInstallReports] = useState<
     StartkitItemReport[]
@@ -119,6 +121,9 @@ export default function Onboarding() {
     [],
   );
   const [tunnelReports, setTunnelReports] = useState<StartkitItemReport[]>([]);
+  const [computerReports, setComputerReports] = useState<StartkitItemReport[]>(
+    [],
+  );
 
   useOnboardingInitialLoad({
     setSettings,
@@ -268,6 +273,49 @@ export default function Onboarding() {
     },
     [agentStatusChoices, downloadSource, toolchainMode],
   );
+
+  useEffect(() => {
+    if (!loaded || activeStep !== "install" || startkit.running) return;
+    const signature = itemCheckSignature(
+      "computer",
+      downloadSource,
+      toolchainMode,
+      String(choices.shellPath),
+      [...choices.agents].sort().join(","),
+      [...choices.channels].sort().join(","),
+      choices.tunnel,
+    );
+    if (checkedComputerSignaturesRef.current.has(signature)) return;
+    checkedComputerSignaturesRef.current.add(signature);
+
+    const checkingReports = computerCheckingReports(choices);
+    if (checkingReports.length === 0) return;
+
+    setComputerReports((previous) =>
+      mergeReportsById(previous, checkingReports),
+    );
+
+    void invoke<StartkitItemReport[]>("scan_computer_install_status", {
+      settings,
+      choices,
+    })
+      .then((reports) => {
+        setComputerReports((previous) =>
+          mergeReportsById(previous, reports),
+        );
+      })
+      .catch((error) => {
+        console.error("failed to scan computer install status", error);
+      });
+  }, [
+    activeStep,
+    choices,
+    downloadSource,
+    loaded,
+    settings,
+    startkit.running,
+    toolchainMode,
+  ]);
 
   useEffect(() => {
     if (!loaded || activeStep !== "install" || startkit.running) return;
@@ -602,7 +650,8 @@ export default function Onboarding() {
   const cachedInstallReports = useMemo(() => {
     const selectedAgents = new Set(choices.agents);
     const selectedChannels = new Set(choices.channels);
-    return [
+    return mergeReportsById([], [
+      ...computerReports,
       ...agentInstallReports.filter((report) => {
         const agentId = agentIdFromReport(report);
         return agentId ? selectedAgents.has(agentId) : false;
@@ -618,13 +667,14 @@ export default function Onboarding() {
       ...tunnelReports.filter((report) =>
         tunnelReportMatchesProvider(report, choices.tunnel),
       ),
-    ];
+    ]);
   }, [
     agentInstallReports,
     agentSdkReports,
     choices.agents,
     choices.channels,
     choices.tunnel,
+    computerReports,
     pluginUpdateReports,
     tunnelReports,
   ]);
@@ -706,7 +756,7 @@ export default function Onboarding() {
         label: t("Install selected"),
         icon: <Download className="h-4 w-4" />,
         disabled: installReportsRunning,
-        run: () => void startkit.start(finalSettings, choices),
+        run: () => void startkit.start(finalSettings, choices, installReports),
       };
     }
 
@@ -737,6 +787,7 @@ export default function Onboarding() {
     finishOnboarding,
     finishing,
     goNext,
+    installReports,
     installReportsRunning,
     enabledAgents,
     startkit,
