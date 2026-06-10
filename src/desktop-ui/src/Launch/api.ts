@@ -102,6 +102,25 @@ export function listAgents(): Promise<AgentSummary[]> {
   return invoke<AgentSummary[]>("list_agents");
 }
 
+export interface DesktopAppDetectionFile {
+  apps: Record<string, DesktopAppDetection>;
+}
+
+export interface DesktopAppDetection {
+  installed: boolean;
+  launchCommand: string;
+  entry?: {
+    appName: string;
+    path: string;
+    source: string;
+    sourceLabel: string;
+  } | null;
+}
+
+export function rescanDesktopAppEntries(): Promise<DesktopAppDetectionFile> {
+  return invoke<DesktopAppDetectionFile>("rescan_desktop_app_entries");
+}
+
 export interface TerminalOption {
   id: string;
   label: string;

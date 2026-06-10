@@ -40,6 +40,7 @@ import {
   removeLauncherWorkspace,
   reorderLauncherWorkspaces,
   reorderProfiles,
+  rescanDesktopAppEntries,
   setProfileConnection,
   setLauncherAgentProfile,
   setLauncherAgentLaunchArgs,
@@ -166,12 +167,21 @@ export function AgentLaunchBuilder({
   }, [prefs, workspaceOptions, agentId]);
 
   useEffect(() => {
-    void listAgents()
-      .then((items) => {
+    void Promise.all([
+      listAgents(),
+      rescanDesktopAppEntries().catch(() => ({ apps: {} })),
+    ])
+      .then(([items, desktopApps]) => {
         const rank = new Map(AGENT_ORDER.map((id, index) => [id, index]));
-        const visible = enabledAgents
-          ? items.filter((agent) => enabledAgents.has(agent.id) || agent.direct_only)
-          : items;
+        const installedDesktopAgents = new Set(
+          Object.entries(desktopApps.apps)
+            .filter(([, app]) => app.installed)
+            .map(([agentId]) => agentId),
+        );
+        const visible = items.filter((agent) => {
+          if (agent.direct_only) return installedDesktopAgents.has(agent.id);
+          return enabledAgents ? enabledAgents.has(agent.id) : true;
+        });
         const ordered = [...visible].sort(
           (a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999),
         );
