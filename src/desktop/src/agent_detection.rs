@@ -324,8 +324,7 @@ async fn output_lines(mut command: Command, max_duration: Duration) -> Vec<PathB
 }
 
 async fn command_version(path: &Path, version_arg: &str) -> Option<String> {
-    let mut command = Command::new(path);
-    command.arg(version_arg);
+    let mut command = command_for_version_check(path, version_arg);
     let output = tokio::time::timeout(Duration::from_secs(6), command.output())
         .await
         .ok()?
@@ -339,6 +338,31 @@ async fn command_version(path: &Path, version_arg: &str) -> Option<String> {
         .find(|line| !line.is_empty())?
         .to_string();
     Some(text)
+}
+
+fn command_for_version_check(path: &Path, version_arg: &str) -> Command {
+    if cfg!(windows) {
+        let ext = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase());
+        if matches!(ext.as_deref(), Some("cmd" | "bat")) {
+            let mut command = Command::new("cmd.exe");
+            command.arg("/C").arg(path).arg(version_arg);
+            return command;
+        }
+        if ext.as_deref() == Some("ps1") {
+            let mut command = Command::new("powershell.exe");
+            command
+                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+                .arg(path)
+                .arg(version_arg);
+            return command;
+        }
+    }
+    let mut command = Command::new(path);
+    command.arg(version_arg);
+    command
 }
 
 fn managed_paths(program: &str) -> Vec<PathBuf> {
