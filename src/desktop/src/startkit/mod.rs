@@ -417,6 +417,7 @@ pub fn plan(choices: &StartkitChoices, platform: Option<&str>) -> anyhow::Result
     plan_from_manifest(&manifest, choices, platform.unwrap_or(current_platform()))
 }
 
+#[allow(dead_code)]
 pub async fn scan(
     settings: &Value,
     choices: &StartkitChoices,
