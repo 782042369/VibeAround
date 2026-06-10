@@ -180,17 +180,14 @@ fn first_install_source(agent_id: &str, source_ids: &[&str]) -> Option<String> {
 pub fn source_package(agent_id: &str, source: &str) -> Option<String> {
     let catalog = source_catalog().ok()?;
     let spec = catalog.agents.get(agent_id)?;
-    spec.sources.get(source).and_then(|source_spec| {
-        source_spec.package.clone().or_else(|| {
-            if source == "npm_managed" || source == "npm_global" || source == "bun_global" {
-                spec.sources
-                    .values()
-                    .find_map(|source_spec| source_spec.package.clone())
-            } else {
-                None
-            }
+    spec.sources
+        .get(source)
+        .and_then(|source_spec| source_spec.package.clone())
+        .or_else(|| {
+            spec.sources
+                .values()
+                .find_map(|source_spec| source_spec.package.clone())
         })
-    })
 }
 
 pub async fn scan_and_persist() -> anyhow::Result<AgentDetectionFile> {
@@ -861,6 +858,18 @@ mod tests {
                 Some("/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js"),
             ),
             "npm global (Homebrew prefix)"
+        );
+    }
+
+    #[test]
+    fn native_sources_can_reuse_agent_package_for_latest_checks() {
+        assert_eq!(
+            source_package("claude", "native").as_deref(),
+            Some("@anthropic-ai/claude-code")
+        );
+        assert_eq!(
+            source_package("codex", "app_bundled").as_deref(),
+            Some("@openai/codex")
         );
     }
 

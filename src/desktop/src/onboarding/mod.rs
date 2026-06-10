@@ -418,7 +418,11 @@ async fn agent_update_report(
     choices: StartkitChoices,
 ) -> Option<StartkitItemReport> {
     let agent = common::resources::agent_by_id(&agent_id)?;
-    let candidate = agent_detection::selected_candidate_for(&agent_id)?;
+    let candidate = agent_detection::scan_agent_and_persist(&agent_id)
+        .await
+        .ok()
+        .and_then(|detection| detection.selected)
+        .or_else(|| agent_detection::selected_candidate_for(&agent_id))?;
     let source = candidate.source.clone();
     let local_version = candidate.version.as_deref().and_then(extract_semver);
     let mut report = StartkitItemReport {
