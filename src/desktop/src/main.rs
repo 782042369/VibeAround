@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_detection;
+mod desktop_detection;
 mod onboarding;
 mod profiles;
 mod startkit;
@@ -124,6 +125,14 @@ async fn rescan_agent_entries() -> Result<agent_detection::AgentDetectionFile, S
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn rescan_desktop_app_entries() -> Result<desktop_detection::DesktopAppDetectionFile, String>
+{
+    desktop_detection::scan_and_persist()
+        .await
+        .map_err(|error| error.to_string())
+}
+
 /// Open an HTTP URL in the user's default external browser.
 ///
 /// We can't use `window.open` from the desktop-ui because it creates a
@@ -201,6 +210,7 @@ fn main() {
             get_auth_token,
             get_app_info,
             rescan_agent_entries,
+            rescan_desktop_app_entries,
             open_external_url,
             restart_services,
             set_ui_locale,
@@ -300,6 +310,18 @@ fn main() {
                         Err(error) => tracing::warn!(
                             error = %error,
                             "[VibeAround] agent auto-detect failed"
+                        ),
+                    }
+                });
+                tauri::async_runtime::spawn(async {
+                    match desktop_detection::scan_and_persist().await {
+                        Ok(detected) => tracing::info!(
+                            apps = detected.apps.len(),
+                            "[VibeAround] desktop app auto-detect completed"
+                        ),
+                        Err(error) => tracing::warn!(
+                            error = %error,
+                            "[VibeAround] desktop app auto-detect failed"
                         ),
                     }
                 });
