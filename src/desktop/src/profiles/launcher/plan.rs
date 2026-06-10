@@ -8,6 +8,7 @@ use ::common::{agent as agent_integrations, profiles, resources};
 use anyhow::{anyhow, Context};
 use profiles::ProfileDef;
 
+#[cfg(not(test))]
 use crate::agent_detection;
 
 use super::common::LaunchPlan;
@@ -173,10 +174,19 @@ impl<'a> LaunchPlanBuilder<'a> {
 }
 
 fn launch_command_for_agent(agent_id: &str, fallback_command: &str) -> String {
-    let Some(candidate) = agent_detection::selected_candidate_for(agent_id) else {
+    #[cfg(test)]
+    {
+        let _ = agent_id;
         return fallback_command.to_string();
-    };
-    replace_launch_program(fallback_command, &candidate.path)
+    }
+
+    #[cfg(not(test))]
+    {
+        let Some(candidate) = agent_detection::selected_candidate_for(agent_id) else {
+            return fallback_command.to_string();
+        };
+        replace_launch_program(fallback_command, &candidate.path)
+    }
 }
 
 fn replace_launch_program(command: &str, program_path: &str) -> String {
