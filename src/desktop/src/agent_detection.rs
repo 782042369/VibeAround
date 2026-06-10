@@ -218,6 +218,12 @@ async fn scan_agent(agent_id: &str, spec: &AgentCommandSpec) -> AgentDetection {
         }
     }
 
+    for path in system_candidate_paths(&spec.program) {
+        if seen.insert(normalize_path_key(&path)) {
+            paths.push((path, false));
+        }
+    }
+
     for path in managed_paths(&spec.program) {
         if seen.insert(normalize_path_key(&path)) {
             paths.push((path, false));
@@ -239,11 +245,12 @@ async fn scan_agent(agent_id: &str, spec: &AgentCommandSpec) -> AgentDetection {
         let package = package_for_source(spec, &source);
         let version = command_version(&path, &spec.version_arg).await;
         let rank = candidate_rank(index, from_user_shell, &source);
+        let source_label = source_label_for_candidate(spec, &source, &path, realpath.as_deref());
         candidates.push(AgentCandidate {
             path: path.to_string_lossy().to_string(),
             realpath,
             version,
-            source_label: source_label(spec, &source),
+            source_label,
             source,
             rank,
             is_user_default: from_user_shell && index == 0,
@@ -278,7 +285,13 @@ async fn user_shell_paths(program: &str) -> Vec<PathBuf> {
 }
 
 async fn unix_shell_paths(program: &str) -> Vec<PathBuf> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+        if cfg!(target_os = "macos") && Path::new("/bin/zsh").exists() {
+            "/bin/zsh".to_string()
+        } else {
+            "/bin/sh".to_string()
+        }
+    });
     let escaped_program = shell_escape::unix::escape(std::borrow::Cow::Borrowed(program));
     let script = format!(
         r#"name={};
@@ -303,6 +316,79 @@ async fn windows_where_paths(program: &str) -> Vec<PathBuf> {
     let mut command = Command::new("where.exe");
     command.arg(program);
     output_lines(command, Duration::from_secs(6)).await
+}
+
+fn system_candidate_paths(program: &str) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if cfg!(windows) {
+        let home = common::config::home_dir();
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            paths.extend(program_candidates_in_dir(
+                Path::new(&appdata).join("npm"),
+                program,
+            ));
+        }
+        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+            paths.extend(program_candidates_in_dir(
+                Path::new(&localappdata)
+                    .join("Programs")
+                    .join("Git")
+                    .join("cmd"),
+                program,
+            ));
+        }
+        paths.extend(program_candidates_in_dir(
+            home.join(".bun").join("bin"),
+            program,
+        ));
+        paths.extend(program_candidates_in_dir(
+            home.join(".local").join("bin"),
+            program,
+        ));
+        return paths;
+    }
+
+    let home = common::config::home_dir();
+    for dir in [
+        home.join(".bun").join("bin"),
+        home.join(".local").join("bin"),
+        home.join(".npm-global").join("bin"),
+        home.join(".yarn").join("bin"),
+        home.join("Library").join("pnpm"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/homebrew/sbin"),
+        PathBuf::from("/usr/bin"),
+    ] {
+        paths.extend(program_candidates_in_dir(dir, program));
+    }
+    paths
+}
+
+fn program_candidates_in_dir(dir: PathBuf, program: &str) -> Vec<PathBuf> {
+    if cfg!(windows) {
+        let candidates = if Path::new(program).extension().is_some() {
+            vec![dir.join(program)]
+        } else {
+            vec![
+                dir.join(program),
+                dir.join(format!("{program}.exe")),
+                dir.join(format!("{program}.cmd")),
+                dir.join(format!("{program}.bat")),
+                dir.join(format!("{program}.ps1")),
+            ]
+        };
+        return candidates
+            .into_iter()
+            .filter(|path| path.exists())
+            .collect();
+    }
+    let path = dir.join(program);
+    if path.exists() {
+        vec![path]
+    } else {
+        Vec::new()
+    }
 }
 
 async fn output_lines(mut command: Command, max_duration: Duration) -> Vec<PathBuf> {
@@ -468,6 +554,27 @@ fn source_label(spec: &AgentCommandSpec, source: &str) -> String {
         })
 }
 
+fn source_label_for_candidate(
+    spec: &AgentCommandSpec,
+    source: &str,
+    path: &Path,
+    realpath: Option<&str>,
+) -> String {
+    if source == "npm_global" && is_homebrew_prefix_path(path, realpath) {
+        return "npm global (Homebrew prefix)".to_string();
+    }
+    source_label(spec, source)
+}
+
+fn is_homebrew_prefix_path(path: &Path, realpath: Option<&str>) -> bool {
+    let path = path.to_string_lossy();
+    let real = realpath.unwrap_or(path.as_ref());
+    path.starts_with("/opt/homebrew/")
+        || real.starts_with("/opt/homebrew/")
+        || path.starts_with("/usr/local/")
+        || real.starts_with("/usr/local/")
+}
+
 fn candidate_rank(index: usize, from_user_shell: bool, source: &str) -> u32 {
     if from_user_shell {
         return index as u32;
@@ -540,6 +647,21 @@ mod tests {
                 Some("/opt/homebrew/Cellar/opencode/1.17.0/bin/opencode"),
             ),
             "homebrew_formula"
+        );
+    }
+
+    #[test]
+    fn labels_homebrew_prefix_npm_globals_without_treating_them_as_brew_packages() {
+        let catalog = source_catalog().expect("catalog parses");
+        let spec = catalog.agents.get("codex").expect("codex source");
+        assert_eq!(
+            source_label_for_candidate(
+                spec,
+                "npm_global",
+                Path::new("/opt/homebrew/bin/codex"),
+                Some("/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js"),
+            ),
+            "npm global (Homebrew prefix)"
         );
     }
 
