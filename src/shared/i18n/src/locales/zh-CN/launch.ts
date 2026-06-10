@@ -46,6 +46,8 @@ export const zhCNLaunch: Record<string, string> = {
   "Native CLI login": "CLI 原生登录",
   "Open desktop app": "打开桌面应用",
   "Desktop app": "桌面应用",
+  "Workspace and sessions are selected inside the desktop app.":
+    "工作区和会话在桌面应用里选择。",
   Direct: "直接",
   "API bridge on": "API 转接开启",
   "API bridge": "API 转接",

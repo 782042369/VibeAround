@@ -816,43 +816,50 @@ export function AgentLaunchBuilder({
                       ) : undefined
                     }
                   >
-                    <SelectorPopup
-                      id="profile"
-                      openSelector={openSelector}
-                      onOpenChange={setOpenSelector}
-                      widthClassName="w-max min-w-[340px] max-w-[min(680px,calc(100vw-1rem))]"
-                      widthPx={680}
-                      trigger={
-                        <button
-                          type="button"
-                          className={`mt-0.5 flex max-w-[520px] min-w-0 cursor-pointer items-center gap-1 rounded-sm text-left text-[12px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                            openSelector === "profile"
-                              ? "text-primary"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                          onClick={() =>
-                            setOpenSelector(
-                              openSelector === "profile" ? null : "profile",
-                            )
-                          }
-                        >
-                          <span className="min-w-0 truncate font-semibold text-foreground">
-                            {selectedProfileSummary.title}
-                          </span>
-                          <span className="min-w-0 truncate text-muted-foreground">
-                            <span className="px-0.5">·</span>
-                            {selectedProfileSummary.route}
-                          </span>
-                        </button>
-                      }
-                    >
-                      <ProfileInfoPanel
-                        agentId={agentId}
-                        prefs={viewPrefs}
-                        profile={selectedProfile}
-                        summary={selectedProfileSummary}
-                      />
-                    </SelectorPopup>
+                    <>
+                      <SelectorPopup
+                        id="profile"
+                        openSelector={openSelector}
+                        onOpenChange={setOpenSelector}
+                        widthClassName="w-max min-w-[340px] max-w-[min(680px,calc(100vw-1rem))]"
+                        widthPx={680}
+                        trigger={
+                          <button
+                            type="button"
+                            className={`mt-0.5 flex max-w-[520px] min-w-0 cursor-pointer items-center gap-1 rounded-sm text-left text-[12px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                              openSelector === "profile"
+                                ? "text-primary"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                            onClick={() =>
+                              setOpenSelector(
+                                openSelector === "profile" ? null : "profile",
+                              )
+                            }
+                          >
+                            <span className="min-w-0 truncate font-semibold text-foreground">
+                              {selectedProfileSummary.title}
+                            </span>
+                            <span className="min-w-0 truncate text-muted-foreground">
+                              <span className="px-0.5">·</span>
+                              {selectedProfileSummary.route}
+                            </span>
+                          </button>
+                        }
+                      >
+                        <ProfileInfoPanel
+                          agentId={agentId}
+                          prefs={viewPrefs}
+                          profile={selectedProfile}
+                          summary={selectedProfileSummary}
+                        />
+                      </SelectorPopup>
+                      {selectedAgentIsDirectOnly && (
+                        <p className="mt-1 max-w-[520px] text-[11px] leading-4 text-muted-foreground">
+                          {t("Workspace and sessions are selected inside the desktop app.")}
+                        </p>
+                      )}
+                    </>
                   </AgentSummaryHeader>
                   {showLaunchControls && (
                     <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
