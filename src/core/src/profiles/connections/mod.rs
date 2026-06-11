@@ -420,9 +420,10 @@ fn recommended_bridge_target(
     client_api_type: &str,
 ) -> Option<String> {
     let order: &[&str] = match (agent_id, client_api_type) {
-        ("claude", "anthropic") | ("opencode", "anthropic") | ("pi", "anthropic") => {
-            &["openai-responses", "gemini", "openai-chat", "anthropic"]
-        }
+        ("claude", "anthropic")
+        | ("claude-desktop", "anthropic")
+        | ("opencode", "anthropic")
+        | ("pi", "anthropic") => &["openai-responses", "gemini", "openai-chat", "anthropic"],
         ("codex", "openai-responses")
         | ("codex-desktop", "openai-responses")
         | ("opencode", "openai-responses")
@@ -470,7 +471,7 @@ fn prune_bridge_headers(headers: BTreeMap<String, String>) -> BTreeMap<String, S
 
 fn agent_client_api_types(agent_id: &str) -> &'static [&'static str] {
     match agent_id {
-        "claude" => &["anthropic"],
+        "claude" | "claude-desktop" => &["anthropic"],
         "codex" | "codex-desktop" => &["openai-responses"],
         "gemini" => &["gemini"],
         "opencode" => &["openai-responses", "openai-chat", "anthropic"],
@@ -490,6 +491,7 @@ fn recommended_client_api_type(profile: &ProfileDef, agent_id: &str) -> Option<&
 fn launch_target_defs() -> &'static [(&'static str, &'static str)] {
     &[
         ("claude", "Claude Code"),
+        ("claude-desktop", "Claude Desktop"),
         ("codex", "Codex"),
         ("codex-desktop", "Codex Desktop"),
         ("gemini", "Gemini CLI"),
@@ -500,6 +502,7 @@ fn launch_target_defs() -> &'static [(&'static str, &'static str)] {
 
 fn connection_agent_id(agent_id: &str) -> &str {
     match agent_id {
+        "claude-desktop" => "claude",
         "codex-desktop" => "codex",
         other => other,
     }

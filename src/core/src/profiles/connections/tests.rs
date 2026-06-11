@@ -234,6 +234,44 @@ fn codex_desktop_reuses_codex_bridge_connection() {
 }
 
 #[test]
+fn claude_desktop_reuses_claude_bridge_connection() {
+    let profile = profile(&["openai-responses"]);
+    let prefs = connections(
+        &profile.id,
+        "claude",
+        agent_state::ProfileConnectionPreference {
+            selected_api_type: Some("anthropic".to_string()),
+            bridge: [(
+                "anthropic".to_string(),
+                agent_state::ProfileBridgePreference {
+                    enabled: true,
+                    target_api_type: Some("openai-responses".to_string()),
+                    upstream_model: Some("gpt-5.1-codex".to_string()),
+                    ..Default::default()
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+    );
+
+    let route = resolve_profile_agent_route_with_connections(&profile, "claude-desktop", &prefs)
+        .expect("claude desktop bridge route");
+    let targets = launch_targets_for_profile_with_connections(&profile, &prefs);
+
+    assert_eq!(route.client_api_type, "anthropic");
+    assert_eq!(
+        route.bridge_target_api_type.as_deref(),
+        Some("openai-responses")
+    );
+    assert!(targets.iter().any(|target| {
+        target.id == "claude-desktop"
+            && target.api_type == "anthropic"
+            && target.bridge_target_api_type.as_deref() == Some("openai-responses")
+    }));
+}
+
+#[test]
 fn bridge_recommendation_can_target_gemini() {
     let profile = profile(&["gemini", "openai-chat"]);
     let prefs = connections(

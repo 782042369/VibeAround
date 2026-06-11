@@ -17,6 +17,7 @@ import type { ConnectionAgentId, ProfileSummary } from "./types";
 
 const PROXY_AGENTS = new Set<string>([
   "claude",
+  "claude-desktop",
   "codex",
   "codex-desktop",
   "gemini",
@@ -281,6 +282,7 @@ export function isBridgeAgent(agentId: string): boolean {
 }
 
 export function connectionAgentId(agentId: string): ConnectionAgentId | null {
+  if (agentId === "claude-desktop") return "claude";
   if (agentId === "codex-desktop") return "codex";
   return PROXY_AGENTS.has(agentId) ? (agentId as ConnectionAgentId) : null;
 }

@@ -158,6 +158,21 @@ impl<'a> LaunchPlanBuilder<'a> {
                 windows_process_probe: windows_process_probe_for_direct_agent(&agent),
             });
         }
+        if agent_id == "claude-desktop" {
+            let env = materialized_profile_env(profile, launch_target, &self.launch_id, rendered)?;
+            return Ok(LaunchPlan {
+                env,
+                command: launch_command_for_agent(
+                    agent_id,
+                    agent.pty_command_for_current_platform(),
+                ),
+                args: Vec::new(),
+                window_label: profile.label.clone(),
+                workspace,
+                macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+                windows_process_probe: windows_process_probe_for_direct_agent(&agent),
+            });
+        }
         agent_integrations::auto_install_project_integrations(agent_id, &workspace)
             .with_context(|| format!("install project integrations for {}", agent_id))?;
         let mut command_args = rendered.command_args.clone();
@@ -585,6 +600,35 @@ mod tests {
         assert!(plan
             .env
             .contains(&("VIBEAROUND_LAUNCH_TARGET".to_string(), "claude".to_string())));
+    }
+
+    #[test]
+    fn claude_desktop_profile_plan_uses_env_without_terminal_args() {
+        let profile = minimax_anthropic_profile();
+        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
+            .profile(&profile, "claude-desktop")
+            .build()
+            .expect("claude desktop profile plan");
+
+        assert_eq!(plan.command, "open -a Claude");
+        assert!(plan.args.is_empty());
+        assert_eq!(plan.window_label, "MiniMax Test");
+        assert!(plan
+            .env
+            .contains(&("ANTHROPIC_API_KEY".to_string(), "test-key".to_string())));
+        assert!(plan
+            .env
+            .contains(&("ANTHROPIC_MODEL".to_string(), "MiniMax-M2.7".to_string())));
+        assert!(plan.env.contains(&(
+            "VIBEAROUND_LAUNCH_TARGET".to_string(),
+            "claude-desktop".to_string()
+        )));
+        if cfg!(target_os = "macos") {
+            assert_eq!(plan.macos_app_probe.as_deref(), Some("Claude"));
+        }
+        if cfg!(target_os = "windows") {
+            assert_eq!(plan.windows_process_probe.as_deref(), Some("Claude"));
+        }
     }
 
     #[test]
