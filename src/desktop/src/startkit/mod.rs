@@ -328,7 +328,7 @@ impl StartkitPaths {
             root,
             bin_dir: home.join("bin"),
             node_dir: runtime_dir.join("node"),
-            npm_prefix: home.join("npm-global"),
+            npm_prefix: home.join("npm"),
             cache_dir: home.join("cache").join("startkit"),
             runtime_dir,
             home,
@@ -1472,6 +1472,8 @@ pub fn managed_path_entries() -> Vec<PathBuf> {
     entries.push(home.join("bin"));
     entries.push(home.join("runtime").join("node").join("bin"));
     entries.push(home.join("runtime").join("node"));
+    entries.push(home.join("npm").join("bin"));
+    entries.push(home.join("npm"));
     entries.push(home.join("npm-global").join("bin"));
     entries.push(home.join("npm-global"));
     entries

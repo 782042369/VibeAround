@@ -628,6 +628,11 @@ fn managed_paths(program: &str) -> Vec<PathBuf> {
     let data_dir = common::config::data_dir();
     if cfg!(windows) {
         vec![
+            data_dir.join("npm").join(format!("{program}.cmd")),
+            data_dir
+                .join("npm")
+                .join("bin")
+                .join(format!("{program}.cmd")),
             data_dir.join("npm-global").join(format!("{program}.cmd")),
             data_dir
                 .join("npm-global")
@@ -641,6 +646,8 @@ fn managed_paths(program: &str) -> Vec<PathBuf> {
         .collect()
     } else {
         vec![
+            data_dir.join("npm").join("bin").join(program),
+            data_dir.join("npm").join(program),
             data_dir.join("npm-global").join("bin").join(program),
             data_dir.join("npm-global").join(program),
             data_dir.join("bin").join(program),

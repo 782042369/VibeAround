@@ -302,6 +302,8 @@ fn prepend_vibearound_managed_paths(env: &mut HashMap<String, String>) {
         home.join("bin"),
         home.join("runtime").join("node").join("bin"),
         home.join("runtime").join("node"),
+        home.join("npm").join("bin"),
+        home.join("npm"),
         home.join("npm-global").join("bin"),
         home.join("npm-global"),
     ];
