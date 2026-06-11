@@ -7,6 +7,7 @@ export interface AgentSummary {
   display_name: string;
   description: string;
   install_type?: "npm" | "script" | "path";
+  direct_only?: boolean;
 }
 
 export interface TunnelSummary {
@@ -50,7 +51,7 @@ export interface Settings {
   };
   startkit?: {
     source?: string;
-    toolchain_mode?: "auto" | "managed" | "system" | string;
+    toolchain_mode?: "managed" | "system" | string;
     shell_path?: boolean;
   };
   tunnel?: {
@@ -180,7 +181,7 @@ export interface StartkitChoices {
   tunnel: string;
   channels: string[];
   source: string;
-  toolchainMode: "auto" | "managed" | "system" | string;
+  toolchainMode: "managed" | "system" | string;
   shellPath: boolean;
 }
 
@@ -229,6 +230,7 @@ export interface StartkitItemReport {
   status: StartkitStatus;
   severity?: string;
   version?: string;
+  latestVersion?: string;
   path?: string;
   message?: string;
   actions: string[];

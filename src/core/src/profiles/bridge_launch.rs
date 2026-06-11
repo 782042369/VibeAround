@@ -27,10 +27,17 @@ pub(super) fn render_bridge_launch(
         fake_model_id,
         bridge_models,
     )?;
-    settings.scope = format!("{launch_target}-{client_api_type}");
+    let scope_agent_id = if launch_target == "claude-desktop" {
+        "claude"
+    } else {
+        launch_target
+    };
+    settings.scope = format!("{scope_agent_id}-{client_api_type}");
     match launch_target {
-        "claude" => Ok(render_claude_bridge_profile(profile, launch_id, settings)),
-        "codex" => Ok(render_codex_bridge_profile(profile, launch_id, settings)),
+        "claude" | "claude-desktop" => {
+            Ok(render_claude_bridge_profile(profile, launch_id, settings))
+        }
+        "codex" | "codex-desktop" => Ok(render_codex_bridge_profile(profile, launch_id, settings)),
         "gemini" => Ok(render_gemini_bridge_profile(profile, settings)),
         "opencode" => Ok(render_opencode_bridge_profile(
             profile,
@@ -887,6 +894,31 @@ mod tests {
             assert!(rendered.command_args.is_empty());
             assert!(rendered.config_env.is_none());
         }
+    }
+
+    #[test]
+    fn claude_desktop_bridge_launch_reuses_claude_scope() {
+        let profile = dashscope_profile();
+        let rendered = render_bridge_launch(
+            &profile,
+            "claude-desktop",
+            "launch-test",
+            "anthropic",
+            "openai-chat",
+            None,
+            Some("claude-opus-4-7[1m]"),
+            &[],
+        )
+        .expect("claude desktop bridge launch renders");
+
+        assert_eq!(
+            rendered
+                .env
+                .iter()
+                .find(|(key, _)| key == "ANTHROPIC_BASE_URL")
+                .map(|(_, value)| value.as_str()),
+            Some("http://127.0.0.1:12358/va/local-api/dashscope-test/claude-anthropic/openai-chat")
+        );
     }
 
     fn dashscope_profile() -> ProfileDef {

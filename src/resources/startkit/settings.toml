@@ -65,7 +65,7 @@ id = "agents.codex.cli"
 label = "Codex CLI"
 group = "agents"
 category = "agents"
-description = "OpenAI Codex CLI installed in the VibeAround-managed npm prefix."
+description = "OpenAI Codex CLI installed in VibeAround-managed npm."
 platforms = ["macos", "windows"]
 include_if = ["agent:codex"]
 depends_on = ["essentials.node"]
@@ -88,7 +88,7 @@ id = "agents.claude.cli"
 label = "Claude Code"
 group = "agents"
 category = "agents"
-description = "Anthropic Claude Code installed in the VibeAround-managed npm prefix."
+description = "Anthropic Claude Code installed in VibeAround-managed npm."
 platforms = ["macos", "windows"]
 include_if = ["agent:claude"]
 depends_on = ["essentials.node"]
@@ -105,6 +105,102 @@ windows = "scripts/windows/detect-program.ps1"
 [items.install]
 macos = "scripts/macos/install-npm-package.sh"
 windows = "scripts/windows/install-npm-package.ps1"
+
+[[items]]
+id = "agents.pi.cli"
+label = "Pi"
+group = "agents"
+category = "agents"
+description = "Pi Coding Agent available on PATH."
+platforms = ["macos", "windows"]
+include_if = ["agent:pi"]
+severity = "warning"
+program = "pi"
+version_arg = "--version"
+
+[items.detect]
+macos = "scripts/macos/detect-program.sh"
+windows = "scripts/windows/detect-program.ps1"
+
+[[items]]
+id = "agents.gemini.cli"
+label = "Gemini CLI"
+group = "agents"
+category = "agents"
+description = "Google Gemini CLI available on PATH."
+platforms = ["macos", "windows"]
+include_if = ["agent:gemini"]
+severity = "warning"
+program = "gemini"
+version_arg = "--version"
+
+[items.detect]
+macos = "scripts/macos/detect-program.sh"
+windows = "scripts/windows/detect-program.ps1"
+
+[[items]]
+id = "agents.opencode.cli"
+label = "Opencode"
+group = "agents"
+category = "agents"
+description = "OpenCode AI agent available on PATH."
+platforms = ["macos", "windows"]
+include_if = ["agent:opencode"]
+severity = "warning"
+program = "opencode"
+version_arg = "--version"
+
+[items.detect]
+macos = "scripts/macos/detect-program.sh"
+windows = "scripts/windows/detect-program.ps1"
+
+[[items]]
+id = "agents.cursor.cli"
+label = "Cursor CLI"
+group = "agents"
+category = "agents"
+description = "Cursor agent CLI available on PATH."
+platforms = ["macos", "windows"]
+include_if = ["agent:cursor"]
+severity = "warning"
+program = "cursor-agent"
+version_arg = "--version"
+
+[items.detect]
+macos = "scripts/macos/detect-program.sh"
+windows = "scripts/windows/detect-program.ps1"
+
+[[items]]
+id = "agents.kiro.cli"
+label = "Kiro CLI"
+group = "agents"
+category = "agents"
+description = "Amazon Kiro CLI available on PATH."
+platforms = ["macos", "windows"]
+include_if = ["agent:kiro"]
+severity = "warning"
+program = "kiro-cli"
+version_arg = "--version"
+
+[items.detect]
+macos = "scripts/macos/detect-program.sh"
+windows = "scripts/windows/detect-program.ps1"
+
+[[items]]
+id = "agents.qwen-code.cli"
+label = "Qwen Code"
+group = "agents"
+category = "agents"
+description = "Qwen Code CLI available on PATH."
+platforms = ["macos", "windows"]
+include_if = ["agent:qwen-code"]
+severity = "warning"
+program = "qwen"
+version_arg = "--version"
+
+[items.detect]
+macos = "scripts/macos/detect-program.sh"
+windows = "scripts/windows/detect-program.ps1"
 
 [[items]]
 id = "tunnels.cloudflare.binary"

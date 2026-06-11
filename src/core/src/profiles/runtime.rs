@@ -169,9 +169,11 @@ pub fn launch_targets_for_api_types(
     let mut out = Vec::new();
     if has("anthropic") {
         out.push(("claude", "Claude Code", "anthropic"));
+        out.push(("claude-desktop", "Claude Desktop", "anthropic"));
     }
     if has("openai-responses") {
         out.push(("codex", "Codex", "openai-responses"));
+        out.push(("codex-desktop", "Codex Desktop", "openai-responses"));
     }
     if has("gemini") {
         out.push(("gemini", "Gemini CLI", "gemini"));
@@ -192,7 +194,9 @@ pub fn launch_targets_for_api_types(
 pub fn agent_id_for(launch_target: &str) -> anyhow::Result<&'static str> {
     match launch_target {
         "claude" => Ok("claude"),
+        "claude-desktop" => Ok("claude-desktop"),
         "codex" => Ok("codex"),
+        "codex-desktop" => Ok("codex-desktop"),
         "gemini" => Ok("gemini"),
         "opencode" => Ok("opencode"),
         "pi" => Ok("pi"),
@@ -225,8 +229,8 @@ pub fn api_type_for_launch_target<'a>(
 
 fn api_types_for_launch_target(launch_target: &str) -> &'static [&'static str] {
     match launch_target {
-        "claude" => &["anthropic"],
-        "codex" => &["openai-responses"],
+        "claude" | "claude-desktop" => &["anthropic"],
+        "codex" | "codex-desktop" => &["openai-responses"],
         "gemini" => &["gemini"],
         "opencode" => &["openai-responses", "openai-chat", "anthropic"],
         "pi" => &["anthropic", "openai-responses", "openai-chat"],
