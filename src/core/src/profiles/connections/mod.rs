@@ -14,6 +14,8 @@ mod legacy;
 
 use super::{catalog, schema::ProfileDef};
 
+pub const DEFAULT_CLAUDE_BRIDGE_MODEL_ID: &str = "claude-sonnet-4-5";
+
 #[derive(Debug, Clone)]
 pub struct ProfileAgentRoute {
     pub client_api_type: String,
@@ -152,10 +154,11 @@ pub fn resolve_profile_agent_route_with_connections(
     if supported.is_empty() {
         return None;
     }
+    let connection_agent_id = connection_agent_id(agent_id);
 
     let preference = connections
         .get(&profile.id)
-        .and_then(|items| items.get(agent_id));
+        .and_then(|items| items.get(connection_agent_id));
     let preferred_client_api_type = preference
         .and_then(|preference| preference.selected_api_type.as_deref())
         .filter(|api_type| supported.contains(api_type))
@@ -244,6 +247,31 @@ pub fn bridge_model_routes(
         }));
     }
     dedupe_model_routes(routes)
+}
+
+pub fn is_claude_usable_model_id(model_id: &str) -> bool {
+    let model_id = catalog::strip_bracket_suffix(model_id).unwrap_or(model_id);
+    let model_id = model_id.trim().to_ascii_lowercase();
+    if model_id.is_empty() {
+        return false;
+    }
+    let excluded = [
+        "deepseek", "gemini", "glm", "gpt", "grok", "kimi", "llama", "mimo", "minimax", "moonshot",
+        "nemotron", "nvidia", "openai", "qwen",
+    ];
+    if excluded.iter().any(|needle| model_id.contains(needle)) {
+        return false;
+    }
+    model_id.contains("claude")
+        || model_id.contains("anthropic")
+        || ["sonnet", "opus", "haiku", "fable", "mythos"]
+            .iter()
+            .any(|prefix| {
+                model_id == *prefix
+                    || model_id
+                        .strip_prefix(prefix)
+                        .is_some_and(|rest| rest.starts_with('-'))
+            })
 }
 
 fn sanitize_bridge_models(
@@ -419,10 +447,12 @@ fn recommended_bridge_target(
     client_api_type: &str,
 ) -> Option<String> {
     let order: &[&str] = match (agent_id, client_api_type) {
-        ("claude", "anthropic") | ("opencode", "anthropic") | ("pi", "anthropic") => {
-            &["openai-responses", "gemini", "openai-chat", "anthropic"]
-        }
+        ("claude", "anthropic")
+        | ("claude-desktop", "anthropic")
+        | ("opencode", "anthropic")
+        | ("pi", "anthropic") => &["openai-responses", "gemini", "openai-chat", "anthropic"],
         ("codex", "openai-responses")
+        | ("codex-desktop", "openai-responses")
         | ("opencode", "openai-responses")
         | ("opencode", "openai-chat")
         | ("pi", "openai-responses")
@@ -468,8 +498,8 @@ fn prune_bridge_headers(headers: BTreeMap<String, String>) -> BTreeMap<String, S
 
 fn agent_client_api_types(agent_id: &str) -> &'static [&'static str] {
     match agent_id {
-        "claude" => &["anthropic"],
-        "codex" => &["openai-responses"],
+        "claude" | "claude-desktop" => &["anthropic"],
+        "codex" | "codex-desktop" => &["openai-responses"],
         "gemini" => &["gemini"],
         "opencode" => &["openai-responses", "openai-chat", "anthropic"],
         "pi" => &["anthropic", "openai-responses", "openai-chat"],
@@ -488,11 +518,21 @@ fn recommended_client_api_type(profile: &ProfileDef, agent_id: &str) -> Option<&
 fn launch_target_defs() -> &'static [(&'static str, &'static str)] {
     &[
         ("claude", "Claude Code"),
+        ("claude-desktop", "Claude Desktop"),
         ("codex", "Codex"),
+        ("codex-desktop", "Codex Desktop"),
         ("gemini", "Gemini CLI"),
         ("pi", "Pi"),
         ("opencode", "OpenCode"),
     ]
+}
+
+fn connection_agent_id(agent_id: &str) -> &str {
+    match agent_id {
+        "claude-desktop" => "claude",
+        "codex-desktop" => "codex",
+        other => other,
+    }
 }
 
 #[cfg(test)]

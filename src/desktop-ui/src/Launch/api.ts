@@ -102,6 +102,10 @@ export function listAgents(): Promise<AgentSummary[]> {
   return invoke<AgentSummary[]>("list_agents");
 }
 
+export function rescanAgentEntries(): Promise<unknown> {
+  return invoke("rescan_agent_entries");
+}
+
 export interface DesktopAppDetectionFile {
   apps: Record<string, DesktopAppDetection>;
 }
@@ -119,6 +123,10 @@ export interface DesktopAppDetection {
 
 export function rescanDesktopAppEntries(): Promise<DesktopAppDetectionFile> {
   return invoke<DesktopAppDetectionFile>("rescan_desktop_app_entries");
+}
+
+export function getDesktopAppEntries(): Promise<DesktopAppDetectionFile | null> {
+  return invoke<DesktopAppDetectionFile | null>("get_desktop_app_entries");
 }
 
 export interface TerminalOption {

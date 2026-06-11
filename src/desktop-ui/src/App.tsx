@@ -24,7 +24,12 @@ import { Previews } from "./Previews";
 import { Launch } from "./Launch";
 import { StatusDashboard } from "./StatusDashboard";
 import { SettingsDialog } from "./Settings";
-import { getLauncherPreferences, type LauncherPreferences } from "./Launch/api";
+import {
+  getLauncherPreferences,
+  rescanAgentEntries,
+  rescanDesktopAppEntries,
+  type LauncherPreferences,
+} from "./Launch/api";
 import { LanguageMenu } from "./components/LanguageMenu";
 import { cn } from "./lib/utils";
 import { UpdateIndicator } from "./UpdateIndicator";
@@ -35,12 +40,29 @@ import { UpdateIndicator } from "./UpdateIndicator";
 
 function App() {
   const [route, setRoute] = useState(() => window.location.pathname);
+  const [startupScanDone, setStartupScanDone] = useState(false);
 
   useEffect(() => {
     const onPop = () => setRoute(window.location.pathname);
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.allSettled([rescanAgentEntries(), rescanDesktopAppEntries()]).then(
+      () => {
+        if (!cancelled) setStartupScanDone(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!startupScanDone) {
+    return <Splash visible />;
+  }
 
   if (route === "/onboarding") {
     return <Onboarding />;

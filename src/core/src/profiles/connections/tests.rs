@@ -199,6 +199,79 @@ fn codex_can_launch_gemini_profile_via_bridge() {
 }
 
 #[test]
+fn codex_desktop_reuses_codex_bridge_connection() {
+    let profile = profile(&["gemini"]);
+    let prefs = connections(
+        &profile.id,
+        "codex",
+        agent_state::ProfileConnectionPreference {
+            selected_api_type: Some("openai-responses".to_string()),
+            bridge: [(
+                "openai-responses".to_string(),
+                agent_state::ProfileBridgePreference {
+                    enabled: true,
+                    target_api_type: Some("gemini".to_string()),
+                    upstream_model: Some("gemini-2.5-flash".to_string()),
+                    ..Default::default()
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+    );
+
+    let route = resolve_profile_agent_route_with_connections(&profile, "codex-desktop", &prefs)
+        .expect("codex desktop bridge route");
+    let targets = launch_targets_for_profile_with_connections(&profile, &prefs);
+
+    assert_eq!(route.client_api_type, "openai-responses");
+    assert_eq!(route.bridge_target_api_type.as_deref(), Some("gemini"));
+    assert!(targets.iter().any(|target| {
+        target.id == "codex-desktop"
+            && target.api_type == "openai-responses"
+            && target.bridge_target_api_type.as_deref() == Some("gemini")
+    }));
+}
+
+#[test]
+fn claude_desktop_reuses_claude_bridge_connection() {
+    let profile = profile(&["openai-responses"]);
+    let prefs = connections(
+        &profile.id,
+        "claude",
+        agent_state::ProfileConnectionPreference {
+            selected_api_type: Some("anthropic".to_string()),
+            bridge: [(
+                "anthropic".to_string(),
+                agent_state::ProfileBridgePreference {
+                    enabled: true,
+                    target_api_type: Some("openai-responses".to_string()),
+                    upstream_model: Some("gpt-5.1-codex".to_string()),
+                    ..Default::default()
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+    );
+
+    let route = resolve_profile_agent_route_with_connections(&profile, "claude-desktop", &prefs)
+        .expect("claude desktop bridge route");
+    let targets = launch_targets_for_profile_with_connections(&profile, &prefs);
+
+    assert_eq!(route.client_api_type, "anthropic");
+    assert_eq!(
+        route.bridge_target_api_type.as_deref(),
+        Some("openai-responses")
+    );
+    assert!(targets.iter().any(|target| {
+        target.id == "claude-desktop"
+            && target.api_type == "anthropic"
+            && target.bridge_target_api_type.as_deref() == Some("openai-responses")
+    }));
+}
+
+#[test]
 fn bridge_recommendation_can_target_gemini() {
     let profile = profile(&["gemini", "openai-chat"]);
     let prefs = connections(
@@ -271,4 +344,13 @@ fn bridge_route_carries_model_list() {
             },
         ]
     );
+}
+
+#[test]
+fn claude_usable_model_id_accepts_claude_style_ids() {
+    assert!(is_claude_usable_model_id("claude-sonnet-4-5"));
+    assert!(is_claude_usable_model_id("opus-4.7[1m]"));
+    assert!(!is_claude_usable_model_id(
+        "nvidia/nemotron-3-super-120b-a12b"
+    ));
 }

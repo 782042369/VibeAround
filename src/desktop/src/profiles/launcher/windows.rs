@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context};
 
 use super::common::{command_words_with_args, LaunchPlan};
+use super::templates;
 use crate::profiles::terminal::{self, TerminalChoice};
 
 pub(super) fn spawn(plan: LaunchPlan) -> anyhow::Result<()> {
@@ -77,15 +78,9 @@ fn build_powershell_script(plan: &LaunchPlan, command: &str, args: &[String]) ->
 }
 
 fn append_windows_process_probe(out: &mut String, process_name: &str) {
-    out.push_str("if ($?) {\n");
-    out.push_str("  for ($attempt = 1; $attempt -le 10; $attempt++) {\n");
-    out.push_str("    Start-Sleep -Milliseconds 500\n");
-    out.push_str(&format!(
-        "    if ($attempt -ge 4 -and (Get-Process -Name {} -ErrorAction SilentlyContinue)) {{ break }}\n",
-        powershell_single_quoted(process_name)
+    out.push_str(&templates::windows_process_probe_script(
+        &powershell_single_quoted(process_name),
     ));
-    out.push_str("  }\n");
-    out.push_str("}\n");
 }
 
 fn normalize_windows_claude_profile_launch(

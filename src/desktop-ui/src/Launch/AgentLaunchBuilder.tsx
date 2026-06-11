@@ -40,7 +40,7 @@ import {
   removeLauncherWorkspace,
   reorderLauncherWorkspaces,
   reorderProfiles,
-  rescanDesktopAppEntries,
+  getDesktopAppEntries,
   setProfileConnection,
   setLauncherAgentProfile,
   setLauncherAgentLaunchArgs,
@@ -58,12 +58,12 @@ import { agentLaunchArgCount } from "./agentLaunchArgs";
 import { buildProfileCopyDraft } from "./profileClone";
 import {
   agentLabel,
+  connectionAgentId,
   agentProfileId,
   agentSupportsSessionResume,
   agentWorkspace,
   currentTerminal,
   currentWorkspace,
-  isBridgeAgent,
   isSelectionLaunchable,
   isSortableWorkspace,
   mergeOrderedSubset,
@@ -153,9 +153,10 @@ export function AgentLaunchBuilder({
     typeof setTimeout
   >[]>([]);
 
+  const enabledAgentKey = prefs?.enabledAgents.join("|") ?? "";
   const enabledAgents = useMemo(
     () => (prefs ? new Set(prefs.enabledAgents) : null),
-    [prefs?.enabledAgents],
+    [enabledAgentKey],
   );
   const viewPrefs = useMemo<LauncherPreferences | null>(() => {
     if (!prefs) return null;
@@ -169,7 +170,7 @@ export function AgentLaunchBuilder({
   useEffect(() => {
     void Promise.all([
       listAgents(),
-      rescanDesktopAppEntries().catch(() => null),
+      getDesktopAppEntries().catch(() => null),
     ])
       .then(([items, desktopApps]) => {
         const rank = new Map(AGENT_ORDER.map((id, index) => [id, index]));
@@ -180,7 +181,7 @@ export function AgentLaunchBuilder({
         );
         const visible = items.filter((agent) => {
           if (agent.direct_only) {
-            return desktopApps === null || installedDesktopAgents.has(agent.id);
+            return installedDesktopAgents.has(agent.id);
           }
           return enabledAgents ? enabledAgents.has(agent.id) : true;
         });
@@ -486,11 +487,12 @@ export function AgentLaunchBuilder({
   }
 
   async function chooseProfileApiType(profile: ProfileSummary, apiType: string) {
-    if (!viewPrefs || !isBridgeAgent(agentId)) return;
-    const current = viewPrefs.profileConnections[profile.id]?.[agentId] ?? {};
+    const connectionId = connectionAgentId(agentId);
+    if (!viewPrefs || !connectionId) return;
+    const current = viewPrefs.profileConnections[profile.id]?.[connectionId] ?? {};
     onError(null);
     try {
-      await setProfileConnection(profile.id, agentId, {
+      await setProfileConnection(profile.id, connectionId, {
         ...current,
         selectedApiType: apiType,
       });
@@ -779,6 +781,8 @@ export function AgentLaunchBuilder({
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
   const terminalArgCount = agentLaunchArgCount(selectedAgentPreference);
   const showLaunchControls = !selectedAgentIsDirectOnly;
+  const showClaudeDesktopDeveloperModeHint =
+    agentId === "claude-desktop" && profileChoice.kind === "profile";
 
   return (
     <TooltipProvider>
@@ -867,9 +871,18 @@ export function AgentLaunchBuilder({
                         />
                       </SelectorPopup>
                       {selectedAgentIsDirectOnly && (
-                        <p className="mt-1 max-w-[520px] text-[11px] leading-4 text-muted-foreground">
-                          {t("Workspace and sessions are selected inside the desktop app.")}
-                        </p>
+                        <div className="mt-1 space-y-0.5">
+                          <p className="max-w-[520px] text-[11px] leading-4 text-muted-foreground">
+                            {t("Workspace and sessions are selected inside the desktop app.")}
+                          </p>
+                          {showClaudeDesktopDeveloperModeHint && (
+                            <p className="max-w-[640px] text-[11px] leading-4 text-muted-foreground">
+                              {t(
+                                "Claude Desktop profile launch requires Developer Mode. Enable it in Claude Desktop: Help -> Troubleshooting -> Enable Developer Mode.",
+                              )}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </>
                   </AgentSummaryHeader>

@@ -15,7 +15,15 @@ import {
 } from "./connections";
 import type { ConnectionAgentId, ProfileSummary } from "./types";
 
-const PROXY_AGENTS = new Set<string>(["claude", "codex", "gemini", "opencode", "pi"]);
+const PROXY_AGENTS = new Set<string>([
+  "claude",
+  "claude-desktop",
+  "codex",
+  "codex-desktop",
+  "gemini",
+  "opencode",
+  "pi",
+]);
 const SESSION_RESUME_AGENTS = new Set<string>([
   "claude",
   "codex",
@@ -262,14 +270,21 @@ export function isSelectionLaunchable(
 }
 
 export function agentConnectionDef(agentId: string): ConnectionAgentDef {
+  const id = connectionAgentId(agentId);
   return (
-    CONNECTION_AGENTS.find((agent) => agent.id === agentId) ??
+    CONNECTION_AGENTS.find((agent) => agent.id === id) ??
     CONNECTION_AGENTS.find((agent) => agent.id === "codex")!
   );
 }
 
-export function isBridgeAgent(agentId: string): agentId is ConnectionAgentId {
+export function isBridgeAgent(agentId: string): boolean {
   return PROXY_AGENTS.has(agentId);
+}
+
+export function connectionAgentId(agentId: string): ConnectionAgentId | null {
+  if (agentId === "claude-desktop") return "claude";
+  if (agentId === "codex-desktop") return "codex";
+  return PROXY_AGENTS.has(agentId) ? (agentId as ConnectionAgentId) : null;
 }
 
 export function agentSupportsSessionResume(agentId: string): boolean {

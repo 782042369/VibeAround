@@ -12,7 +12,7 @@ use profiles::ProfileDef;
 use crate::agent_detection;
 
 use super::common::LaunchPlan;
-use super::{bridge, codex};
+use super::{bridge, claude_desktop, codex, codex_desktop};
 
 enum LaunchTarget<'a> {
     Profile {
@@ -100,6 +100,13 @@ impl<'a> LaunchPlanBuilder<'a> {
         }
 
         let Some(session_id) = self.session_id else {
+            if agent_id == "codex-desktop" {
+                codex_desktop::cleanup_profile_overlay()
+                    .context("restore Codex Desktop config before direct launch")?;
+            } else if agent_id == "claude-desktop" {
+                claude_desktop::cleanup_profile_config()
+                    .context("restore Claude Desktop config before direct launch")?;
+            }
             return Ok(LaunchPlan {
                 env: Vec::new(),
                 command: launch_command_for_agent(
@@ -138,6 +145,39 @@ impl<'a> LaunchPlanBuilder<'a> {
         let agent = resources::agent_by_id(agent_id)
             .ok_or_else(|| anyhow!("agent '{}' not found in agents.json", agent_id))?;
         let workspace = crate::profiles::resolve_launch_workspace(agent_id)?;
+        if agent_id == "codex-desktop" {
+            codex_desktop::apply_profile_overlay(profile, &self.launch_id, rendered)
+                .with_context(|| format!("prepare Codex Desktop profile '{}'", profile.id))?;
+            return Ok(LaunchPlan {
+                env: Vec::new(),
+                command: launch_command_for_agent(
+                    agent_id,
+                    agent.pty_command_for_current_platform(),
+                ),
+                args: Vec::new(),
+                window_label: profile.label.clone(),
+                workspace,
+                macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+                windows_process_probe: windows_process_probe_for_direct_agent(&agent),
+            });
+        }
+        if agent_id == "claude-desktop" {
+            let _ = rendered;
+            claude_desktop::apply_profile_config(profile)
+                .with_context(|| format!("prepare Claude Desktop profile '{}'", profile.id))?;
+            return Ok(LaunchPlan {
+                env: Vec::new(),
+                command: launch_command_for_agent(
+                    agent_id,
+                    agent.pty_command_for_current_platform(),
+                ),
+                args: Vec::new(),
+                window_label: profile.label.clone(),
+                workspace,
+                macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+                windows_process_probe: windows_process_probe_for_direct_agent(&agent),
+            });
+        }
         agent_integrations::auto_install_project_integrations(agent_id, &workspace)
             .with_context(|| format!("install project integrations for {}", agent_id))?;
         let mut command_args = rendered.command_args.clone();
@@ -227,7 +267,10 @@ fn launch_command_for_agent(agent_id: &str, fallback_command: &str) -> String {
 
     #[cfg(not(test))]
     {
-        let Some(candidate) = agent_detection::selected_candidate_for(agent_id) else {
+        let toolchain_mode = agent_detection::configured_toolchain_mode();
+        let Some(candidate) =
+            agent_detection::candidate_for_toolchain_mode(agent_id, &toolchain_mode)
+        else {
             return fallback_command.to_string();
         };
         replace_launch_program(fallback_command, &candidate.path)
@@ -565,6 +608,121 @@ mod tests {
         assert!(plan
             .env
             .contains(&("VIBEAROUND_LAUNCH_TARGET".to_string(), "claude".to_string())));
+    }
+
+    #[test]
+    fn claude_desktop_profile_plan_uses_3p_config_without_terminal_args() {
+        let profile = minimax_anthropic_profile();
+        let root = std::env::temp_dir().join(format!(
+            "vibearound-claude-desktop-plan-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let _guard = claude_desktop::set_test_user_data_dir(root.clone());
+        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
+            .profile(&profile, "claude-desktop")
+            .build()
+            .expect("claude desktop profile plan");
+
+        assert_eq!(plan.command, "open -a Claude");
+        assert!(plan.args.is_empty());
+        assert_eq!(plan.window_label, "MiniMax Test");
+        assert!(plan.env.is_empty());
+        let meta_path = root.join("configLibrary").join("_meta.json");
+        let meta: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(&meta_path).expect("read Claude Desktop meta"),
+        )
+        .expect("parse Claude Desktop meta");
+        let applied_id = meta
+            .get("appliedId")
+            .and_then(serde_json::Value::as_str)
+            .expect("applied id");
+        let applied: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                root.join("configLibrary")
+                    .join(format!("{applied_id}.json")),
+            )
+            .expect("read Claude Desktop applied profile"),
+        )
+        .expect("parse Claude Desktop applied profile");
+        assert_eq!(
+            applied
+                .get("inferenceProvider")
+                .and_then(serde_json::Value::as_str),
+            Some("gateway")
+        );
+        assert_eq!(
+            applied
+                .get("inferenceGatewayBaseUrl")
+                .and_then(serde_json::Value::as_str),
+            Some("http://127.0.0.1:12358/va/local-api/minimax-test/claude-anthropic/anthropic")
+        );
+        if cfg!(target_os = "macos") {
+            assert_eq!(plan.macos_app_probe.as_deref(), Some("Claude"));
+        }
+        if cfg!(target_os = "windows") {
+            assert_eq!(plan.windows_process_probe.as_deref(), Some("Claude"));
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn claude_desktop_direct_plan_restores_3p_config() {
+        let profile = minimax_anthropic_profile();
+        let root = std::env::temp_dir().join(format!(
+            "vibearound-claude-desktop-direct-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(root.join("configLibrary")).expect("create Claude config library");
+        std::fs::write(
+            root.join("configLibrary").join("_meta.json"),
+            r#"{"appliedId":"default-id","entries":[{"id":"default-id","name":"Default"}]}"#,
+        )
+        .expect("write Claude meta");
+        std::fs::write(
+            root.join("claude_desktop_config.json"),
+            r#"{"deploymentMode":"1p"}"#,
+        )
+        .expect("write Claude deployment config");
+
+        let _guard = claude_desktop::set_test_user_data_dir(root.clone());
+        LaunchPlanBuilder::with_launch_id("launch-123")
+            .profile(&profile, "claude-desktop")
+            .build()
+            .expect("Claude Desktop profile plan");
+        LaunchPlanBuilder::with_launch_id("launch-456")
+            .direct("claude-desktop")
+            .build()
+            .expect("Claude Desktop direct plan");
+
+        let meta: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join("configLibrary").join("_meta.json"))
+                .expect("read restored Claude meta"),
+        )
+        .expect("parse restored Claude meta");
+        assert_eq!(
+            meta.get("appliedId").and_then(serde_json::Value::as_str),
+            Some("default-id")
+        );
+        assert_eq!(
+            meta.get("entries")
+                .and_then(serde_json::Value::as_array)
+                .expect("entries")
+                .len(),
+            1
+        );
+        let deployment: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join("claude_desktop_config.json"))
+                .expect("read restored deployment config"),
+        )
+        .expect("parse restored deployment config");
+        assert_eq!(
+            deployment
+                .get("deploymentMode")
+                .and_then(serde_json::Value::as_str),
+            Some("1p")
+        );
+        assert!(!root.join(".vibearound-claude-desktop-state.json").exists());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -176,7 +176,7 @@ fn default_source() -> String {
 }
 
 fn default_toolchain_mode() -> String {
-    "auto".to_string()
+    "managed".to_string()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -328,7 +328,7 @@ impl StartkitPaths {
             root,
             bin_dir: home.join("bin"),
             node_dir: runtime_dir.join("node"),
-            npm_prefix: home.join("npm-global"),
+            npm_prefix: home.join("npm"),
             cache_dir: home.join("cache").join("startkit"),
             runtime_dir,
             home,
@@ -1100,7 +1100,12 @@ async fn scan_agent_cli_item(
     let selected = agent_detection::scan_agent_and_persist(agent_id)
         .await
         .ok()
-        .and_then(|detection| detection.selected);
+        .and_then(|detection| {
+            agent_detection::preferred_candidate_for_toolchain_mode(
+                &detection,
+                &choices.toolchain_mode,
+            )
+        });
 
     match selected {
         Some(candidate) => StartkitItemReport {
@@ -1125,10 +1130,7 @@ async fn scan_agent_cli_item(
             .is_some();
             StartkitItemReport {
                 status: StartkitItemStatus::Missing,
-                message: Some(format!(
-                    "{} was not found in the user's default PATH",
-                    item.label
-                )),
+                message: Some(agent_missing_message(item, &choices.toolchain_mode)),
                 actions: if can_install {
                     vec!["install".to_string()]
                 } else {
@@ -1137,6 +1139,14 @@ async fn scan_agent_cli_item(
                 ..base_report(item)
             }
         }
+    }
+}
+
+fn agent_missing_message(item: &StartkitItem, toolchain_mode: &str) -> String {
+    if toolchain_mode == "system" {
+        format!("{} was not found in the system toolchain", item.label)
+    } else {
+        format!("{} was not found in VibeAround", item.label)
     }
 }
 
@@ -1468,13 +1478,13 @@ fn apply_startkit_env(
 
 pub fn managed_path_entries() -> Vec<PathBuf> {
     let home = common::config::data_dir();
-    let mut entries = Vec::new();
-    entries.push(home.join("bin"));
-    entries.push(home.join("runtime").join("node").join("bin"));
-    entries.push(home.join("runtime").join("node"));
-    entries.push(home.join("npm-global").join("bin"));
-    entries.push(home.join("npm-global"));
-    entries
+    vec![
+        home.join("bin"),
+        home.join("runtime").join("node").join("bin"),
+        home.join("runtime").join("node"),
+        home.join("npm").join("bin"),
+        home.join("npm"),
+    ]
 }
 
 fn report_from_script(item: &StartkitItem, output: ScriptOutput) -> StartkitItemReport {
@@ -1740,7 +1750,7 @@ mod tests {
             tunnel: "none".to_string(),
             channels: Vec::new(),
             source: "global".to_string(),
-            toolchain_mode: "auto".to_string(),
+            toolchain_mode: "managed".to_string(),
             shell_path: false,
         });
 
@@ -1758,7 +1768,7 @@ mod tests {
             tunnel: "cloudflare".to_string(),
             channels: Vec::new(),
             source: "cn".to_string(),
-            toolchain_mode: "auto".to_string(),
+            toolchain_mode: "managed".to_string(),
             shell_path: false,
         });
 
@@ -1779,7 +1789,7 @@ mod tests {
             tunnel: "none".to_string(),
             channels: vec!["telegram".to_string()],
             source: "global".to_string(),
-            toolchain_mode: "auto".to_string(),
+            toolchain_mode: "managed".to_string(),
             shell_path: false,
         });
 
@@ -1789,7 +1799,7 @@ mod tests {
     }
 
     #[test]
-    fn startkit_choices_default_to_auto_toolchain() {
+    fn startkit_choices_default_to_managed_toolchain() {
         let choices: StartkitChoices = serde_json::from_value(serde_json::json!({
             "agents": ["codex"],
             "tunnel": "none",
@@ -1798,7 +1808,7 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(choices.toolchain_mode, "auto");
+        assert_eq!(choices.toolchain_mode, "managed");
         assert!(!choices.shell_path);
     }
 

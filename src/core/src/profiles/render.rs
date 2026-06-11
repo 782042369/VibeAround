@@ -96,7 +96,7 @@ pub fn render(
             env.push((k.clone(), v));
         }
     }
-    if launch_target == "claude" && api_type == "anthropic" {
+    if is_claude_launch_target(launch_target) && api_type == "anthropic" {
         normalize_claude_env(&mut env, &context);
     }
 
@@ -279,7 +279,7 @@ fn render_pi_profile(
 }
 
 fn command_args_for(launch_target: &str, ctx: &BTreeMap<String, String>) -> Vec<String> {
-    if launch_target != "codex" {
+    if !is_codex_launch_target(launch_target) {
         return Vec::new();
     }
 
@@ -352,7 +352,7 @@ fn add_codex_model_catalog(
     settings_files: &mut Vec<RenderedSettingsFile>,
     command_args: &mut Vec<String>,
 ) -> anyhow::Result<()> {
-    if launch_target != "codex" {
+    if !is_codex_launch_target(launch_target) {
         return Ok(());
     }
     let Some(model) = ctx.get("model").filter(|value| !value.is_empty()) else {
@@ -463,6 +463,14 @@ fn codex_provider_env_key(provider_id: &str) -> &'static str {
         "azure" => "AZURE_OPENAI_API_KEY",
         _ => "OPENAI_API_KEY",
     }
+}
+
+fn is_codex_launch_target(launch_target: &str) -> bool {
+    matches!(launch_target, "codex" | "codex-desktop")
+}
+
+fn is_claude_launch_target(launch_target: &str) -> bool {
+    matches!(launch_target, "claude" | "claude-desktop")
 }
 
 /// Wraps a value as a TOML literal string (`'...'`).  Literal strings have no
@@ -717,6 +725,22 @@ mod tests {
     }
 
     #[test]
+    fn claude_desktop_launch_uses_claude_env_shape() {
+        let profile = anthropic_profile("dashscope", Some("coding-plan"), "qwen3.6-plus");
+        let provider = catalog::get(&profile.provider).expect("provider exists");
+
+        let cli =
+            render(&profile, "anthropic", "claude", provider).expect("claude profile renders");
+        let desktop = render(&profile, "anthropic", "claude-desktop", provider)
+            .expect("claude desktop profile renders");
+
+        assert_eq!(desktop.env, cli.env);
+        assert!(desktop.command_args.is_empty());
+        assert!(desktop.settings_files.is_empty());
+        assert!(desktop.config_env.is_none());
+    }
+
+    #[test]
     fn codex_launch_includes_model_catalog_for_context_window() {
         let profile = openai_responses_profile("xai", "grok-4.3");
         let provider = catalog::get(&profile.provider).expect("provider exists");
@@ -753,6 +777,29 @@ mod tests {
             model["input_modalities"],
             serde_json::json!(["text", "image"])
         );
+    }
+
+    #[test]
+    fn codex_desktop_launch_uses_codex_config_args() {
+        let profile = openai_responses_profile("xai", "grok-4.3");
+        let provider = catalog::get(&profile.provider).expect("provider exists");
+
+        let rendered = render(&profile, "openai-responses", "codex-desktop", provider)
+            .expect("codex desktop profile renders");
+
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model='grok-4.3'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_provider='xai'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg.starts_with("model_catalog_json='")));
+        assert!(rendered.config_env.is_none());
     }
 
     #[test]
