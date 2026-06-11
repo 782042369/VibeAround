@@ -5,6 +5,7 @@
 //! in the user's selected terminal.
 
 mod bridge;
+mod claude_desktop;
 mod codex;
 mod codex_desktop;
 mod common;
