@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use super::templates;
+
 #[derive(Debug, Clone)]
 pub(super) struct LaunchPlan {
     pub env: Vec<(String, String)>,
@@ -107,19 +109,7 @@ fn append_macos_app_launch(
     );
     let app_script = shell_escape::unix::escape(std::borrow::Cow::Owned(app_script));
     let command = macos_open_command_with_env(command, env);
-    out.push_str(&format!("{command}\n"));
-    out.push_str("status=$?\n");
-    out.push_str("if [ \"$status\" -eq 0 ]; then\n");
-    out.push_str("  for attempt in 1 2 3 4 5 6 7 8 9 10; do\n");
-    out.push_str("    sleep 0.5\n");
-    out.push_str(&format!(
-        "    if [ \"$attempt\" -ge 4 ] && [ \"$(osascript -e {app_script} 2>/dev/null)\" = \"true\" ]; then\n",
-    ));
-    out.push_str("      break\n");
-    out.push_str("    fi\n");
-    out.push_str("  done\n");
-    out.push_str("fi\n");
-    out.push_str("exit \"$status\"\n");
+    out.push_str(&templates::macos_app_probe_script(&command, &app_script));
 }
 
 fn macos_open_command_with_env(command: &str, env: &[(String, String)]) -> String {

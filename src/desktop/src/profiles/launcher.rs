@@ -10,6 +10,7 @@ mod codex;
 mod codex_desktop;
 mod common;
 mod plan;
+mod templates;
 
 #[cfg(target_os = "macos")]
 #[path = "launcher/macos.rs"]

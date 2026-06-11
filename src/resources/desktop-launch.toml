@@ -1,0 +1,24 @@
+[macos]
+app_probe = """
+{command}
+status=$?
+if [ "$status" -eq 0 ]; then
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.5
+    if [ "$attempt" -ge 4 ] && [ "$(osascript -e {app_script} 2>/dev/null)" = "true" ]; then
+      break
+    fi
+  done
+fi
+exit "$status"
+"""
+
+[windows]
+process_probe = """
+if ($?) {
+  for ($attempt = 1; $attempt -le 10; $attempt++) {
+    Start-Sleep -Milliseconds 500
+    if ($attempt -ge 4 -and (Get-Process -Name {process_name} -ErrorAction SilentlyContinue)) { break }
+  }
+}
+"""
