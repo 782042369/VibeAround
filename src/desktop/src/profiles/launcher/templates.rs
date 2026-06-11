@@ -7,6 +7,7 @@ const DESKTOP_LAUNCH_TOML: &str = include_str!("../../../../resources/desktop-la
 #[derive(Debug, Deserialize)]
 struct DesktopLaunchTemplates {
     macos: MacosTemplates,
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     windows: WindowsTemplates,
 }
 
@@ -17,6 +18,7 @@ struct MacosTemplates {
 
 #[derive(Debug, Deserialize)]
 struct WindowsTemplates {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     process_probe: String,
 }
 
@@ -31,6 +33,7 @@ pub(super) fn macos_app_probe_script(command: &str, app_script: &str) -> String 
     )
 }
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(super) fn windows_process_probe_script(process_name: &str) -> String {
     render_template(
         &TEMPLATES.windows.process_probe,
