@@ -100,6 +100,10 @@ impl<'a> LaunchPlanBuilder<'a> {
         }
 
         let Some(session_id) = self.session_id else {
+            if agent_id == "codex-desktop" {
+                codex_desktop::cleanup_profile_overlay()
+                    .context("restore Codex Desktop config before direct launch")?;
+            }
             return Ok(LaunchPlan {
                 env: Vec::new(),
                 command: launch_command_for_agent(

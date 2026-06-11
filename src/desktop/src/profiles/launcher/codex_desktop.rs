@@ -50,6 +50,10 @@ pub(super) fn apply_profile_overlay(
     apply_overlay_to_path(&codex_config_path(), &overlay)
 }
 
+pub(super) fn cleanup_profile_overlay() -> anyhow::Result<()> {
+    cleanup_overlay_at_path(&codex_config_path())
+}
+
 fn codex_config_path() -> PathBuf {
     config::home_dir().join(".codex").join("config.toml")
 }
@@ -57,6 +61,20 @@ fn codex_config_path() -> PathBuf {
 fn apply_overlay_to_path(path: &Path, overlay: &CodexDesktopOverlay) -> anyhow::Result<()> {
     let current = std::fs::read_to_string(path).unwrap_or_default();
     let next = apply_overlay_to_string(&current, overlay);
+    write_config_if_changed(path, &current, next)
+}
+
+fn cleanup_overlay_at_path(path: &Path) -> anyhow::Result<()> {
+    let current = match std::fs::read_to_string(path) {
+        Ok(current) => current,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).with_context(|| format!("read Codex config {:?}", path)),
+    };
+    let next = cleanup_vibearound_blocks(&current);
+    write_config_if_changed(path, &current, next)
+}
+
+fn write_config_if_changed(path: &Path, current: &str, next: String) -> anyhow::Result<()> {
     if next == current {
         return Ok(());
     }
@@ -469,5 +487,24 @@ url = "http://127.0.0.1:12358/mcp"
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn cleanup_overlay_at_path_restores_config_for_direct_launch() {
+        let dir = std::env::temp_dir().join(format!(
+            "vibearound-codex-desktop-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("config.toml");
+        let with_overlay = apply_overlay_to_string("model = \"gpt-5-codex\"\n", &overlay());
+        std::fs::write(&path, with_overlay).expect("write test config");
+
+        cleanup_overlay_at_path(&path).expect("cleanup overlay");
+
+        let cleaned = std::fs::read_to_string(&path).expect("read cleaned config");
+        assert!(cleaned.contains("model = \"gpt-5-codex\""));
+        assert!(!cleaned.contains(MARKER));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
