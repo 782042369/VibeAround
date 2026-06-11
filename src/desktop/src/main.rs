@@ -301,31 +301,6 @@ fn main() {
 
                 tray::setup(app)?;
 
-                tauri::async_runtime::spawn(async {
-                    match agent_detection::scan_and_persist().await {
-                        Ok(detected) => tracing::info!(
-                            agents = detected.agents.len(),
-                            "[VibeAround] agent auto-detect completed"
-                        ),
-                        Err(error) => tracing::warn!(
-                            error = %error,
-                            "[VibeAround] agent auto-detect failed"
-                        ),
-                    }
-                });
-                tauri::async_runtime::spawn(async {
-                    match desktop_detection::scan_and_persist().await {
-                        Ok(detected) => tracing::info!(
-                            apps = detected.apps.len(),
-                            "[VibeAround] desktop app auto-detect completed"
-                        ),
-                        Err(error) => tracing::warn!(
-                            error = %error,
-                            "[VibeAround] desktop app auto-detect failed"
-                        ),
-                    }
-                });
-
                 // Show the window immediately — the splash screen in index.html
                 // is visible while React loads and the daemon starts.
                 if let Some(w) = app.get_webview_window("main") {

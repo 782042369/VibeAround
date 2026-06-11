@@ -102,6 +102,10 @@ export function listAgents(): Promise<AgentSummary[]> {
   return invoke<AgentSummary[]>("list_agents");
 }
 
+export function rescanAgentEntries(): Promise<unknown> {
+  return invoke("rescan_agent_entries");
+}
+
 export interface DesktopAppDetectionFile {
   apps: Record<string, DesktopAppDetection>;
 }
