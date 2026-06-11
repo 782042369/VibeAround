@@ -210,7 +210,67 @@ Latest release: [VibeAround v0.7.1-beta](https://github.com/jazzenchen/VibeAroun
 
 Windows and Linux packages are built by GitHub Actions. The macOS package is currently Apple Silicon only. The v0.7.1-beta Windows MSI is intentionally omitted because Windows Installer requires numeric-only prerelease identifiers.
 
-**Upgrade note:** v0.7.1-beta changes Startkit state, detected agent sources, desktop launch targets, and profile launch settings. Before upgrading from 0.6.x, back up durable state you may want to restore: `settings.json`, `profiles/`, `google-oauth/`, `agents.json`, `launcher.json`, `state/`, `sessions/`, `launch-session-archive.json`, `workspaces/`, and `worktrees/`. Let 0.7.1-beta rebuild generated cache/runtime data such as `.cache/`, `cache/startkit/`, `agents.detected.json`, `desktop-apps.detected.json`, `profile-state/`, `api-bridge/launches/`, `agent-hooks/`, `logs/`, `npm-global/`, `plugins/`, `bin/`, and `runtime/`. If Launch or desktop-agent settings look stale after upgrading, rerun onboarding / Startkit setup.
+<a id="migration-guide-from-06x"></a>
+
+### Migration Guide From 0.6.x
+
+v0.7.1-beta changes Startkit state, detected agent sources, desktop launch targets, and profile launch settings. If you are upgrading from 0.6.x, do a clean local-state migration:
+
+1. Quit VibeAround.
+2. Make a full backup of the old `~/.vibearound` directory.
+3. Remove the old `~/.vibearound` directory.
+4. Restore only durable state from the backup.
+5. Launch VibeAround v0.7.1-beta and rerun onboarding / Startkit setup if Launch, profile, Startkit, or desktop-agent settings look stale.
+
+Restore these durable items only: `settings.json`, `profiles/`, `google-oauth/`, `agents.json`, `launcher.json`, `state/`, `sessions/`, `launch-session-archive.json`, `workspaces/`, and `worktrees/`.
+
+Do not restore generated or runtime data such as `.cache/`, `cache/startkit/`, `agents.detected.json`, `desktop-apps.detected.json`, `profile-state/`, `api-bridge/launches/`, `agent-hooks/`, `logs/`, `npm-global/`, `plugins/`, `bin/`, `runtime/`, or `auth.json`.
+
+macOS / Linux:
+
+```bash
+set -euo pipefail
+
+BACKUP="$HOME/vibearound-0.6-full-backup-$(date +%Y%m%d%H%M%S)"
+SOURCE="$HOME/.vibearound"
+
+if [ -d "$SOURCE" ]; then
+  cp -a "$SOURCE" "$BACKUP"
+  rm -rf "$SOURCE"
+fi
+
+mkdir -p "$SOURCE"
+
+for item in settings.json profiles google-oauth agents.json launcher.json state sessions launch-session-archive.json workspaces worktrees; do
+  [ -e "$BACKUP/$item" ] && cp -a "$BACKUP/$item" "$SOURCE/"
+done
+```
+
+Windows PowerShell:
+
+```powershell
+$ErrorActionPreference = "Stop"
+
+$Backup = Join-Path $env:USERPROFILE ("vibearound-0.6-full-backup-" + (Get-Date -Format "yyyyMMddHHmmss"))
+$SourceRoot = Join-Path $env:USERPROFILE ".vibearound"
+
+if (Test-Path $SourceRoot) {
+  Copy-Item $SourceRoot $Backup -Recurse -Force
+  Remove-Item $SourceRoot -Recurse -Force
+}
+
+New-Item -ItemType Directory -Force -Path $SourceRoot | Out-Null
+
+$Items = @(
+  "settings.json", "profiles", "google-oauth", "agents.json", "launcher.json",
+  "state", "sessions", "launch-session-archive.json", "workspaces", "worktrees"
+)
+
+foreach ($Item in $Items) {
+  $Source = Join-Path $Backup $Item
+  if (Test-Path $Source) { Copy-Item $Source $SourceRoot -Recurse -Force }
+}
+```
 
 ## Develop Locally
 
