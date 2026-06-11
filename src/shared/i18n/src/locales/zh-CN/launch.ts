@@ -48,6 +48,8 @@ export const zhCNLaunch: Record<string, string> = {
   "Desktop app": "桌面应用",
   "Workspace and sessions are selected inside the desktop app.":
     "工作区和会话在桌面应用里选择。",
+  "Claude Desktop profile launch requires Developer Mode. Enable it in Claude Desktop: Help -> Troubleshooting -> Enable Developer Mode.":
+    "Claude Desktop 使用配置启动需要开启 Developer Mode：在 Claude Desktop 里打开 Help -> Troubleshooting -> Enable Developer Mode。",
   Direct: "直接",
   "API bridge on": "API 转接开启",
   "API bridge": "API 转接",

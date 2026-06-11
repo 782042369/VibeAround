@@ -781,6 +781,8 @@ export function AgentLaunchBuilder({
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
   const terminalArgCount = agentLaunchArgCount(selectedAgentPreference);
   const showLaunchControls = !selectedAgentIsDirectOnly;
+  const showClaudeDesktopDeveloperModeHint =
+    agentId === "claude-desktop" && profileChoice.kind === "profile";
 
   return (
     <TooltipProvider>
@@ -869,9 +871,18 @@ export function AgentLaunchBuilder({
                         />
                       </SelectorPopup>
                       {selectedAgentIsDirectOnly && (
-                        <p className="mt-1 max-w-[520px] text-[11px] leading-4 text-muted-foreground">
-                          {t("Workspace and sessions are selected inside the desktop app.")}
-                        </p>
+                        <div className="mt-1 space-y-0.5">
+                          <p className="max-w-[520px] text-[11px] leading-4 text-muted-foreground">
+                            {t("Workspace and sessions are selected inside the desktop app.")}
+                          </p>
+                          {showClaudeDesktopDeveloperModeHint && (
+                            <p className="max-w-[640px] text-[11px] leading-4 text-muted-foreground">
+                              {t(
+                                "Claude Desktop profile launch requires Developer Mode. Enable it in Claude Desktop: Help -> Troubleshooting -> Enable Developer Mode.",
+                              )}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </>
                   </AgentSummaryHeader>
