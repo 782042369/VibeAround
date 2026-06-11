@@ -133,17 +133,14 @@ function InstallLocationChooser({
   const options: Array<{
     id: "managed" | "system";
     label: string;
-    description: string;
   }> = [
     {
       id: "managed",
-      label: "VibeAround npm",
-      description: "Install CLI tools under .vibearound/npm.",
+      label: "VibeAround",
     },
     {
       id: "system",
       label: "System",
-      description: "Use the user's global toolchain when available.",
     },
   ];
 
@@ -161,21 +158,15 @@ function InstallLocationChooser({
             size="sm"
             variant="outline"
             className={cn(
-              "h-auto min-h-9 flex-col items-start justify-start gap-0.5 px-2 py-1.5 text-left text-xs",
+              "h-9 justify-center text-xs",
               value === option.id && "border-primary bg-primary/10 text-primary",
             )}
             onClick={() => onChange(option.id)}
           >
-            <span className="font-medium">{t(option.label)}</span>
-            <span className="text-[10px] leading-snug text-muted-foreground">
-              {t(option.description)}
-            </span>
+            {option.label}
           </Button>
         ))}
       </div>
-      <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-        {t("Plugins always install under .vibearound/plugins.")}
-      </p>
     </div>
   );
 }
@@ -204,9 +195,6 @@ function ShellPathChooser({
             <TerminalSquare className="h-3.5 w-3.5 text-primary" />
             {t("Write shell PATH")}
           </div>
-          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-            {t("Terminal sessions can find managed Node, Codex, Claude, and helper tools.")}
-          </p>
         </div>
         <Switch
           checked={checked}
