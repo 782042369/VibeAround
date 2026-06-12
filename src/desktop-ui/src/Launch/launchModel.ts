@@ -233,15 +233,11 @@ export function profileSummary(
         bridgeLabel: bridgeEnabled
           ? t("Desktop bridge")
           : t("Desktop bridge on launch"),
-        route: t(
-          bridgeEnabled
-            ? "Claude Desktop local bridge -> {{provider}} {{apiType}}"
-            : "Claude Desktop local bridge opens on launch -> {{provider}} {{apiType}}",
-          {
-            provider: profile.providerLabel,
-            apiType: apiTypeProtocolDisplayLabel(targetApiType),
-          },
-        ),
+        route: t("{{agent}} → {{provider}} {{apiType}}", {
+          agent: agentLabel(agentId),
+          provider: profile.providerLabel,
+          apiType: apiTypeProtocolDisplayLabel(targetApiType),
+        }),
       };
     }
     if (resolved.status === "via_bridge" && resolved.selected.targetApiType) {
@@ -306,7 +302,7 @@ export function isBridgeAgent(agentId: string): boolean {
 }
 
 export function isDesktopBridgeAgent(agentId: string): boolean {
-  return agentId === "claude-desktop";
+  return agentId === "claude-desktop" || agentId === "codex-desktop";
 }
 
 export function connectionAgentId(agentId: string): ConnectionAgentId | null {
