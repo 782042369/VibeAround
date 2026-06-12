@@ -14,6 +14,7 @@ import { useI18n } from "@va/i18n";
 import { BrandIcon } from "@/components/brand-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -739,9 +740,11 @@ function ModelSettingDialog({
 
           <datalist id={datalistId}>
             {setting.options.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label ?? model.id}
-              </option>
+              <option
+                key={model.id}
+                value={model.id}
+                label={modelOptionDatalistLabel(model, t)}
+              />
             ))}
           </datalist>
 
@@ -749,6 +752,7 @@ function ModelSettingDialog({
             {models.map((model, index) => {
               const upstreamModel = cleanModelId(model.upstreamModel);
               const option = findModelOption(setting.options, upstreamModel);
+              const isCustomModel = !!upstreamModel && !option;
               return (
                 <div
                   key={index}
@@ -774,7 +778,15 @@ function ModelSettingDialog({
                         className="h-7 w-full font-mono text-xs"
                         placeholder={t("model id (e.g. gpt-4o, claude-sonnet-4-6)")}
                         onChange={(event) =>
-                          updateModel(index, { upstreamModel: event.currentTarget.value })
+                          updateModel(index, {
+                            upstreamModel: event.currentTarget.value,
+                            capabilities: findModelOption(
+                              setting.options,
+                              event.currentTarget.value,
+                            )
+                              ? undefined
+                              : model.capabilities,
+                          })
                         }
                       />
                     </label>
@@ -792,12 +804,45 @@ function ModelSettingDialog({
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
                     <span className="rounded bg-muted px-1.5 py-0.5">
-                      {modelMetadataText(option, t)}
+                      {modelMetadataText(option, t, model)}
                     </span>
                     <span className="rounded bg-muted px-1.5 py-0.5">
                       {t("Agent sees {{model}}", { model: modelAgentId(model) || "..." })}
                     </span>
                   </div>
+                  {isCustomModel && (
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {t("Input support")}
+                      </span>
+                      <CapabilityCheckbox
+                        label={t("Images")}
+                        checked={!!model.capabilities?.image_input}
+                        onCheckedChange={(checked) =>
+                          updateModel(index, {
+                            capabilities: updateCapability(
+                              model.capabilities,
+                              "image_input",
+                              checked === true,
+                            ),
+                          })
+                        }
+                      />
+                      <CapabilityCheckbox
+                        label={t("Files")}
+                        checked={!!model.capabilities?.file_input}
+                        onCheckedChange={(checked) =>
+                          updateModel(index, {
+                            capabilities: updateCapability(
+                              model.capabilities,
+                              "file_input",
+                              checked === true,
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -859,7 +904,13 @@ function bridgeModelOptions(
 ): ModelDef[] {
   const options = targetApiType ? [...(profile.apiTypeModelOptions[targetApiType] ?? [])] : [];
   const model = cleanModelId(currentModel);
-  if (model && !options.some((option) => option.id === model)) {
+  if (
+    model &&
+    !options.some(
+      (option) =>
+        option.id === model || (option.aliases ?? []).some((alias) => alias === model),
+    )
+  ) {
     options.unshift({ id: model, label: null });
   }
   return options;
@@ -876,21 +927,80 @@ function findModelOption(options: ModelDef[], model: string): ModelDef | null {
   );
 }
 
+function CapabilityCheckbox({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean | "indeterminate") => void;
+}) {
+  return (
+    <label className="inline-flex items-center gap-1.5">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        className="size-3.5"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function updateCapability(
+  current: ProfileBridgeModelPreference["capabilities"],
+  key: "image_input" | "file_input",
+  value: boolean,
+): ProfileBridgeModelPreference["capabilities"] {
+  const next = {
+    ...(current ?? {}),
+    [key]: value,
+  };
+  if (!next.image_input && !next.file_input) return undefined;
+  return {
+    ...(next.image_input ? { image_input: true } : {}),
+    ...(next.file_input ? { file_input: true } : {}),
+  };
+}
+
+function modelOptionDatalistLabel(
+  option: ModelDef,
+  t: (key: string, values?: Record<string, string | number | null | undefined>) => string,
+): string {
+  const label = option.label && option.label !== option.id ? option.label : option.id;
+  return `${label} · ${modelMetadataText(option, t)}`;
+}
+
 function modelMetadataText(
   option: ModelDef | null,
   t: (key: string, values?: Record<string, string | number | null | undefined>) => string,
+  preference?: ProfileBridgeModelPreference,
 ): string {
-  if (!option) return t("Custom model metadata");
+  if (!option) {
+    const parts = [t("Custom model metadata")];
+    const customCapabilities = capabilityLabels(preference?.capabilities, t);
+    if (customCapabilities.length > 0) parts.push(customCapabilities.join(", "));
+    return parts.join(" · ");
+  }
   const parts = [
     option.context_window
       ? t("{{count}} context", { count: formatContextWindow(option.context_window) })
       : t("Context unknown"),
   ];
-  const capabilities = [];
-  if (option.capabilities?.image_input) capabilities.push(t("images"));
-  if (option.capabilities?.file_input) capabilities.push(t("files"));
+  const capabilities = capabilityLabels(option.capabilities, t);
   if (capabilities.length > 0) parts.push(capabilities.join(", "));
   return parts.join(" · ");
+}
+
+function capabilityLabels(
+  capabilities: ModelDef["capabilities"] | ProfileBridgeModelPreference["capabilities"],
+  t: (key: string, values?: Record<string, string | number | null | undefined>) => string,
+): string[] {
+  const labels = [];
+  if (capabilities?.image_input) labels.push(t("images"));
+  if (capabilities?.file_input) labels.push(t("files"));
+  return labels;
 }
 
 function formatContextWindow(value: number): string {

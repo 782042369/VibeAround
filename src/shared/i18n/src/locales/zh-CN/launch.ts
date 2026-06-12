@@ -125,6 +125,8 @@ export const zhCNLaunch: Record<string, string> = {
     "服务商控制台里的 endpoint URL。",
   "Deployment name": "部署名称",
   Model: "模型",
+  "Default model": "默认模型",
+  "Selected model": "已选模型",
   "Select a model": "选择模型",
   "model id (e.g. gpt-4o, claude-sonnet-4-6)":
     "模型 id（例如 gpt-4o、claude-sonnet-4-6）",
