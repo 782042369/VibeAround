@@ -25,11 +25,10 @@ id = "essentials.node"
 label = "Node.js"
 group = "computer"
 category = "essentials"
-description = "Node.js runtime for ACP adapters and channel plugins."
+description = "System Node.js runtime for npm-based agents, tunnels, adapters, and channel plugins."
 platforms = ["macos", "windows"]
 include_if = ["channels:any", "tunnel:localtunnel"]
 severity = "blocker"
-managed = true
 min_version = "22.0.0"
 
 [items.detect]
@@ -196,11 +195,27 @@ severity = "blocker"
 kind = "builtin_agent_adapters"
 
 [[items]]
+id = "tunnels.localtunnel.package"
+label = "localtunnel"
+group = "remote"
+category = "tunnels"
+description = "Localtunnel npm package in VibeAround's managed dependency cache."
+platforms = ["macos", "windows"]
+include_if = ["managed-tunnel:localtunnel"]
+depends_on = ["essentials.node"]
+severity = "blocker"
+managed = true
+kind = "managed_npm_package"
+plugin_dependency = "tunnel-localtunnel"
+npm_package = "localtunnel"
+program = "lt"
+
+[[items]]
 id = "tunnels.cloudflare.binary"
 label = "cloudflared"
 group = "remote"
 category = "tunnels"
-description = "Cloudflare tunnel binary from PATH or VibeAround's plugin dependency cache."
+description = "Cloudflare tunnel binary from PATH or VibeAround's managed dependency cache."
 platforms = ["macos", "windows"]
 include_if = ["tunnel:cloudflare"]
 severity = "blocker"

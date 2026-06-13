@@ -10,15 +10,18 @@ version_arg="${STARTKIT_VERSION_ARG:---version}"
 can_install="${STARTKIT_CAN_INSTALL:-false}"
 candidate=""
 
-if command -v "$program" >/dev/null 2>&1; then
-  candidate="$(command -v "$program")"
-fi
-
-if [ -z "$candidate" ] && [ "${STARTKIT_ITEM_MANAGED:-false}" = "true" ] && [ -n "${STARTKIT_PLUGIN_BIN_DIR:-}" ]; then
+if [ "${STARTKIT_ITEM_MANAGED:-false}" = "true" ] && [ -n "${STARTKIT_PLUGIN_BIN_DIR:-}" ]; then
   plugin_candidate="${STARTKIT_PLUGIN_BIN_DIR:-}/$program"
   if [ -x "$plugin_candidate" ]; then
     candidate="$plugin_candidate"
+  else
+    printf '{"status":"missing","message":"%s was not found","actions":["install"]}\n' "$(json_escape "$program")"
+    exit 0
   fi
+fi
+
+if [ -z "$candidate" ] && command -v "$program" >/dev/null 2>&1; then
+  candidate="$(command -v "$program")"
 fi
 
 if [ -z "$candidate" ]; then

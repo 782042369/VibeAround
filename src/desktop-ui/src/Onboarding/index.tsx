@@ -29,7 +29,6 @@ import {
   agentIdFromReport,
   agentIdFromSdkReport,
   agentSdkCheckingReport,
-  computerCheckingReports,
   groupReportsFromReports,
   itemCheckSignature,
   localPluginReport,
@@ -51,11 +50,12 @@ import type {
   StartkitChoices,
   StartkitItemReport,
   StartkitManifestSummary,
+  ToolchainMode,
   TunnelSummary,
 } from "./types";
 import type { AgentId, TunnelProvider } from "./constants";
 
-const SYSTEM_TOOLCHAIN_MODE = "system" as const;
+const DEFAULT_TOOLCHAIN_MODE: ToolchainMode = "system";
 
 export default function Onboarding() {
   const { t } = useI18n();
@@ -78,6 +78,8 @@ export default function Onboarding() {
   >([]);
 
   const [downloadSource, setDownloadSource] = useState("global");
+  const [toolchainMode, setToolchainMode] =
+    useState<ToolchainMode>(DEFAULT_TOOLCHAIN_MODE);
   const [enabledAgents, setEnabledAgents] = useState<Set<AgentId>>(new Set());
   const [enabledChannels, setEnabledChannels] = useState<Set<string>>(
     new Set(),
@@ -107,7 +109,6 @@ export default function Onboarding() {
   const checkedPluginSignaturesRef = useRef<Set<string>>(new Set());
   const checkedAgentSdkSignaturesRef = useRef<Set<string>>(new Set());
   const checkedTunnelSignaturesRef = useRef<Set<string>>(new Set());
-  const checkedComputerSignaturesRef = useRef<Set<string>>(new Set());
   const checkedInstallScanSignaturesRef = useRef<Set<string>>(new Set());
   const previousStartkitOptionsRef = useRef<string | null>(null);
   const refreshedPluginsAfterInstallRef = useRef(false);
@@ -121,9 +122,6 @@ export default function Onboarding() {
     [],
   );
   const [tunnelReports, setTunnelReports] = useState<StartkitItemReport[]>([]);
-  const [computerReports, setComputerReports] = useState<StartkitItemReport[]>(
-    [],
-  );
 
   useOnboardingInitialLoad({
     setSettings,
@@ -134,6 +132,7 @@ export default function Onboarding() {
     setPluginRegistry,
     setDiscoveredPlugins,
     setDownloadSource,
+    setToolchainMode,
     setEnabledAgents,
     setEnabledChannels,
     setChannelConfigs,
@@ -156,7 +155,7 @@ export default function Onboarding() {
       tunnel: tunnelProvider,
       channels: Array.from(enabledChannels),
       source: downloadSource,
-      toolchainMode: SYSTEM_TOOLCHAIN_MODE,
+      toolchainMode,
       shellPath: false,
     }),
     [
@@ -164,6 +163,7 @@ export default function Onboarding() {
       tunnelProvider,
       enabledChannels,
       downloadSource,
+      toolchainMode,
     ],
   );
 
@@ -193,7 +193,7 @@ export default function Onboarding() {
             ? built.startkit
             : {}),
           source: downloadSource,
-          toolchain_mode: SYSTEM_TOOLCHAIN_MODE,
+          toolchain_mode: toolchainMode,
           shell_path: false,
         },
       };
@@ -212,6 +212,7 @@ export default function Onboarding() {
       cfToken,
       cfHostname,
       downloadSource,
+      toolchainMode,
     ],
   );
 
@@ -221,22 +222,22 @@ export default function Onboarding() {
       tunnel: "none",
       channels: [],
       source: downloadSource,
-      toolchainMode: SYSTEM_TOOLCHAIN_MODE,
+      toolchainMode,
       shellPath: false,
     }),
-    [downloadSource],
+    [downloadSource, toolchainMode],
   );
 
   const checkAgentUpdates = useCallback(
     (agentIds: string[]) => {
       const pendingAgentIds = agentIds.filter((agentId) => {
-        const signature = itemCheckSignature(agentId, downloadSource);
+        const signature = itemCheckSignature(agentId, downloadSource, toolchainMode);
         return !checkedAgentUpdateSignaturesRef.current.has(signature);
       });
       if (pendingAgentIds.length === 0) return;
       for (const agentId of pendingAgentIds) {
         checkedAgentUpdateSignaturesRef.current.add(
-          itemCheckSignature(agentId, downloadSource),
+          itemCheckSignature(agentId, downloadSource, toolchainMode),
         );
       }
 
@@ -268,12 +269,12 @@ export default function Onboarding() {
           );
         });
     },
-    [agentStatusChoices, downloadSource],
+    [agentStatusChoices, downloadSource, toolchainMode],
   );
 
   useEffect(() => {
     if (!loaded) return;
-    const signature = itemCheckSignature("startkit-options", downloadSource);
+    const signature = itemCheckSignature("startkit-options", downloadSource, toolchainMode);
     if (previousStartkitOptionsRef.current === null) {
       previousStartkitOptionsRef.current = signature;
       return;
@@ -286,15 +287,13 @@ export default function Onboarding() {
     checkedPluginSignaturesRef.current.clear();
     checkedAgentSdkSignaturesRef.current.clear();
     checkedTunnelSignaturesRef.current.clear();
-    checkedComputerSignaturesRef.current.clear();
     checkedInstallScanSignaturesRef.current.clear();
     setAgentInstallReports([]);
     setPluginUpdateReports([]);
     setAgentSdkReports([]);
     setTunnelReports([]);
-    setComputerReports([]);
     startkit.reset();
-  }, [downloadSource, loaded, startkit.reset]);
+  }, [downloadSource, loaded, startkit.reset, toolchainMode]);
 
   useEffect(() => {
     if (!loaded || activeStep !== "install" || startkit.running || startkit.scanning) return;
@@ -304,6 +303,7 @@ export default function Onboarding() {
       [...choices.agents].sort().join(","),
       [...choices.channels].sort().join(","),
       choices.tunnel,
+      choices.toolchainMode,
     );
     if (checkedInstallScanSignaturesRef.current.has(signature)) return;
     checkedInstallScanSignaturesRef.current.add(signature);
@@ -322,56 +322,15 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (!loaded || activeStep !== "install" || startkit.running || startkit.scanning) return;
-    const signature = itemCheckSignature(
-      "computer",
-      downloadSource,
-      [...choices.agents].sort().join(","),
-      [...choices.channels].sort().join(","),
-      choices.tunnel,
-    );
-    if (checkedComputerSignaturesRef.current.has(signature)) return;
-    checkedComputerSignaturesRef.current.add(signature);
-
-    const checkingReports = computerCheckingReports(choices);
-    if (checkingReports.length === 0) return;
-
-    setComputerReports((previous) =>
-      mergeReportsById(previous, checkingReports),
-    );
-
-    void invoke<StartkitItemReport[]>("scan_computer_install_status", {
-      settings,
-      choices,
-    })
-      .then((reports) => {
-        setComputerReports((previous) =>
-          mergeReportsById(previous, reports),
-        );
-      })
-      .catch((error) => {
-        console.error("failed to scan computer install status", error);
-      });
-  }, [
-    activeStep,
-    choices,
-    downloadSource,
-    loaded,
-    settings,
-    startkit.running,
-    startkit.scanning,
-  ]);
-
-  useEffect(() => {
-    if (!loaded || activeStep !== "install" || startkit.running || startkit.scanning) return;
     const agentIds = Array.from(enabledAgents).sort();
     const pendingAgentIds = agentIds.filter((agentId) => {
-      const signature = itemCheckSignature(agentId, "agent-sdk");
+      const signature = itemCheckSignature(agentId, "agent-sdk", toolchainMode);
       return !checkedAgentSdkSignaturesRef.current.has(signature);
     });
     if (pendingAgentIds.length === 0) return;
     for (const agentId of pendingAgentIds) {
       checkedAgentSdkSignaturesRef.current.add(
-        itemCheckSignature(agentId, "agent-sdk"),
+        itemCheckSignature(agentId, "agent-sdk", toolchainMode),
       );
     }
 
@@ -405,19 +364,20 @@ export default function Onboarding() {
     loaded,
     startkit.running,
     startkit.scanning,
+    toolchainMode,
   ]);
 
   useEffect(() => {
     if (!loaded || activeStep !== "agents" || agents.length === 0 || startkit.running) return;
     const agentIds = agents.map((agent) => agent.id).sort();
     const pendingAgentIds = agentIds.filter((agentId) => {
-      const signature = itemCheckSignature(agentId, "local");
+      const signature = itemCheckSignature(agentId, "local", toolchainMode);
       return !checkedAgentLocalSignaturesRef.current.has(signature);
     });
     if (pendingAgentIds.length === 0) return;
     for (const agentId of pendingAgentIds) {
       checkedAgentLocalSignaturesRef.current.add(
-        itemCheckSignature(agentId, "local"),
+        itemCheckSignature(agentId, "local", toolchainMode),
       );
     }
     setAgentInstallReports((previous) =>
@@ -451,6 +411,7 @@ export default function Onboarding() {
     loaded,
     settings,
     startkit.running,
+    toolchainMode,
   ]);
 
   useEffect(() => {
@@ -539,13 +500,13 @@ export default function Onboarding() {
       .filter((id) => id !== "none")
       .sort();
     const pendingTunnelIds = tunnelIds.filter((id) => {
-      const signature = itemCheckSignature(id, "tunnel");
+      const signature = itemCheckSignature(id, "tunnel", toolchainMode);
       return !checkedTunnelSignaturesRef.current.has(signature);
     });
     if (pendingTunnelIds.length === 0) return;
     for (const id of pendingTunnelIds) {
       checkedTunnelSignaturesRef.current.add(
-        itemCheckSignature(id, "tunnel"),
+        itemCheckSignature(id, "tunnel", toolchainMode),
       );
     }
 
@@ -578,6 +539,7 @@ export default function Onboarding() {
     loaded,
     settings,
     tunnels,
+    toolchainMode,
   ]);
 
   useEffect(() => {
@@ -690,7 +652,6 @@ export default function Onboarding() {
     const selectedAgents = new Set(choices.agents);
     const selectedChannels = new Set(choices.channels);
     return mergeReportsById([], [
-      ...computerReports,
       ...agentInstallReports.filter((report) => {
         const agentId = agentIdFromReport(report);
         return agentId ? selectedAgents.has(agentId) : false;
@@ -713,7 +674,6 @@ export default function Onboarding() {
     choices.agents,
     choices.channels,
     choices.tunnel,
-    computerReports,
     pluginUpdateReports,
     tunnelReports,
   ]);
@@ -842,12 +802,10 @@ export default function Onboarding() {
           disabled: !hasScanned,
           run: () => {
             checkedInstallScanSignaturesRef.current.clear();
-            checkedComputerSignaturesRef.current.clear();
             checkedAgentLocalSignaturesRef.current.clear();
             checkedTunnelSignaturesRef.current.clear();
             setAgentInstallReports([]);
             setTunnelReports([]);
-            setComputerReports([]);
             void startkit.scan(finalSettings, choices);
           },
         };
@@ -930,7 +888,9 @@ export default function Onboarding() {
           <StartkitAdvancedMenu
             sources={manifest?.sources ?? {}}
             downloadSource={downloadSource}
+            toolchainMode={toolchainMode}
             onDownloadSource={setDownloadSource}
+            onToolchainMode={setToolchainMode}
           />
           <LanguageMenu />
         </div>

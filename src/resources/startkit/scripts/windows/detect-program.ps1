@@ -18,13 +18,19 @@ function ManagedCommand($program) {
   return $null
 }
 
-$cmd = Get-Command $program -ErrorAction SilentlyContinue
-if ((-not $cmd) -and $env:STARTKIT_ITEM_MANAGED -eq "true") {
+$managed = $env:STARTKIT_ITEM_MANAGED -eq "true"
+if ($managed) {
   $cmd = ManagedCommand $program
+  if (-not $cmd) {
+    Emit @{ status = "missing"; message = "$program was not found"; actions = @("install") }
+    exit 0
+  }
+} else {
+  $cmd = Get-Command $program -ErrorAction SilentlyContinue
 }
 
 if (-not $cmd) {
-  if ($env:STARTKIT_ITEM_MANAGED -eq "true" -or $canInstall) {
+  if ($canInstall) {
     Emit @{ status = "missing"; message = "$program was not found"; actions = @("install") }
   } else {
     Emit @{ status = "blocked"; message = "Install $program on this computer, then scan again."; actions = @() }

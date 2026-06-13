@@ -69,7 +69,10 @@ export function tunnelReportMatchesProvider(
     case "cloudflare":
       return report.id === "tunnels.cloudflare.binary";
     case "localtunnel":
-      return report.id === "essentials.node";
+      return (
+        report.id === "tunnels.localtunnel.package" ||
+        report.id === "tunnels.localtunnel.system"
+      );
     case "ngrok":
       return report.id === "tunnels.ngrok.sdk";
     default:
@@ -220,10 +223,10 @@ export function tunnelCheckingReport(
   const tunnel = tunnels.find((item) => item.id === tunnelId);
   if (tunnelId === "localtunnel") {
     return {
-      id: "essentials.node",
-      label: "Node.js",
-      group: "computer",
-      category: "essentials",
+      id: "tunnels.localtunnel.system",
+      label: tunnel?.display_name ?? "localtunnel",
+      group: "remote",
+      category: "tunnels",
       status: "running",
       message: "Checking local version",
       actions: [],

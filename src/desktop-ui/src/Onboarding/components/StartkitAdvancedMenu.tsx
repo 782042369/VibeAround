@@ -1,5 +1,6 @@
 import {
   Globe,
+  Package,
   SlidersHorizontal,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
@@ -13,15 +14,20 @@ import {
 import { cn } from "@/lib/utils";
 
 import type { StartkitManifestSummary } from "../types";
+import type { ToolchainMode } from "../types";
 
 export function StartkitAdvancedMenu({
   sources,
   downloadSource,
+  toolchainMode,
   onDownloadSource,
+  onToolchainMode,
 }: {
   sources: StartkitManifestSummary["sources"];
   downloadSource: string;
+  toolchainMode: ToolchainMode;
   onDownloadSource: (value: string) => void;
+  onToolchainMode: (value: ToolchainMode) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -45,9 +51,50 @@ export function StartkitAdvancedMenu({
             onChange={onDownloadSource}
             t={t}
           />
+          <ToolchainChooser
+            value={toolchainMode}
+            onChange={onToolchainMode}
+            t={t}
+          />
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function ToolchainChooser({
+  value,
+  onChange,
+  t,
+}: {
+  value: ToolchainMode;
+  onChange: (value: ToolchainMode) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium">
+        <Package className="h-3.5 w-3.5 text-primary" />
+        {t("Toolchain")}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {(["system", "managed"] as const).map((mode) => (
+          <Button
+            key={mode}
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn(
+              "justify-center text-xs",
+              value === mode && "border-primary bg-primary/10 text-primary",
+            )}
+            onClick={() => onChange(mode)}
+          >
+            {mode === "system" ? t("System") : t("VibeAround managed")}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }
 

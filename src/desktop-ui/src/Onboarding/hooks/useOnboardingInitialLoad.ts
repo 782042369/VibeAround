@@ -15,6 +15,7 @@ import type {
   PluginRegistryEntry,
   Settings,
   StartkitManifestSummary,
+  ToolchainMode,
   TunnelSummary,
 } from "../types";
 
@@ -38,6 +39,7 @@ export function useOnboardingInitialLoad({
   setPluginRegistry,
   setDiscoveredPlugins,
   setDownloadSource,
+  setToolchainMode,
   setEnabledAgents,
   setEnabledChannels,
   setChannelConfigs,
@@ -56,6 +58,7 @@ export function useOnboardingInitialLoad({
   setPluginRegistry: (value: PluginRegistryEntry[]) => void;
   setDiscoveredPlugins: (value: DiscoveredChannelPlugin[]) => void;
   setDownloadSource: (value: string) => void;
+  setToolchainMode: (value: ToolchainMode) => void;
   setEnabledAgents: (value: Set<AgentId>) => void;
   setEnabledChannels: (value: Set<string>) => void;
   setChannelConfigs: (value: Record<string, Record<string, string>>) => void;
@@ -94,6 +97,7 @@ export function useOnboardingInitialLoad({
 
           hydrateStartkitPrefs(loadedSettings, {
             setDownloadSource,
+            setToolchainMode,
           });
           hydrateAgents(loadedSettings, orderedAgents, setEnabledAgents);
           hydrateChannels(loadedSettings, pluginDefs, {
@@ -124,6 +128,7 @@ export function useOnboardingInitialLoad({
     setChannelVerbose,
     setDiscoveredPlugins,
     setDownloadSource,
+    setToolchainMode,
     setEnabledAgents,
     setEnabledChannels,
     setLoaded,

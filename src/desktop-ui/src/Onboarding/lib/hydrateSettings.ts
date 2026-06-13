@@ -5,6 +5,7 @@ import type {
   ChannelVerboseConfig,
   PluginRegistryEntry,
   Settings,
+  ToolchainMode,
 } from "../types";
 
 const DEFAULT_ENABLED_AGENT_IDS = new Set<AgentId>(["claude", "codex"]);
@@ -13,10 +14,17 @@ export function hydrateStartkitPrefs(
   loadedSettings: Settings,
   setters: {
     setDownloadSource: (value: string) => void;
+    setToolchainMode: (value: ToolchainMode) => void;
   },
 ) {
   if (loadedSettings.startkit?.source) {
     setters.setDownloadSource(loadedSettings.startkit.source);
+  }
+  if (
+    loadedSettings.startkit?.toolchain_mode === "system" ||
+    loadedSettings.startkit?.toolchain_mode === "managed"
+  ) {
+    setters.setToolchainMode(loadedSettings.startkit.toolchain_mode);
   }
 }
 

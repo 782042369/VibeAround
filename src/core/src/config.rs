@@ -143,6 +143,7 @@ pub struct Config {
     pub ngrok_domain: Option<String>,
     pub cloudflare_tunnel_token: Option<String>,
     pub cloudflare_hostname: Option<String>,
+    pub toolchain_mode: ToolchainMode,
     // --- Workspaces ---
     /// User-added project folders (not including the built-in ~/.vibearound/workspaces/).
     pub workspaces: Vec<PathBuf>,
@@ -167,6 +168,33 @@ pub struct Config {
     pub api_bridge: ApiBridgeConfig,
     // --- Raw channels JSON (for dynamic plugin config) ---
     raw_channels: serde_json::Value,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ToolchainMode {
+    #[default]
+    System,
+    Managed,
+}
+
+impl ToolchainMode {
+    pub fn from_config(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "managed" | "vibearound" | "vibearound_managed" => Self::Managed,
+            _ => Self::System,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Managed => "managed",
+        }
+    }
+
+    pub fn is_managed(self) -> bool {
+        matches!(self, Self::Managed)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -349,6 +377,12 @@ fn load_settings_from(path: &std::path::Path) -> Config {
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
+    let toolchain_mode = root
+        .get("startkit")
+        .and_then(|value| value.get("toolchain_mode"))
+        .and_then(|value| value.as_str())
+        .map(ToolchainMode::from_config)
+        .unwrap_or_default();
 
     let raw_channels = root
         .get("channels")
@@ -504,6 +538,7 @@ fn load_settings_from(path: &std::path::Path) -> Config {
         ngrok_domain,
         cloudflare_tunnel_token,
         cloudflare_hostname,
+        toolchain_mode,
         workspaces,
         preview_base_url,
         tmux_detach_others,
@@ -719,6 +754,7 @@ impl Default for Config {
             ngrok_domain: None,
             cloudflare_tunnel_token: None,
             cloudflare_hostname: None,
+            toolchain_mode: ToolchainMode::System,
             workspaces: vec![],
             preview_base_url: None,
             tmux_detach_others: true,

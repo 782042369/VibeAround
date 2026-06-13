@@ -86,7 +86,7 @@ pub struct AgentDetection {
 }
 
 impl AgentDetection {
-    fn system_selected_candidate(&self) -> Option<AgentCandidate> {
+    pub fn system_selected_candidate(&self) -> Option<AgentCandidate> {
         self.system_selected
             .clone()
             .filter(is_system_toolchain_candidate)
@@ -101,6 +101,13 @@ impl AgentDetection {
                     .find(|candidate| is_system_toolchain_candidate(candidate))
                     .cloned()
             })
+    }
+
+    pub fn managed_selected_candidate(&self) -> Option<AgentCandidate> {
+        self.candidates
+            .iter()
+            .find(|candidate| candidate.source == "npm_managed")
+            .cloned()
     }
 }
 
@@ -138,26 +145,24 @@ pub fn read_detected_agents() -> Option<AgentDetectionFile> {
     serde_json::from_str(&contents).ok()
 }
 
-pub fn startkit_candidate_for(agent_id: &str) -> Option<AgentCandidate> {
+pub fn startkit_candidate_for_mode(agent_id: &str, toolchain_mode: &str) -> Option<AgentCandidate> {
     read_detected_agents()?
         .agents
         .get(agent_id)
-        .and_then(|detection| preferred_startkit_candidate(agent_id, detection))
+        .and_then(|detection| preferred_startkit_candidate(agent_id, detection, toolchain_mode))
 }
 
 pub fn preferred_startkit_candidate(
     agent_id: &str,
     detection: &AgentDetection,
+    toolchain_mode: &str,
 ) -> Option<AgentCandidate> {
-    detection.system_selected_candidate().or_else(|| {
-        agent_uses_npm_install(agent_id).then(|| {
-            detection
-                .candidates
-                .iter()
-                .find(|candidate| candidate.source == "npm_managed")
-                .cloned()
-        })?
-    })
+    if toolchain_mode == "managed" {
+        return agent_uses_npm_install(agent_id)
+            .then(|| detection.managed_selected_candidate())
+            .flatten();
+    }
+    detection.system_selected_candidate()
 }
 
 pub fn agent_uses_npm_install(agent_id: &str) -> bool {
@@ -280,6 +285,12 @@ async fn scan_agent(agent_id: &str, spec: &AgentCommandSpec) -> AgentDetection {
     }
 
     for path in system_candidate_paths(&spec.program) {
+        if seen.insert(normalize_path_key(&path)) {
+            paths.push((path, false));
+        }
+    }
+
+    for path in managed_candidate_paths(&spec.program) {
         if seen.insert(normalize_path_key(&path)) {
             paths.push((path, false));
         }
@@ -473,6 +484,10 @@ fn system_candidate_paths(program: &str) -> Vec<PathBuf> {
         paths.extend(program_candidates_in_dir(dir, program));
     }
     paths
+}
+
+fn managed_candidate_paths(program: &str) -> Vec<PathBuf> {
+    program_candidates_in_dir(common::process::env::managed_npm_bin_dir(), program)
 }
 
 fn windows_package_manager_candidate_paths(program: &str) -> Vec<PathBuf> {
@@ -909,7 +924,7 @@ mod tests {
     }
 
     #[test]
-    fn startkit_selection_accepts_managed_candidate_for_npm_agents() {
+    fn managed_startkit_selection_accepts_managed_candidate_for_npm_agents() {
         let managed = test_candidate("/tmp/.vibearound/npm/bin/codex", "npm_managed", 10_000);
         let detection = AgentDetection {
             default_candidate: Some(managed.clone()),
@@ -919,11 +934,12 @@ mod tests {
         };
 
         assert_eq!(
-            preferred_startkit_candidate("codex", &detection)
+            preferred_startkit_candidate("codex", &detection, "managed")
                 .as_ref()
                 .map(|candidate| candidate.path.as_str()),
             Some(managed.path.as_str())
         );
+        assert!(preferred_startkit_candidate("codex", &detection, "system").is_none());
     }
 
     #[test]

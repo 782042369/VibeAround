@@ -16,23 +16,25 @@ if command -v node >/dev/null 2>&1; then
   candidate="$(command -v node)"
 fi
 
-if [ -z "$candidate" ] && [ -x "${STARTKIT_NODE_DIR:-}/bin/node" ]; then
-  candidate="$STARTKIT_NODE_DIR/bin/node"
+if [ -z "$candidate" ]; then
+  printf '{"status":"missing","message":"Node.js %s or newer will be installed on this computer.","actions":["install"]}\n' \
+    "$(json_escape "${STARTKIT_MIN_VERSION:-22.0.0}")"
+  exit 0
 fi
 
-if [ -z "$candidate" ]; then
-  printf '{"status":"missing","message":"Node.js %s or newer will be installed for VibeAround plugins.","actions":["install"]}\n' \
-    "$(json_escape "${STARTKIT_MIN_VERSION:-22.0.0}")"
+if ! command -v npm >/dev/null 2>&1; then
+  printf '{"status":"missing","path":"%s","message":"npm was not found. Install Node.js %s or newer on this computer.","actions":["install"]}\n' \
+    "$(json_escape "$candidate")" "$(json_escape "${STARTKIT_MIN_VERSION:-22.0.0}")"
   exit 0
 fi
 
 version="$("$candidate" --version 2>/dev/null || true)"
 major="$(version_major "$version")"
 if [ -z "$major" ] || [ "$major" -lt "$min_major" ] 2>/dev/null; then
-  printf '{"status":"outdated","version":"%s","path":"%s","message":"Node.js %s is below the required version. VibeAround will install Node.js %s or newer for plugins.","actions":["install"]}\n' \
+  printf '{"status":"outdated","version":"%s","path":"%s","message":"Node.js %s is below the required version. VibeAround will install Node.js %s or newer on this computer.","actions":["install"]}\n' \
     "$(json_escape "$version")" "$(json_escape "$candidate")" "$(json_escape "$version")" "$(json_escape "${STARTKIT_MIN_VERSION:-22.0.0}")"
   exit 0
 fi
 
-printf '{"status":"ok","version":"%s","path":"%s","message":"Node.js is ready","actions":[]}\n' \
+printf '{"status":"ok","version":"%s","path":"%s","message":"Node.js and npm are ready","actions":[]}\n' \
   "$(json_escape "$version")" "$(json_escape "$candidate")"
