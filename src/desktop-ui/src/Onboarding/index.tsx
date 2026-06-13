@@ -95,7 +95,7 @@ export default function Onboarding() {
   );
 
   const [tunnelProvider, setTunnelProvider] =
-    useState<TunnelProvider>("cloudflare");
+    useState<TunnelProvider>("none");
   const [ngrokToken, setNgrokToken] = useState("");
   const [ngrokDomain, setNgrokDomain] = useState("");
   const [cfToken, setCfToken] = useState("");
