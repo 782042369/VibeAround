@@ -112,12 +112,14 @@ fn localtunnel_command(
     tunnel_def: &crate::resources::TunnelDef,
     _config: &crate::config::Config,
 ) -> Result<(String, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
-    let install_dir = crate::plugins::user_plugin_dependency_dir("tunnel-localtunnel");
-    if let Ok(entry) = crate::process::env::resolve_npm_bin_in_dir(&install_dir, "lt") {
-        return Ok((
-            "node".to_string(),
-            vec![entry.to_string_lossy().to_string(), "--port".to_string()],
-        ));
+    if let Some(dependency_id) = tunnel_def.dependency_id.as_deref() {
+        let install_dir = crate::plugins::user_plugin_dependency_dir(dependency_id);
+        if let Ok(entry) = crate::process::env::resolve_npm_bin_in_dir(&install_dir, "lt") {
+            return Ok((
+                "node".to_string(),
+                vec![entry.to_string_lossy().to_string(), "--port".to_string()],
+            ));
+        }
     }
 
     let program = tunnel_def.program.as_deref().unwrap_or("npx").to_string();

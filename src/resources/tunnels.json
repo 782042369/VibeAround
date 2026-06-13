@@ -8,6 +8,7 @@
     "display_name": "Local Tunnel",
     "program": "npx",
     "args": ["localtunnel", "--port"],
+    "dependency_id": "tunnel-localtunnel",
     "spawn_error_hint": "Run VibeAround setup, or install Node/npx on PATH"
   },
   {
@@ -15,6 +16,7 @@
     "display_name": "Cloudflare Tunnel",
     "program": "cloudflared",
     "args": ["tunnel", "run", "--token"],
+    "dependency_id": "tunnel-cloudflare",
     "spawn_error_hint": "Run VibeAround setup, or install cloudflared on PATH",
     "platform_overrides": {
       "windows": {
