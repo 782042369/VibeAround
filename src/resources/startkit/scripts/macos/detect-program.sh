@@ -14,6 +14,9 @@ if [ "${STARTKIT_ITEM_MANAGED:-false}" = "true" ] && [ -n "${STARTKIT_PLUGIN_BIN
   plugin_candidate="${STARTKIT_PLUGIN_BIN_DIR:-}/$program"
   if [ -x "$plugin_candidate" ]; then
     candidate="$plugin_candidate"
+  else
+    printf '{"status":"missing","message":"%s was not found","actions":["install"]}\n' "$(json_escape "$program")"
+    exit 0
   fi
 fi
 

@@ -474,13 +474,31 @@ pub(crate) async fn scan_tunnel_reports(
             settings_key: None,
         }]),
         "localtunnel" => {
-            scan_startkit_item_reports(
-                settings,
-                choices,
-                &["tunnels.localtunnel.package".to_string()],
-                STARTKIT_ITEM_SCAN_TIMEOUT,
-            )
-            .await
+            if choices.toolchain_mode == "managed" {
+                scan_startkit_item_reports(
+                    settings,
+                    choices,
+                    &["tunnels.localtunnel.package".to_string()],
+                    STARTKIT_ITEM_SCAN_TIMEOUT,
+                )
+                .await
+            } else {
+                Ok(vec![StartkitItemReport {
+                    id: "tunnels.localtunnel.system".to_string(),
+                    label: "localtunnel".to_string(),
+                    group: "remote".to_string(),
+                    category: "tunnels".to_string(),
+                    status: StartkitItemStatus::Ok,
+                    severity: None,
+                    version: None,
+                    latest_version: None,
+                    path: None,
+                    message: Some("System npx will be checked during setup".to_string()),
+                    actions: Vec::new(),
+                    secret: false,
+                    settings_key: None,
+                }])
+            }
         }
         _ => {
             let item_id = format!("tunnels.{}.binary", choices.tunnel);
@@ -1607,7 +1625,8 @@ fn apply_startkit_env(
     command.env("STARTKIT_ROOT", &paths.root);
     command.env("STARTKIT_CACHE_DIR", &paths.cache_dir);
     command.env("STARTKIT_SOURCE", &choices.source);
-    let managed_item_active = item_uses_managed_dependency_dir(item);
+    let managed_item_active =
+        item_uses_managed_dependency_dir(item) && choices.toolchain_mode == "managed";
     command.env(
         "STARTKIT_ITEM_MANAGED",
         if managed_item_active { "true" } else { "false" },
@@ -1617,7 +1636,7 @@ fn apply_startkit_env(
     command.env("STARTKIT_NODE_DIST_BASE", &source.node_dist);
     command.env(
         "STARTKIT_CAN_INSTALL",
-        if item.install.is_some() {
+        if item.install.is_some() && (!item.managed || managed_item_active) {
             "true"
         } else {
             "false"
@@ -1825,6 +1844,10 @@ fn should_include(item: &StartkitItem, choices: &StartkitChoices) -> bool {
         "shell_path:true" => choices.shell_path,
         "toolchain:system" => choices.toolchain_mode != "managed",
         "toolchain:managed" => choices.toolchain_mode == "managed",
+        rule if rule.starts_with("managed-tunnel:") => {
+            let tunnel = &rule["managed-tunnel:".len()..];
+            choices.toolchain_mode == "managed" && choices.tunnel == tunnel
+        }
         rule if rule.starts_with("agent:") => {
             let agent = &rule["agent:".len()..];
             choices.agents.iter().any(|id| id == agent)
@@ -2043,13 +2066,13 @@ mod tests {
     }
 
     #[test]
-    fn localtunnel_plan_installs_package_after_node() {
+    fn managed_localtunnel_plan_installs_package_after_node() {
         let item_ids = ids(StartkitChoices {
             agents: Vec::new(),
             tunnel: "localtunnel".to_string(),
             channels: Vec::new(),
             source: "global".to_string(),
-            toolchain_mode: "system".to_string(),
+            toolchain_mode: "managed".to_string(),
             shell_path: false,
         });
 
@@ -2062,6 +2085,21 @@ mod tests {
             .position(|id| id == "tunnels.localtunnel.package")
             .expect("managed localtunnel package is planned");
         assert!(node < package);
+    }
+
+    #[test]
+    fn system_localtunnel_plan_only_checks_node() {
+        let item_ids = ids(StartkitChoices {
+            agents: Vec::new(),
+            tunnel: "localtunnel".to_string(),
+            channels: Vec::new(),
+            source: "global".to_string(),
+            toolchain_mode: "system".to_string(),
+            shell_path: false,
+        });
+
+        assert!(item_ids.contains(&"essentials.node".to_string()));
+        assert!(!item_ids.contains(&"tunnels.localtunnel.package".to_string()));
     }
 
     #[test]

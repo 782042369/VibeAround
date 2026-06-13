@@ -30,7 +30,7 @@ pub async fn start_web_tunnel(
     let tunnel_def = crate::resources::tunnel_by_id("cloudflare")
         .expect("cloudflare tunnel not in tunnels.json");
     let program = tunnel_def.program.as_deref().unwrap_or("cloudflared");
-    let resolved_program = resolve_cloudflared_program(tunnel_def, program);
+    let resolved_program = resolve_cloudflared_program(tunnel_def, program, config)?;
     let base_args: Vec<&str> = tunnel_def
         .args
         .as_ref()
@@ -76,14 +76,22 @@ pub async fn start_web_tunnel(
     Ok((crate::tunnels::TunnelGuard::Process { registry_id }, url))
 }
 
-fn resolve_cloudflared_program(tunnel_def: &crate::resources::TunnelDef, program: &str) -> PathBuf {
-    if let Some(dependency_id) = tunnel_def.dependency_id.as_deref() {
-        let managed = crate::plugins::user_plugin_dependency_bin_path(dependency_id, program);
-        if managed.exists() {
-            return managed;
-        }
+fn resolve_cloudflared_program(
+    tunnel_def: &crate::resources::TunnelDef,
+    program: &str,
+    config: &crate::config::Config,
+) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    if config.toolchain_mode.is_managed() {
+        let dependency_id = tunnel_def
+            .dependency_id
+            .as_deref()
+            .ok_or("cloudflare managed dependency is not configured")?;
+        return Ok(crate::plugins::user_plugin_dependency_bin_path(
+            dependency_id,
+            program,
+        ));
     }
-    PathBuf::from(program)
+    Ok(PathBuf::from(program))
 }
 
 /// Cloudflare backend. Implements TunnelBackend for unified dispatch.

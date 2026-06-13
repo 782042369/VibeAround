@@ -68,7 +68,10 @@ export function tunnelReportMatchesProvider(
     case "cloudflare":
       return report.id === "tunnels.cloudflare.binary";
     case "localtunnel":
-      return report.id === "tunnels.localtunnel.package";
+      return (
+        report.id === "tunnels.localtunnel.package" ||
+        report.id === "tunnels.localtunnel.system"
+      );
     case "ngrok":
       return report.id === "tunnels.ngrok.sdk";
     default:

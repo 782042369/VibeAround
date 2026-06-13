@@ -21,9 +21,12 @@ function ManagedCommand($program) {
 $managed = $env:STARTKIT_ITEM_MANAGED -eq "true"
 if ($managed) {
   $cmd = ManagedCommand $program
+  if (-not $cmd) {
+    Emit @{ status = "missing"; message = "$program was not found"; actions = @("install") }
+    exit 0
+  }
 }
-
-if (-not $cmd) {
+else {
   $cmd = Get-Command $program -ErrorAction SilentlyContinue
 }
 
