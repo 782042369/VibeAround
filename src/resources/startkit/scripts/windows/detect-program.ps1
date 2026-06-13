@@ -6,6 +6,7 @@ function Emit($obj) {
 
 $program = $env:STARTKIT_PROGRAM
 $versionArg = if ($env:STARTKIT_VERSION_ARG) { $env:STARTKIT_VERSION_ARG } else { "--version" }
+$canInstall = $env:STARTKIT_CAN_INSTALL -eq "true"
 $cmd = $null
 
 function ManagedCommand($program) {
@@ -23,7 +24,7 @@ if ((-not $cmd) -and $env:STARTKIT_ITEM_MANAGED -eq "true") {
 }
 
 if (-not $cmd) {
-  if ($env:STARTKIT_ITEM_MANAGED -eq "true") {
+  if ($env:STARTKIT_ITEM_MANAGED -eq "true" -or $canInstall) {
     Emit @{ status = "missing"; message = "$program was not found"; actions = @("install") }
   } else {
     Emit @{ status = "blocked"; message = "Install $program on this computer, then scan again."; actions = @() }

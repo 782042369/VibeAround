@@ -42,10 +42,13 @@ pub fn enriched_env() -> &'static HashMap<String, String> {
 /// Return the environment VibeAround should pass to child processes.
 ///
 /// This is the cached shell environment captured from the user's login shell.
-/// VibeAround-owned helper binaries are resolved explicitly by the callers
-/// that own them instead of being injected into PATH globally.
+/// If Startkit installed a private Node.js runtime for plugin execution, its
+/// bin directory is appended after user paths so the user's own terminal
+/// toolchain still wins.
 pub fn child_env() -> HashMap<String, String> {
-    enriched_env().clone()
+    let mut env = enriched_env().clone();
+    append_private_node_bin_path(&mut env);
+    env
 }
 
 /// Create a `tokio::process::Command` with the enriched environment pre-set.
@@ -127,6 +130,45 @@ fn hide_windows_console_std(_: &mut std::process::Command) {}
 /// dependencies (e.g. `@agentclientprotocol/sdk`, `zod`) are deduped.
 pub fn acp_agents_dir() -> std::path::PathBuf {
     crate::config::data_dir().join("plugins")
+}
+
+pub fn private_node_dir() -> std::path::PathBuf {
+    crate::config::data_dir().join("runtime").join("node")
+}
+
+fn private_node_bin_dir() -> std::path::PathBuf {
+    if cfg!(windows) {
+        private_node_dir()
+    } else {
+        private_node_dir().join("bin")
+    }
+}
+
+fn append_private_node_bin_path(env: &mut HashMap<String, String>) {
+    let candidate = private_node_bin_dir();
+    if !candidate.exists() {
+        return;
+    }
+
+    let sep = path_separator();
+    let current = path_value(env).unwrap_or_default();
+    let mut parts: Vec<String> = current
+        .split(sep)
+        .filter(|part| !part.trim().is_empty())
+        .map(String::from)
+        .collect();
+
+    let value = candidate.to_string_lossy().to_string();
+    let exists = if cfg!(windows) {
+        parts.iter().any(|part| part.eq_ignore_ascii_case(&value))
+    } else {
+        parts.iter().any(|part| part == &value)
+    };
+    if !exists {
+        parts.push(value);
+    }
+
+    set_path_value(env, parts.join(&sep.to_string()));
 }
 
 /// Resolve the JS entry point for a pre-installed npm ACP agent binary.

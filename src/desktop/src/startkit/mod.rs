@@ -314,6 +314,7 @@ struct ScriptOutput {
 pub struct StartkitPaths {
     pub root: PathBuf,
     pub home: PathBuf,
+    pub node_dir: PathBuf,
     pub cache_dir: PathBuf,
 }
 
@@ -322,6 +323,7 @@ impl StartkitPaths {
         let home = common::config::data_dir();
         Self {
             root,
+            node_dir: common::process::env::private_node_dir(),
             cache_dir: home.join("cache").join("startkit"),
             home,
         }
@@ -1278,6 +1280,7 @@ fn apply_startkit_env(
 
     command.env("STARTKIT_HOME", &paths.home);
     command.env("STARTKIT_ROOT", &paths.root);
+    command.env("STARTKIT_NODE_DIR", &paths.node_dir);
     command.env("STARTKIT_CACHE_DIR", &paths.cache_dir);
     command.env("STARTKIT_SOURCE", &choices.source);
     command.env(
@@ -1285,6 +1288,16 @@ fn apply_startkit_env(
         if item.managed { "true" } else { "false" },
     );
     command.env("STARTKIT_NPM_REGISTRY", &source.npm_registry);
+    command.env("STARTKIT_NODE_INDEX_URL", &source.node_index);
+    command.env("STARTKIT_NODE_DIST_BASE", &source.node_dist);
+    command.env(
+        "STARTKIT_CAN_INSTALL",
+        if item.install.is_some() {
+            "true"
+        } else {
+            "false"
+        },
+    );
     command.env("STARTKIT_ITEM_ID", &item.id);
     if let Some(value) = &item.min_version {
         command.env("STARTKIT_MIN_VERSION", value);
@@ -1576,7 +1589,7 @@ mod tests {
             shell_path: false,
         });
 
-        assert!(item_ids.contains(&"essentials.node".to_string()));
+        assert!(!item_ids.contains(&"essentials.node".to_string()));
         assert!(!item_ids.contains(&"essentials.git".to_string()));
         assert!(item_ids.contains(&"agents.codex.cli".to_string()));
         assert!(!item_ids.contains(&"agents.claude.cli".to_string()));

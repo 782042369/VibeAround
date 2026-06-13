@@ -824,6 +824,14 @@ export default function Onboarding() {
           run: () => setActiveStep("configure"),
         };
       }
+      if (hasRunnableInstallWork) {
+        return {
+          label: t("Install selected"),
+          icon: <Download className="h-4 w-4" />,
+          disabled: installReportsRunning,
+          run: () => void startkit.start(finalSettings, choices, installReports),
+        };
+      }
       if (hasBlockingReport || !hasRunnableInstallWork) {
         return {
           label: t("Check again"),
@@ -841,12 +849,6 @@ export default function Onboarding() {
           },
         };
       }
-      return {
-        label: t("Install selected"),
-        icon: <Download className="h-4 w-4" />,
-        disabled: installReportsRunning,
-        run: () => void startkit.start(finalSettings, choices, installReports),
-      };
     }
 
     if (activeStep === "configure") {

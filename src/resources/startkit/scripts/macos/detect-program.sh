@@ -7,6 +7,7 @@ json_escape() {
 
 program="${STARTKIT_PROGRAM:?missing STARTKIT_PROGRAM}"
 version_arg="${STARTKIT_VERSION_ARG:---version}"
+can_install="${STARTKIT_CAN_INSTALL:-false}"
 candidate=""
 
 if command -v "$program" >/dev/null 2>&1; then
@@ -21,7 +22,7 @@ if [ -z "$candidate" ] && [ "${STARTKIT_ITEM_MANAGED:-false}" = "true" ] && [ -n
 fi
 
 if [ -z "$candidate" ]; then
-  if [ "${STARTKIT_ITEM_MANAGED:-false}" = "true" ]; then
+  if [ "${STARTKIT_ITEM_MANAGED:-false}" = "true" ] || [ "$can_install" = "true" ]; then
     printf '{"status":"missing","message":"%s was not found","actions":["install"]}\n' "$(json_escape "$program")"
   else
     printf '{"status":"blocked","message":"Install %s on this computer, then scan again.","actions":[]}\n' "$(json_escape "$program")"
@@ -37,8 +38,13 @@ set -e
 version="$(printf '%s' "$version_output" | head -n 1)"
 
 if [ "$version_status" -ne 0 ] || printf '%s' "$version_output" | grep -Eqi 'xcode-select|developer tools (were )?not found|no developer tools'; then
-  printf '{"status":"blocked","version":"%s","path":"%s","message":"%s is present but not usable. Reinstall it, then scan again.","actions":[]}\n' \
-    "$(json_escape "$version")" "$(json_escape "$path")" "$(json_escape "$program")"
+  if [ "$can_install" = "true" ]; then
+    printf '{"status":"missing","version":"%s","path":"%s","message":"%s is present but Apple Command Line Tools are not installed.","actions":["install"]}\n' \
+      "$(json_escape "$version")" "$(json_escape "$path")" "$(json_escape "$program")"
+  else
+    printf '{"status":"blocked","version":"%s","path":"%s","message":"%s is present but not usable. Install it manually, then scan again.","actions":[]}\n' \
+      "$(json_escape "$version")" "$(json_escape "$path")" "$(json_escape "$program")"
+  fi
   exit 0
 fi
 

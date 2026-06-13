@@ -15,13 +15,18 @@ $cmd = Get-Command node -ErrorAction SilentlyContinue
 if ($cmd) { $candidate = $cmd.Source }
 
 if (-not $candidate) {
-  Emit @{ status = "blocked"; message = "Install Node.js $env:STARTKIT_MIN_VERSION or newer, then scan again."; actions = @() }
+  $privateNode = Join-Path $env:STARTKIT_NODE_DIR "node.exe"
+  if (Test-Path $privateNode) { $candidate = $privateNode }
+}
+
+if (-not $candidate) {
+  Emit @{ status = "missing"; message = "Node.js $env:STARTKIT_MIN_VERSION or newer will be installed for VibeAround plugins."; actions = @("install") }
   exit 0
 }
 
 $version = & $candidate --version 2>$null
 if ((Major $version) -lt $minMajor) {
-  Emit @{ status = "blocked"; version = $version; path = $candidate; message = "Node.js $version is below the required version. Install Node.js $env:STARTKIT_MIN_VERSION or newer, then scan again."; actions = @() }
+  Emit @{ status = "outdated"; version = $version; path = $candidate; message = "Node.js $version is below the required version. VibeAround will install Node.js $env:STARTKIT_MIN_VERSION or newer for plugins."; actions = @("install") }
   exit 0
 }
 
