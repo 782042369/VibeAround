@@ -8,9 +8,6 @@ use ::common::{agent as agent_integrations, profiles, resources};
 use anyhow::{anyhow, Context};
 use profiles::ProfileDef;
 
-#[cfg(not(test))]
-use crate::agent_detection;
-
 use super::common::LaunchPlan;
 use super::{bridge, claude_desktop, codex, codex_desktop};
 
