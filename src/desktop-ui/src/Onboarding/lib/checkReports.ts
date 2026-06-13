@@ -182,7 +182,7 @@ export function tunnelCheckingReport(
   const tunnel = tunnels.find((item) => item.id === tunnelId);
   if (tunnelId === "localtunnel") {
     return {
-      id: "tunnels.localtunnel.system",
+      id: "tunnels.localtunnel.package",
       label: tunnel?.display_name ?? "localtunnel",
       group: "remote",
       category: "tunnels",

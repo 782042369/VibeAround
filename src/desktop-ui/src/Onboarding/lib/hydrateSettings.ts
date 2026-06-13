@@ -88,13 +88,15 @@ export function hydrateTunnel(
     setCfToken: (value: string) => void;
     setCfHostname: (value: string) => void;
   },
+  options: { restoreProvider?: boolean } = {},
 ) {
   const provider = loadedSettings.tunnel?.provider;
   if (
-    provider === "none" ||
-    provider === "cloudflare" ||
-    provider === "ngrok" ||
-    provider === "localtunnel"
+    options.restoreProvider &&
+    (provider === "none" ||
+      provider === "cloudflare" ||
+      provider === "ngrok" ||
+      provider === "localtunnel")
   ) {
     setters.setTunnelProvider(provider);
   }

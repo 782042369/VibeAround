@@ -105,13 +105,19 @@ export function useOnboardingInitialLoad({
             setChannelConfigs,
             setChannelVerbose,
           });
-          hydrateTunnel(loadedSettings, {
-            setTunnelProvider,
-            setNgrokToken,
-            setNgrokDomain,
-            setCfToken,
-            setCfHostname,
-          });
+          hydrateTunnel(
+            loadedSettings,
+            {
+              setTunnelProvider,
+              setNgrokToken,
+              setNgrokDomain,
+              setCfToken,
+              setCfHostname,
+            },
+            {
+              restoreProvider: loadedSettings.onboarded === true,
+            },
+          );
 
           setLoaded(true);
         },
