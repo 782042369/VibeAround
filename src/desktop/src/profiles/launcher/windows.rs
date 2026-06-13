@@ -361,6 +361,10 @@ fn claude_desktop_exe_candidates() -> Vec<PathBuf> {
                 .join("Claude.exe"),
         );
         paths.push(localappdata.join("Claude").join("Claude.exe"));
+        paths.extend(versioned_child_exe_candidates(
+            &localappdata.join("AnthropicClaude"),
+            "Claude.exe",
+        ));
     }
     paths
 }
@@ -376,22 +380,23 @@ fn codex_desktop_exe_candidates() -> Vec<PathBuf> {
                 .join("Codex.exe"),
         );
         paths.push(localappdata.join("OpenAI").join("Codex").join("Codex.exe"));
-        paths.extend(codex_desktop_bin_exe_candidates(
+        paths.extend(versioned_child_exe_candidates(
             &localappdata.join("OpenAI").join("Codex").join("bin"),
+            "codex.exe",
         ));
     }
     paths
 }
 
-fn codex_desktop_bin_exe_candidates(bin_dir: &Path) -> Vec<PathBuf> {
+fn versioned_child_exe_candidates(parent: &Path, exe_name: &str) -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    let Ok(entries) = std::fs::read_dir(bin_dir) else {
+    let Ok(entries) = std::fs::read_dir(parent) else {
         return paths;
     };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            paths.push(path.join("codex.exe"));
+            paths.push(path.join(exe_name));
         }
     }
     paths
@@ -647,7 +652,7 @@ node "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
             .expect("create app fixture");
         std::fs::write(&app_exe, "").expect("write app fixture");
 
-        let paths = codex_desktop_bin_exe_candidates(&codex_bin);
+        let paths = versioned_child_exe_candidates(&codex_bin, "codex.exe");
 
         assert_eq!(paths, vec![app_exe]);
 
