@@ -141,6 +141,14 @@ async fn macos_application_entry(app_name: &str) -> Option<(String, String, Stri
 }
 
 async fn windows_application_entry(app_name: &str) -> Option<(String, String, String)> {
+    if let Some(app_id) = windows_start_app_id(app_name).await {
+        return Some((
+            app_id,
+            "windows_start_apps".to_string(),
+            "Windows Start Apps".to_string(),
+        ));
+    }
+
     if let Some(path) = windows_application_candidate_paths(app_name)
         .into_iter()
         .find(|path| path.is_file())
@@ -152,11 +160,7 @@ async fn windows_application_entry(app_name: &str) -> Option<(String, String, St
         ));
     }
 
-    Some((
-        windows_start_app_id(app_name).await?,
-        "windows_start_apps".to_string(),
-        "Windows Start Apps".to_string(),
-    ))
+    None
 }
 
 fn windows_application_candidate_paths(app_name: &str) -> Vec<PathBuf> {
@@ -192,18 +196,13 @@ fn claude_windows_candidate_paths(localappdata: &Path) -> Vec<PathBuf> {
 }
 
 fn codex_windows_candidate_paths(localappdata: &Path) -> Vec<PathBuf> {
-    let mut paths = vec![
+    vec![
         localappdata
             .join("Programs")
             .join("Codex")
             .join("Codex.exe"),
         localappdata.join("OpenAI").join("Codex").join("Codex.exe"),
-    ];
-    paths.extend(versioned_child_exe_paths(
-        &localappdata.join("OpenAI").join("Codex").join("bin"),
-        "codex.exe",
-    ));
-    paths
+    ]
 }
 
 fn versioned_child_exe_paths(parent: &Path, exe_name: &str) -> Vec<PathBuf> {
@@ -342,22 +341,11 @@ mod tests {
     }
 
     #[test]
-    fn windows_codex_candidates_include_openai_bin_children() {
-        let root = std::env::temp_dir().join(format!(
-            "vibearound-desktop-detect-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let exe = root
-            .join("OpenAI")
-            .join("Codex")
-            .join("bin")
-            .join("f1c7")
-            .join("codex.exe");
-        std::fs::create_dir_all(exe.parent().expect("codex exe parent")).expect("create fixture");
-
-        assert!(codex_windows_candidate_paths(&root).contains(&exe));
-
-        let _ = std::fs::remove_dir_all(root);
+    fn windows_codex_candidates_do_not_include_cli_bin_children() {
+        let root = PathBuf::from(r"C:\Users\tester\AppData\Local");
+        assert!(!codex_windows_candidate_paths(&root)
+            .iter()
+            .any(|path| path.to_string_lossy().contains(r"OpenAI\Codex\bin")));
     }
 
     #[test]

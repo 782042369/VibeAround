@@ -303,11 +303,25 @@ fn normalize_windows_desktop_app_launch(
     }
     let (target, rest) = args.split_first()?;
     let app = windows_desktop_app_kind(target)?;
-    let app_path = executable_path
+    if let Some(app_path) = executable_path
         .filter(|path| path.exists())
         .map(Path::to_path_buf)
-        .or_else(|| find_windows_desktop_app_exe(app))?;
+    {
+        let mut out = Vec::with_capacity(rest.len() + 2);
+        out.push("-FilePath".to_string());
+        out.push(app_path.to_string_lossy().into_owned());
+        out.extend(rest.iter().cloned());
+        return Some(("Start-Process".to_string(), out));
+    }
 
+    if let Some(app_id) = windows_start_app_id(app) {
+        let mut out = Vec::with_capacity(rest.len() + 1);
+        out.push(format!(r"shell:AppsFolder\{app_id}"));
+        out.extend(rest.iter().cloned());
+        return Some(("explorer.exe".to_string(), out));
+    }
+
+    let app_path = find_windows_desktop_app_exe(app)?;
     let mut out = Vec::with_capacity(rest.len() + 2);
     out.push("-FilePath".to_string());
     out.push(app_path.to_string_lossy().into_owned());
@@ -329,6 +343,29 @@ fn windows_desktop_app_kind(target: &str) -> Option<WindowsDesktopApp> {
     } else {
         None
     }
+}
+
+fn windows_start_app_id(app: WindowsDesktopApp) -> Option<String> {
+    let app_name = match app {
+        WindowsDesktopApp::Claude => "Claude",
+        WindowsDesktopApp::Codex => "Codex",
+    };
+    let script = format!(
+        "$app = Get-StartApps -Name {} | Select-Object -First 1; if ($app) {{ $app.AppID }}",
+        powershell_single_quoted(app_name)
+    );
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_string)
 }
 
 fn find_windows_desktop_app_exe(app: WindowsDesktopApp) -> Option<PathBuf> {
@@ -380,10 +417,6 @@ fn codex_desktop_exe_candidates() -> Vec<PathBuf> {
                 .join("Codex.exe"),
         );
         paths.push(localappdata.join("OpenAI").join("Codex").join("Codex.exe"));
-        paths.extend(versioned_child_exe_candidates(
-            &localappdata.join("OpenAI").join("Codex").join("bin"),
-            "codex.exe",
-        ));
     }
     paths
 }
@@ -639,22 +672,6 @@ node "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
                 "acceptEdits".to_string()
             ]
         );
-
-        std::fs::remove_dir_all(root).ok();
-    }
-
-    #[test]
-    fn desktop_launch_resolution_ignores_cli_shims() {
-        let root = std::env::temp_dir().join(format!("VibeAround Test {}", uuid::Uuid::new_v4()));
-        let codex_bin = root.join("bin");
-        let app_exe = codex_bin.join("26.1.0").join("codex.exe");
-        std::fs::create_dir_all(app_exe.parent().expect("codex app parent"))
-            .expect("create app fixture");
-        std::fs::write(&app_exe, "").expect("write app fixture");
-
-        let paths = versioned_child_exe_candidates(&codex_bin, "codex.exe");
-
-        assert_eq!(paths, vec![app_exe]);
 
         std::fs::remove_dir_all(root).ok();
     }
