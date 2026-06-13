@@ -10,7 +10,7 @@
 //! so only well-known PATH directories are appended as a safety net.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::OnceLock;
 
 #[cfg(windows)]
@@ -209,7 +209,7 @@ fn ensure_user_path_dir_inner(path: &Path) -> anyhow::Result<()> {
 }
 
 #[cfg(unix)]
-fn user_shell_profile_path() -> PathBuf {
+fn user_shell_profile_path() -> std::path::PathBuf {
     let home = crate::config::home_dir();
     let shell = std::env::var("SHELL").unwrap_or_default();
     if shell.contains("zsh") {
