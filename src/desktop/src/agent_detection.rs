@@ -10,6 +10,7 @@ use tokio::task::JoinSet;
 const AGENT_SOURCES_TOML: &str = include_str!("../../resources/agent-sources.toml");
 const DETECTION_SCHEMA_VERSION: u32 = 1;
 const VERSION_CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+const NON_PATH_CANDIDATE_RANK_BASE: u32 = 5_000;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AgentSourceCatalog {
@@ -89,18 +90,8 @@ impl AgentDetection {
     pub fn system_selected_candidate(&self) -> Option<AgentCandidate> {
         self.system_selected
             .clone()
-            .filter(is_system_toolchain_candidate)
-            .or_else(|| {
-                self.legacy_selected
-                    .clone()
-                    .filter(is_system_toolchain_candidate)
-            })
-            .or_else(|| {
-                self.candidates
-                    .iter()
-                    .find(|candidate| is_system_toolchain_candidate(candidate))
-                    .cloned()
-            })
+            .filter(is_system_path_candidate)
+            .or_else(|| self.legacy_selected.clone().filter(is_system_path_candidate))
     }
 
     pub fn managed_selected_candidate(&self) -> Option<AgentCandidate> {
@@ -112,7 +103,11 @@ impl AgentDetection {
 }
 
 fn is_system_toolchain_candidate(candidate: &AgentCandidate) -> bool {
-    candidate.source != "npm_managed"
+    !matches!(candidate.source.as_str(), "npm_managed" | "app_bundled")
+}
+
+fn is_system_path_candidate(candidate: &AgentCandidate) -> bool {
+    is_system_toolchain_candidate(candidate) && candidate.rank < NON_PATH_CANDIDATE_RANK_BASE
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -325,7 +320,7 @@ async fn scan_agent(agent_id: &str, spec: &AgentCommandSpec) -> AgentDetection {
     candidates.sort_by_key(|candidate| candidate.rank);
     let system_selected = candidates
         .iter()
-        .find(|candidate| is_system_toolchain_candidate(candidate))
+        .find(|candidate| is_system_path_candidate(candidate))
         .cloned();
     let default_candidate = system_selected.clone();
     AgentDetection {
@@ -679,7 +674,7 @@ fn classify_source(path: &Path, realpath: Option<&str>) -> String {
     if real.contains("/Caskroom/") || real.contains("\\Caskroom\\") {
         return "homebrew_cask".to_string();
     }
-    if path_str.contains("Codex.app") || real.contains("Codex.app") {
+    if is_app_bundle_path(&path_str) || is_app_bundle_path(real) {
         return "app_bundled".to_string();
     }
     if real.contains("/lib/node_modules/") || real.contains("\\node_modules\\") {
@@ -689,6 +684,13 @@ fn classify_source(path: &Path, realpath: Option<&str>) -> String {
         return "native".to_string();
     }
     "path".to_string()
+}
+
+fn is_app_bundle_path(path: &str) -> bool {
+    if cfg!(target_os = "macos") {
+        return path.contains(".app/Contents/");
+    }
+    path.contains(".app\\Contents\\")
 }
 
 fn package_for_source(spec: &AgentCommandSpec, source: &str) -> Option<String> {
@@ -753,7 +755,7 @@ fn candidate_rank(index: usize, from_user_shell: bool, source: &str) -> u32 {
     match source {
         "npm_managed" => 10_000 + index as u32,
         "app_bundled" => 20_000 + index as u32,
-        _ => 5_000 + index as u32,
+        _ => NON_PATH_CANDIDATE_RANK_BASE + index as u32,
     }
 }
 
@@ -950,12 +952,12 @@ mod tests {
     }
 
     #[test]
-    fn system_selection_ignores_legacy_managed_candidates() {
+    fn system_selection_uses_selected_path_and_ignores_unselected_candidates() {
         let system = test_candidate("/usr/local/bin/codex", "npm_global", 0);
         let managed = test_candidate("/tmp/.vibearound/npm/bin/codex", "npm_managed", 10_000);
         let detection = AgentDetection {
             default_candidate: Some(managed.clone()),
-            system_selected: Some(managed.clone()),
+            system_selected: Some(system.clone()),
             legacy_selected: None,
             candidates: vec![managed.clone(), system.clone()],
         };
@@ -972,9 +974,53 @@ mod tests {
             default_candidate: Some(managed.clone()),
             system_selected: Some(managed.clone()),
             legacy_selected: None,
-            candidates: vec![managed],
+            candidates: vec![managed.clone(), system.clone()],
         };
         assert!(managed_only.system_selected_candidate().is_none());
+
+        let legacy_selected = AgentDetection {
+            default_candidate: None,
+            system_selected: None,
+            legacy_selected: Some(system.clone()),
+            candidates: vec![system, managed],
+        };
+        assert!(legacy_selected.system_selected_candidate().is_some());
+    }
+
+    #[test]
+    fn system_selection_only_accepts_user_path_candidates() {
+        let npm_global_not_on_path = test_candidate("/opt/homebrew/bin/codex", "npm_global", 5_000);
+        let app_bundled = test_candidate(
+            "/Applications/Codex.app/Contents/Resources/codex",
+            "app_bundled",
+            20_000,
+        );
+        let detection = AgentDetection {
+            default_candidate: Some(app_bundled.clone()),
+            system_selected: Some(app_bundled.clone()),
+            legacy_selected: None,
+            candidates: vec![app_bundled, npm_global_not_on_path],
+        };
+
+        assert!(detection.system_selected_candidate().is_none());
+        assert!(preferred_startkit_candidate("codex", &detection, "system").is_none());
+    }
+
+    #[test]
+    fn app_bundle_paths_are_not_system_toolchain_candidates() {
+        let candidate = test_candidate(
+            "/Applications/Claude.app/Contents/Resources/claude",
+            "app_bundled",
+            0,
+        );
+        assert!(!is_system_toolchain_candidate(&candidate));
+        assert_eq!(
+            classify_source(
+                Path::new("/usr/local/bin/claude"),
+                Some("/Applications/Claude.app/Contents/Resources/claude"),
+            ),
+            "app_bundled"
+        );
     }
 
     fn test_candidate(path: &str, source: &str, rank: u32) -> AgentCandidate {

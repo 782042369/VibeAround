@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { openExternalUrl } from "@/lib/api";
 
 import type { StartkitItemReport, StartkitStatus } from "../types";
 
@@ -72,7 +73,7 @@ export function StartkitReportRow({
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] text-foreground hover:bg-muted"
-                  onClick={() => window.open(report.manualUrl, "_blank", "noopener,noreferrer")}
+                  onClick={() => void openExternalUrl(report.manualUrl!)}
                   title={report.manualUrl}
                 >
                   <ExternalLink className="h-3 w-3" />

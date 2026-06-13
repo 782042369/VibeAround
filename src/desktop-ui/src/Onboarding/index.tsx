@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 import {
   OnboardingFooter,
+  type FooterAction,
   type PrimaryAction,
 } from "./components/OnboardingFooter";
 import { OnboardingStepContent } from "./components/OnboardingStepContent";
@@ -761,6 +762,15 @@ export default function Onboarding() {
     }
   }, [activeStep]);
 
+  const rerunInstallScan = useCallback(() => {
+    checkedInstallScanSignaturesRef.current.clear();
+    checkedAgentLocalSignaturesRef.current.clear();
+    checkedTunnelSignaturesRef.current.clear();
+    setAgentInstallReports([]);
+    setTunnelReports([]);
+    void startkit.scan(finalSettings, choices);
+  }, [choices, finalSettings, startkit]);
+
   const primaryAction = useMemo<PrimaryAction>(() => {
     if (activeStep === "install") {
       if (startkit.running) {
@@ -788,18 +798,19 @@ export default function Onboarding() {
         };
       }
       if (hasBlockingReport) {
+        if (hasRunnableInstallWork) {
+          return {
+            label: t("Install anyway"),
+            icon: <Download className="h-4 w-4" />,
+            disabled: installReportsRunning,
+            run: () => void startkit.start(finalSettings, choices, installReports),
+          };
+        }
         return {
           label: t("Check again"),
           icon: <RefreshCw className="h-4 w-4" />,
           disabled: !hasScanned,
-          run: () => {
-            checkedInstallScanSignaturesRef.current.clear();
-            checkedAgentLocalSignaturesRef.current.clear();
-            checkedTunnelSignaturesRef.current.clear();
-            setAgentInstallReports([]);
-            setTunnelReports([]);
-            void startkit.scan(finalSettings, choices);
-          },
+          run: rerunInstallScan,
         };
       }
       if (hasRunnableInstallWork) {
@@ -815,14 +826,7 @@ export default function Onboarding() {
           label: t("Check again"),
           icon: <RefreshCw className="h-4 w-4" />,
           disabled: !hasScanned,
-          run: () => {
-            checkedInstallScanSignaturesRef.current.clear();
-            checkedAgentLocalSignaturesRef.current.clear();
-            checkedTunnelSignaturesRef.current.clear();
-            setAgentInstallReports([]);
-            setTunnelReports([]);
-            void startkit.scan(finalSettings, choices);
-          },
+          run: rerunInstallScan,
         };
       }
     }
@@ -861,7 +865,37 @@ export default function Onboarding() {
     installReports,
     installReportsRunning,
     enabledAgents,
+    rerunInstallScan,
     startkit,
+    t,
+  ]);
+
+  const secondaryAction = useMemo<FooterAction | null>(() => {
+    if (
+      activeStep !== "install" ||
+      startkit.running ||
+      installReportsRunning ||
+      canContinueFromInstall ||
+      !hasBlockingReport ||
+      !hasRunnableInstallWork
+    ) {
+      return null;
+    }
+    return {
+      label: t("Check again"),
+      icon: <RefreshCw className="h-4 w-4" />,
+      disabled: !hasScanned,
+      run: rerunInstallScan,
+    };
+  }, [
+    activeStep,
+    canContinueFromInstall,
+    hasBlockingReport,
+    hasRunnableInstallWork,
+    hasScanned,
+    installReportsRunning,
+    rerunInstallScan,
+    startkit.running,
     t,
   ]);
 
@@ -966,6 +1000,7 @@ export default function Onboarding() {
         running={startkit.running}
         finishing={finishing}
         primaryAction={primaryAction}
+        secondaryAction={secondaryAction}
         onBack={goBack}
         onSkip={skipStep}
         onCancel={() => void startkit.cancel()}

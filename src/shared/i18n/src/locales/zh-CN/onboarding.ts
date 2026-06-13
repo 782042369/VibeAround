@@ -235,6 +235,7 @@ export const zhCNOnboarding: Record<string, string> = {
   "Installing...": "安装中...",
   "Checking...": "检测中...",
   "Install selected": "开始安装",
+  "Install anyway": "仍然安装",
   "Launching...": "启动中...",
   "Launch VibeAround": "启动 VibeAround",
   Continue: "继续",
