@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use common::agent_state;
 use common::profiles::{normalize_legacy_profile_and_persist, schema};
 use common::{config, resources};
+use serde::Serialize;
 use tauri::Emitter;
 
 use self::connections::{
@@ -40,6 +41,38 @@ pub use workspace::WorkspaceOption;
 // ---------------------------------------------------------------------------
 // View types — sanitized for the frontend.
 // ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentExecutableCandidateView {
+    pub path: String,
+    pub realpath: Option<String>,
+    pub version: Option<String>,
+    pub latest_version: Option<String>,
+    pub update_available: Option<bool>,
+    pub source: String,
+    pub source_label: String,
+    pub rank: u32,
+    pub selected: bool,
+    pub update_command: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentExecutableResolution {
+    pub agent_id: String,
+    pub configured_path: Option<String>,
+    pub selected: Option<AgentExecutableCandidateView>,
+    pub candidates: Vec<AgentExecutableCandidateView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentExecutableLatestView {
+    pub path: String,
+    pub latest_version: Option<String>,
+    pub update_available: Option<bool>,
+}
 
 // ---------------------------------------------------------------------------
 // Tauri commands
@@ -129,6 +162,169 @@ pub async fn launcher_get_preferences() -> Result<LauncherPreferences, String> {
     tauri::async_runtime::spawn_blocking(launcher_preferences)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn launcher_agent_executable_resolution(
+    agent_id: String,
+) -> Result<AgentExecutableResolution, String> {
+    let agent_id = resources::agent_by_alias(&agent_id)
+        .map(|def| def.id.clone())
+        .ok_or_else(|| format!("unknown agent: '{agent_id}'"))?;
+    let detection = common::agent_detection::scan_agent_and_persist(&agent_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let configured = common::agent_detection::configured_candidate_with_version(&agent_id).await;
+    let mode = config::ensure_loaded().toolchain_mode.as_str();
+    let selected = configured.clone().or_else(|| {
+        common::agent_detection::preferred_startkit_candidate(&agent_id, &detection, mode)
+    });
+    let configured_path =
+        agent_state::resolve_agent_executable_path(&agent_state::read_prefs(), &agent_id)
+            .map(|path| path.to_string_lossy().to_string());
+
+    let mut candidates = Vec::new();
+    if let Some(candidate) = configured {
+        candidates.push(candidate);
+    }
+    candidates.extend(detection.candidates);
+
+    let selected_key = selected.as_ref().map(candidate_key);
+    let mut candidate_views = Vec::new();
+    for candidate in dedupe_agent_candidates(candidates) {
+        let selected = selected_key
+            .as_deref()
+            .is_some_and(|key| key == candidate_key(&candidate));
+        candidate_views.push(candidate_view(&agent_id, candidate, selected));
+    }
+    let selected = match selected {
+        Some(candidate) => Some(candidate_view(&agent_id, candidate, true)),
+        None => None,
+    };
+
+    Ok(AgentExecutableResolution {
+        agent_id: agent_id.clone(),
+        configured_path,
+        selected,
+        candidates: candidate_views,
+    })
+}
+
+#[tauri::command]
+pub async fn launcher_agent_executable_latest(
+    agent_id: String,
+    executable_path: String,
+) -> Result<AgentExecutableLatestView, String> {
+    let agent_id = resources::agent_by_alias(&agent_id)
+        .map(|def| def.id.clone())
+        .ok_or_else(|| format!("unknown agent: '{agent_id}'"))?;
+    let path = PathBuf::from(executable_path.trim());
+    if !path.is_file() {
+        return Err(format!("executable path is not a file: {}", path.display()));
+    }
+
+    let detected_candidate = common::agent_detection::read_detected_agents().and_then(|detected| {
+        detected
+            .agents
+            .get(&agent_id)
+            .and_then(|detection| common::agent_detection::candidate_for_path(detection, &path))
+    });
+    let candidate = if let Some(candidate) = detected_candidate {
+        candidate
+    } else {
+        common::agent_detection::manual_candidate_with_version(&agent_id, path.clone())
+            .await
+            .map_err(|error| error.to_string())?
+    };
+    let latest_version =
+        common::agent_detection::latest_version_for_candidate(&agent_id, &candidate).await;
+    let update_available =
+        common::agent_detection::candidate_update_available(&candidate, latest_version.as_deref());
+
+    Ok(AgentExecutableLatestView {
+        path: path.to_string_lossy().to_string(),
+        latest_version,
+        update_available,
+    })
+}
+
+#[tauri::command]
+pub async fn launcher_update_agent(
+    agent_id: String,
+    executable_path: Option<String>,
+) -> Result<(), String> {
+    let agent_id = resources::agent_by_alias(&agent_id)
+        .map(|def| def.id.clone())
+        .ok_or_else(|| format!("unknown agent: '{agent_id}'"))?;
+    let detection = common::agent_detection::scan_agent_and_persist(&agent_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let candidate = if let Some(path) = executable_path {
+        let path = PathBuf::from(path.trim());
+        if !path.is_file() {
+            return Err(format!("executable path is not a file: {}", path.display()));
+        }
+        if let Some(candidate) = common::agent_detection::candidate_for_path(&detection, &path) {
+            candidate
+        } else {
+            common::agent_detection::manual_candidate_with_version(&agent_id, path)
+                .await
+                .map_err(|error| error.to_string())?
+        }
+    } else {
+        common::agent_detection::selected_candidate(&agent_id)
+            .or_else(|| {
+                common::agent_detection::startkit_candidate_for_mode(
+                    &agent_id,
+                    config::ensure_loaded().toolchain_mode.as_str(),
+                )
+            })
+            .ok_or_else(|| format!("no selected executable for '{agent_id}'"))?
+    };
+    let command =
+        common::agent_detection::source_command_template(&agent_id, &candidate.source, "upgrade")
+            .or_else(|| {
+                common::agent_detection::source_command_template(
+                    &agent_id,
+                    &candidate.source,
+                    "install",
+                )
+            })
+            .ok_or_else(|| format!("no update command for {}", candidate.source_label))?;
+
+    let output = if cfg!(windows) {
+        common::process::env::command("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &command,
+            ])
+            .output()
+            .await
+    } else {
+        common::process::env::command("sh")
+            .args(["-lc", &command])
+            .output()
+            .await
+    }
+    .map_err(|error| error.to_string())?;
+
+    if output.status.success() {
+        let _ = common::agent_detection::scan_agent_and_persist(&agent_id).await;
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Err(stderr
+            .lines()
+            .chain(stdout.lines())
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or("agent update failed")
+            .to_string())
+    }
 }
 
 #[tauri::command]
@@ -230,28 +426,126 @@ pub fn launcher_set_agent_launch_args(
 }
 
 #[tauri::command]
-pub fn launcher_set_agent_executable_path(
+pub async fn launcher_set_agent_executable_path(
     app: tauri::AppHandle,
     agent_id: String,
     executable_path: Option<String>,
 ) -> Result<(), String> {
-    let agent_id = resources::agent_by_alias(&agent_id)
-        .map(|def| def.id.clone())
+    let agent = resources::agent_by_alias(&agent_id)
+        .cloned()
         .ok_or_else(|| format!("unknown agent: '{agent_id}'"))?;
-    let executable_path = match executable_path {
+    let agent_id = agent.id.clone();
+    let executable = match executable_path {
         Some(path) => {
             let path = PathBuf::from(path.trim());
-            if !path.is_file() {
-                return Err(format!("executable path is not a file: {}", path.display()));
+            if agent.direct_only {
+                if !is_valid_direct_only_executable_path(&agent_id, &path) {
+                    return Err(format!(
+                        "agent path is not a valid {}: {}",
+                        direct_only_executable_path_label(),
+                        path.display()
+                    ));
+                }
+                Some(direct_only_executable_preference(&agent_id, path))
+            } else {
+                if !path.is_file() {
+                    return Err(format!("executable path is not a file: {}", path.display()));
+                }
+                let detected_candidate =
+                    common::agent_detection::read_detected_agents().and_then(|detected| {
+                        detected.agents.get(&agent_id).and_then(|detection| {
+                            common::agent_detection::candidate_for_path(detection, &path)
+                        })
+                    });
+                let candidate = if let Some(candidate) = detected_candidate {
+                    candidate
+                } else {
+                    common::agent_detection::manual_candidate_with_version(&agent_id, path.clone())
+                        .await
+                        .map_err(|e| e.to_string())?
+                };
+                Some(
+                    common::agent_detection::executable_preference_from_candidate_path(
+                        &candidate, &path,
+                    ),
+                )
             }
-            Some(path)
         }
         None => None,
     };
-    agent_state::write_agent_executable_path(&agent_id, executable_path)
-        .map_err(|e| e.to_string())?;
+    agent_state::write_agent_executable(&agent_id, executable).map_err(|e| e.to_string())?;
     emit_launch_config_changed(&app);
     Ok(())
+}
+
+fn is_valid_direct_only_executable_path(agent_id: &str, path: &std::path::Path) -> bool {
+    if cfg!(target_os = "macos") {
+        path.is_dir() || path.is_file()
+    } else if cfg!(target_os = "windows") {
+        path.is_file() || matches_detected_windows_start_app(agent_id, path)
+    } else {
+        path.is_file()
+    }
+}
+
+fn direct_only_executable_path_label() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "app bundle or executable"
+    } else if cfg!(target_os = "windows") {
+        "executable file or Start app ID"
+    } else {
+        "executable file"
+    }
+}
+
+fn matches_detected_windows_start_app(agent_id: &str, path: &std::path::Path) -> bool {
+    if !cfg!(target_os = "windows") {
+        return false;
+    }
+    let Some(detected) = crate::desktop_detection::read_detected_desktop_apps() else {
+        return false;
+    };
+    detected
+        .apps
+        .get(agent_id)
+        .and_then(|detection| detection.entry.as_ref())
+        .is_some_and(|entry| {
+            entry.source == "windows_start_apps"
+                && path.to_string_lossy().eq_ignore_ascii_case(&entry.path)
+        })
+}
+
+fn direct_only_executable_preference(
+    agent_id: &str,
+    path: PathBuf,
+) -> agent_state::AgentExecutablePreference {
+    let realpath = path.canonicalize().ok();
+    let mut preference = agent_state::AgentExecutablePreference::manual(path.clone());
+    preference.realpath = realpath;
+
+    let Some(detected) = crate::desktop_detection::read_detected_desktop_apps() else {
+        return preference;
+    };
+    let Some(entry) = detected
+        .apps
+        .get(agent_id)
+        .and_then(|detection| detection.entry.as_ref())
+    else {
+        return preference;
+    };
+    let detected_path = PathBuf::from(&entry.path);
+    let detected_realpath = detected_path.canonicalize().ok();
+    if path == detected_path
+        || preference
+            .realpath
+            .as_ref()
+            .zip(detected_realpath.as_ref())
+            .is_some_and(|(left, right)| left == right)
+    {
+        preference.source = entry.source.clone();
+        preference.source_label = entry.source_label.clone();
+    }
+    preference
 }
 
 #[tauri::command]
@@ -372,6 +666,54 @@ fn sanitize_arg_list(kind: &str, args: Vec<String>) -> Result<Vec<String>, Strin
         out.push(arg);
     }
     Ok(out)
+}
+
+fn dedupe_agent_candidates(
+    candidates: Vec<common::agent_detection::AgentCandidate>,
+) -> Vec<common::agent_detection::AgentCandidate> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut deduped = Vec::new();
+    for candidate in candidates {
+        if seen.insert(candidate_key(&candidate)) {
+            deduped.push(candidate);
+        }
+    }
+    deduped
+}
+
+fn candidate_key(candidate: &common::agent_detection::AgentCandidate) -> String {
+    candidate
+        .realpath
+        .clone()
+        .unwrap_or_else(|| candidate.path.clone())
+}
+
+fn candidate_view(
+    agent_id: &str,
+    candidate: common::agent_detection::AgentCandidate,
+    selected: bool,
+) -> AgentExecutableCandidateView {
+    let update_command =
+        common::agent_detection::source_command_template(agent_id, &candidate.source, "upgrade")
+            .or_else(|| {
+                common::agent_detection::source_command_template(
+                    agent_id,
+                    &candidate.source,
+                    "install",
+                )
+            });
+    AgentExecutableCandidateView {
+        path: candidate.path,
+        realpath: candidate.realpath,
+        version: candidate.version,
+        latest_version: None,
+        update_available: None,
+        update_command,
+        source: candidate.source,
+        source_label: candidate.source_label,
+        rank: candidate.rank,
+        selected,
+    }
 }
 
 pub(super) fn resolve_launch_workspace(agent_id: &str) -> anyhow::Result<PathBuf> {
