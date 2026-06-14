@@ -26,6 +26,7 @@ interface Props {
   preference?: AgentLaunchPreference;
   executableResolution?: AgentExecutableResolution | null;
   executableLoading?: boolean;
+  fallbackExecutablePath?: string | null;
   busy: boolean;
   onClose: () => void;
   onSaveExecutablePath: (path: string | null) => Promise<void>;
@@ -59,13 +60,14 @@ function detectClientOs(): ClientOs {
 function configuredPath(
   preference?: AgentLaunchPreference,
   resolution?: AgentExecutableResolution | null,
+  fallbackPath = "",
 ): string {
   return (
     resolution?.configuredPath ??
     resolution?.selected?.path ??
     preference?.executable?.path ??
     preference?.executablePath ??
-    ""
+    fallbackPath
   );
 }
 
@@ -114,6 +116,7 @@ export function AgentExecutablePathDialog({
   preference,
   executableResolution,
   executableLoading = false,
+  fallbackExecutablePath,
   busy,
   onClose,
   onSaveExecutablePath,
@@ -123,8 +126,13 @@ export function AgentExecutablePathDialog({
 }: Props) {
   const { t } = useI18n();
   const initialPath = useMemo(
-    () => configuredPath(preference, executableResolution),
-    [preference, executableResolution],
+    () =>
+      configuredPath(
+        preference,
+        executableResolution,
+        fallbackExecutablePath ?? "",
+      ),
+    [preference, executableResolution, fallbackExecutablePath],
   );
   const [executablePath, setExecutablePath] = useState(initialPath);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -266,14 +274,15 @@ export function AgentExecutablePathDialog({
   }
 
   async function chooseExecutable() {
+    const chooseMacAppBundle = isDesktopApp && clientOs === "macos";
     const selected = await open({
-      directory: false,
+      directory: chooseMacAppBundle,
       multiple: false,
       title: isDesktopApp
         ? t("Choose desktop app executable")
         : t("Choose agent executable"),
       filters:
-        clientOs === "windows"
+        !chooseMacAppBundle && clientOs === "windows"
           ? [{ name: "Executable", extensions: ["exe"] }]
           : undefined,
     });
@@ -446,7 +455,7 @@ export function AgentExecutablePathDialog({
                     clientOs === "windows"
                       ? "C:\\Path\\To\\Agent.exe"
                       : isDesktopApp
-                        ? "/Applications/App.app/Contents/MacOS/App"
+                        ? "/Applications/App.app"
                         : "/opt/homebrew/bin/agent"
                   }
                   className="!h-8 min-h-8 max-h-8 font-mono !text-[11px] leading-4 placeholder:!text-[11px] md:!text-[11px] [font-variant-ligatures:none]"

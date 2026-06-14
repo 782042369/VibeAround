@@ -4,6 +4,9 @@
 //! the final plan, which keeps terminal-specific code away from profile,
 //! bridge, and resume routing decisions.
 
+#[cfg(not(test))]
+use std::borrow::Cow;
+
 use ::common::{agent as agent_integrations, profiles, resources};
 use anyhow::{anyhow, Context};
 use profiles::ProfileDef;
@@ -118,14 +121,15 @@ impl<'a> LaunchPlanBuilder<'a> {
             }
             return Ok(LaunchPlan {
                 env: Vec::new(),
-                command: launch_command_for_agent(
+                command: direct_launch_command_for_agent(
                     agent_id,
+                    &agent,
                     agent.pty_command_for_current_platform(),
                 ),
                 args: terminal_launch_args_for_agent(agent_id),
                 window_label: format!("{} (direct)", agent.display_name),
                 workspace,
-                macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+                macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
                 windows_process_probe: windows_process_probe_for_direct_agent(&agent),
                 windows_executable_path: windows_executable_path_for_agent(agent_id),
             });
@@ -136,11 +140,11 @@ impl<'a> LaunchPlanBuilder<'a> {
         args.extend(resume_args);
         Ok(LaunchPlan {
             env: Vec::new(),
-            command: launch_command_for_agent(agent_id, &command),
+            command: direct_launch_command_for_agent(agent_id, &agent, &command),
             args,
             window_label: format!("{} (resume)", agent.display_name),
             workspace,
-            macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+            macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
             windows_process_probe: windows_process_probe_for_direct_agent(&agent),
             windows_executable_path: windows_executable_path_for_agent(agent_id),
         })
@@ -167,14 +171,15 @@ impl<'a> LaunchPlanBuilder<'a> {
                 .with_context(|| format!("prepare Codex Desktop profile '{}'", profile.id))?;
             return Ok(LaunchPlan {
                 env,
-                command: launch_command_for_agent(
+                command: direct_launch_command_for_agent(
                     agent_id,
+                    &agent,
                     agent.pty_command_for_current_platform(),
                 ),
                 args,
                 window_label: profile.label.clone(),
                 workspace,
-                macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+                macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
                 windows_process_probe: windows_process_probe_for_direct_agent(&agent),
                 windows_executable_path: windows_executable_path_for_agent(agent_id),
             });
@@ -185,14 +190,15 @@ impl<'a> LaunchPlanBuilder<'a> {
                 .with_context(|| format!("prepare Claude Desktop profile '{}'", profile.id))?;
             return Ok(LaunchPlan {
                 env: Vec::new(),
-                command: launch_command_for_agent(
+                command: direct_launch_command_for_agent(
                     agent_id,
+                    &agent,
                     agent.pty_command_for_current_platform(),
                 ),
                 args: Vec::new(),
                 window_label: profile.label.clone(),
                 workspace,
-                macos_app_probe: macos_app_probe_for_direct_agent(&agent),
+                macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
                 windows_process_probe: windows_process_probe_for_direct_agent(&agent),
                 windows_executable_path: windows_executable_path_for_agent(agent_id),
             });
@@ -247,11 +253,12 @@ impl<'a> LaunchPlanBuilder<'a> {
     }
 }
 
-fn macos_app_probe_for_direct_agent(agent: &resources::AgentDef) -> Option<String> {
+fn macos_app_probe_for_direct_agent(agent_id: &str, agent: &resources::AgentDef) -> Option<String> {
     if !cfg!(target_os = "macos") || !agent.direct_only {
         return None;
     }
-    open_app_name(agent.pty_command_for_current_platform())
+    macos_configured_app_name(agent_id)
+        .or_else(|| open_app_name(agent.pty_command_for_current_platform()))
 }
 
 fn open_app_name(command: &str) -> Option<String> {
@@ -270,12 +277,72 @@ fn windows_process_probe_for_direct_agent(agent: &resources::AgentDef) -> Option
     start_process_name(agent.pty_command_for_current_platform())
 }
 
+#[cfg(not(test))]
 fn windows_executable_path_for_agent(agent_id: &str) -> Option<std::path::PathBuf> {
     if !cfg!(target_os = "windows") {
         return None;
     }
     let prefs = ::common::agent_state::read_prefs();
     ::common::agent_state::resolve_agent_executable_path(&prefs, agent_id)
+}
+
+#[cfg(test)]
+fn windows_executable_path_for_agent(_agent_id: &str) -> Option<std::path::PathBuf> {
+    None
+}
+
+fn direct_launch_command_for_agent(
+    agent_id: &str,
+    agent: &resources::AgentDef,
+    fallback_command: &str,
+) -> String {
+    if agent.direct_only {
+        if let Some(command) = macos_configured_app_launch_command(agent_id) {
+            return command;
+        }
+    }
+    launch_command_for_agent(agent_id, fallback_command)
+}
+
+#[cfg(not(test))]
+fn macos_configured_app_launch_command(agent_id: &str) -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let prefs = ::common::agent_state::read_prefs();
+    let path = ::common::agent_state::resolve_agent_executable_path(&prefs, agent_id)?;
+    if !path.exists() {
+        return None;
+    }
+    let path = path.to_string_lossy();
+    let escaped = shell_escape::unix::escape(Cow::Borrowed(path.as_ref()));
+    Some(format!("open {escaped}"))
+}
+
+#[cfg(test)]
+fn macos_configured_app_launch_command(_agent_id: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(test))]
+fn macos_configured_app_name(agent_id: &str) -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let prefs = ::common::agent_state::read_prefs();
+    let path = ::common::agent_state::resolve_agent_executable_path(&prefs, agent_id)?;
+    if path.extension().and_then(|extension| extension.to_str()) != Some("app") {
+        return None;
+    }
+    path.file_stem()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .map(ToString::to_string)
+}
+
+#[cfg(test)]
+fn macos_configured_app_name(_agent_id: &str) -> Option<String> {
+    None
 }
 
 fn start_process_name(command: &str) -> Option<String> {
@@ -287,8 +354,14 @@ fn start_process_name(command: &str) -> Option<String> {
         .map(|name| name.trim_matches('"').to_string())
 }
 
+#[cfg(not(test))]
 fn launch_command_for_agent(agent_id: &str, fallback_command: &str) -> String {
     ::common::agent_detection::resolve_agent_command(agent_id, fallback_command)
+}
+
+#[cfg(test)]
+fn launch_command_for_agent(_agent_id: &str, fallback_command: &str) -> String {
+    fallback_command.to_string()
 }
 
 fn materialized_profile_env(

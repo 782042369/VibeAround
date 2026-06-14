@@ -57,6 +57,7 @@ import {
   type AgentSummary,
   type AgentExecutableLatest,
   type AgentExecutableResolution,
+  type DesktopAppDetectionFile,
   type LaunchSessionSummary,
   type LauncherPreferences,
   type WorkspaceOption,
@@ -161,6 +162,8 @@ export function AgentLaunchBuilder({
   const [agentExecutable, setAgentExecutable] =
     useState<AgentExecutableResolution | null>(null);
   const [agentExecutableLoading, setAgentExecutableLoading] = useState(false);
+  const [desktopAppEntries, setDesktopAppEntries] =
+    useState<DesktopAppDetectionFile | null>(null);
   const [busy, setBusy] = useState(false);
   const postLaunchSessionRefreshTimers = useRef<ReturnType<
     typeof setTimeout
@@ -186,6 +189,7 @@ export function AgentLaunchBuilder({
       getDesktopAppEntries().catch(() => null),
     ])
       .then(([items, desktopApps]) => {
+        setDesktopAppEntries(desktopApps);
         const rank = new Map(AGENT_ORDER.map((id, index) => [id, index]));
         const installedDesktopAgents = new Set(
           Object.entries(desktopApps?.apps ?? {})
@@ -877,10 +881,15 @@ export function AgentLaunchBuilder({
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
   const terminalArgCount = agentLaunchArgCount(selectedAgentPreference);
   const showLaunchControls = !selectedAgentIsDirectOnly;
+  const desktopAppPathForAgent = (targetAgentId: string): string | undefined =>
+    desktopAppEntries?.apps[targetAgentId]?.entry?.path ??
+    desktopAppEntries?.apps[targetAgentId]?.launchCommand;
   const selectedExecutablePath =
-    agentExecutable?.selected?.path ??
     selectedAgentPreference?.executable?.path ??
     selectedAgentPreference?.executablePath ??
+    (selectedAgentIsDirectOnly
+      ? desktopAppPathForAgent(agentId)
+      : agentExecutable?.selected?.path) ??
     selectedAgent.pty_command;
   const showClaudeDesktopDeveloperModeHint =
     agentId === "claude-desktop" && profileChoice.kind === "profile";
@@ -911,28 +920,26 @@ export function AgentLaunchBuilder({
                     agentId={agentId}
                     agentLabelText={selectedAgent.display_name}
                     action={
-                      <div className="flex items-center gap-1.5 pt-1">
-                        {showLaunchControls && terminalArgCount > 0 && (
-                          <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                            {t("{{count}} args", { count: terminalArgCount })}
-                          </span>
-                        )}
-                        <TooltipButton
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={busy}
-                          aria-label={t("Agent settings")}
-                          title={t("Agent settings")}
-                          onClick={() =>
-                            selectedAgent.direct_only
-                              ? openAgentPathDialog(selectedAgent)
-                              : setSettingsAgent(selectedAgent)
-                          }
-                        >
-                          <Settings2 className="h-4 w-4" />
-                        </TooltipButton>
-                      </div>
+                      showLaunchControls ? (
+                        <div className="flex items-center gap-1.5 pt-1">
+                          {terminalArgCount > 0 && (
+                            <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                              {t("{{count}} args", { count: terminalArgCount })}
+                            </span>
+                          )}
+                          <TooltipButton
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={busy}
+                            aria-label={t("Agent settings")}
+                            title={t("Agent settings")}
+                            onClick={() => setSettingsAgent(selectedAgent)}
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </TooltipButton>
+                        </div>
+                      ) : undefined
                     }
                   >
                     <>
@@ -1218,6 +1225,11 @@ export function AgentLaunchBuilder({
         executableResolution={pathAgent?.id === agentId ? agentExecutable : null}
         executableLoading={
           pathAgent?.id === agentId ? agentExecutableLoading : false
+        }
+        fallbackExecutablePath={
+          pathAgent?.direct_only
+            ? (desktopAppPathForAgent(pathAgent.id) ?? pathAgent.pty_command)
+            : undefined
         }
         busy={busy}
         onClose={() => setPathAgent(null)}

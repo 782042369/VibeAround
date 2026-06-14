@@ -431,39 +431,80 @@ pub async fn launcher_set_agent_executable_path(
     agent_id: String,
     executable_path: Option<String>,
 ) -> Result<(), String> {
-    let agent_id = resources::agent_by_alias(&agent_id)
-        .map(|def| def.id.clone())
+    let agent = resources::agent_by_alias(&agent_id)
+        .cloned()
         .ok_or_else(|| format!("unknown agent: '{agent_id}'"))?;
+    let agent_id = agent.id.clone();
     let executable = match executable_path {
         Some(path) => {
             let path = PathBuf::from(path.trim());
-            if !path.is_file() {
-                return Err(format!("executable path is not a file: {}", path.display()));
-            }
-            let detected_candidate =
-                common::agent_detection::read_detected_agents().and_then(|detected| {
-                    detected.agents.get(&agent_id).and_then(|detection| {
-                        common::agent_detection::candidate_for_path(detection, &path)
-                    })
-                });
-            let candidate = if let Some(candidate) = detected_candidate {
-                candidate
+            if agent.direct_only {
+                if !path.is_file() && !path.is_dir() {
+                    return Err(format!("agent path does not exist: {}", path.display()));
+                }
+                Some(direct_only_executable_preference(&agent_id, path))
             } else {
-                common::agent_detection::manual_candidate_with_version(&agent_id, path.clone())
-                    .await
-                    .map_err(|e| e.to_string())?
-            };
-            Some(
-                common::agent_detection::executable_preference_from_candidate_path(
-                    &candidate, &path,
-                ),
-            )
+                if !path.is_file() {
+                    return Err(format!("executable path is not a file: {}", path.display()));
+                }
+                let detected_candidate =
+                    common::agent_detection::read_detected_agents().and_then(|detected| {
+                        detected.agents.get(&agent_id).and_then(|detection| {
+                            common::agent_detection::candidate_for_path(detection, &path)
+                        })
+                    });
+                let candidate = if let Some(candidate) = detected_candidate {
+                    candidate
+                } else {
+                    common::agent_detection::manual_candidate_with_version(&agent_id, path.clone())
+                        .await
+                        .map_err(|e| e.to_string())?
+                };
+                Some(
+                    common::agent_detection::executable_preference_from_candidate_path(
+                        &candidate, &path,
+                    ),
+                )
+            }
         }
         None => None,
     };
     agent_state::write_agent_executable(&agent_id, executable).map_err(|e| e.to_string())?;
     emit_launch_config_changed(&app);
     Ok(())
+}
+
+fn direct_only_executable_preference(
+    agent_id: &str,
+    path: PathBuf,
+) -> agent_state::AgentExecutablePreference {
+    let realpath = path.canonicalize().ok();
+    let mut preference = agent_state::AgentExecutablePreference::manual(path.clone());
+    preference.realpath = realpath;
+
+    let Some(detected) = crate::desktop_detection::read_detected_desktop_apps() else {
+        return preference;
+    };
+    let Some(entry) = detected
+        .apps
+        .get(agent_id)
+        .and_then(|detection| detection.entry.as_ref())
+    else {
+        return preference;
+    };
+    let detected_path = PathBuf::from(&entry.path);
+    let detected_realpath = detected_path.canonicalize().ok();
+    if path == detected_path
+        || preference
+            .realpath
+            .as_ref()
+            .zip(detected_realpath.as_ref())
+            .is_some_and(|(left, right)| left == right)
+    {
+        preference.source = entry.source.clone();
+        preference.source_label = entry.source_label.clone();
+    }
+    preference
 }
 
 #[tauri::command]
