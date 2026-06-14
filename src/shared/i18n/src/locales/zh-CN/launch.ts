@@ -245,6 +245,8 @@ export const zhCNLaunch: Record<string, string> = {
   "Choose the desktop app executable.": "选择桌面应用的可执行文件。",
   "Choose the CLI path used by Launch and ACP.":
     "选择 Launch 和 ACP 使用的 CLI 路径。",
+  "Choose the agent path.": "选择 Agent 所在的路径。",
+  "Current selected path": "当前选择的路径",
   "Use a specific executable when auto-detect cannot find the app.":
     "自动检测找不到应用时，指定可执行文件。",
   Executable: "可执行文件",

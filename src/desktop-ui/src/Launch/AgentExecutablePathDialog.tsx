@@ -291,7 +291,7 @@ export function AgentExecutablePathDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="!flex h-[420px] max-h-[calc(100vh-64px)] w-[min(660px,calc(100vw-28px))] max-w-[calc(100vw-28px)] flex-col overflow-hidden p-0 sm:max-w-[min(660px,calc(100vw-28px))]">
+      <DialogContent className="!flex h-[340px] max-h-[calc(100vh-64px)] w-[min(660px,calc(100vw-28px))] max-w-[calc(100vw-28px)] flex-col overflow-hidden p-0 sm:max-w-[min(660px,calc(100vw-28px))]">
         <DialogHeader className="shrink-0 border-b border-border px-5 py-3 pr-12">
           <DialogTitle className="text-lg">
             {isDesktopApp
@@ -305,39 +305,18 @@ export function AgentExecutablePathDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
-          <section className="flex min-h-0 flex-1 flex-col gap-2">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
-                {isDesktopApp ? t("Desktop app") : t("Executable")}
-              </div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {isDesktopApp
-                  ? t("Use a specific executable when auto-detect cannot find the app.")
-                  : t("Choose the CLI path used by Launch and ACP.")}
-              </div>
+        <div className="flex min-h-0 flex-1 flex-col px-5 py-3">
+          <section className="space-y-2">
+            <div className="text-xs text-muted-foreground">
+              {t("Choose the agent path.")}
             </div>
 
             {!isDesktopApp && (
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-[132px] space-y-2 overflow-y-auto pr-1">
                 {executableLoading ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      {t("Scanning local CLIs")}
-                    </div>
-                    {[0, 1, 2].map((index) => (
-                      <div
-                        key={index}
-                        className="flex h-[44px] items-center gap-2 rounded-md border border-border bg-muted/20 px-2.5"
-                      >
-                        <div className="h-2 w-2 rounded-full bg-muted-foreground/20" />
-                        <div className="min-w-0 flex-1 space-y-1.5">
-                          <div className="h-2.5 w-2/3 animate-pulse rounded bg-muted-foreground/20" />
-                          <div className="h-2 w-1/2 animate-pulse rounded bg-muted-foreground/15" />
-                        </div>
-                      </div>
-                    ))}
+                  <div className="px-1 py-2 text-xs text-muted-foreground">
+                    <RefreshCw className="mr-1.5 inline h-3 w-3 animate-spin align-[-2px]" />
+                    {t("Scanning local CLIs")}
                   </div>
                 ) : executableCandidates.length ? (
                   executableCandidates.map((candidate) => {
@@ -449,30 +428,35 @@ export function AgentExecutablePathDialog({
               </div>
             )}
 
-            <div className="flex shrink-0 gap-1.5 pt-1">
-              <Input
-                value={executablePath}
-                disabled={busy}
-                placeholder={
-                  clientOs === "windows"
-                    ? "C:\\Path\\To\\Agent.exe"
-                    : isDesktopApp
-                      ? "/Applications/App.app/Contents/MacOS/App"
-                      : "/opt/homebrew/bin/agent"
-                }
-                className="!h-8 min-h-8 max-h-8 font-mono !text-[11px] leading-4 placeholder:!text-[11px] md:!text-[11px] [font-variant-ligatures:none]"
-                onChange={(event) => setExecutablePath(event.target.value)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                className="h-8 px-2.5 text-xs"
-                onClick={() => void chooseExecutable()}
-              >
-                {t("Choose")}
-              </Button>
+            <div className="space-y-1 pt-1">
+              <div className="text-[10px] font-medium text-muted-foreground">
+                {t("Current selected path")}
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  value={executablePath}
+                  disabled={busy}
+                  placeholder={
+                    clientOs === "windows"
+                      ? "C:\\Path\\To\\Agent.exe"
+                      : isDesktopApp
+                        ? "/Applications/App.app/Contents/MacOS/App"
+                        : "/opt/homebrew/bin/agent"
+                  }
+                  className="!h-8 min-h-8 max-h-8 font-mono !text-[11px] leading-4 placeholder:!text-[11px] md:!text-[11px] [font-variant-ligatures:none]"
+                  onChange={(event) => setExecutablePath(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  className="h-8 px-2.5 text-xs"
+                  onClick={() => void chooseExecutable()}
+                >
+                  {t("Choose")}
+                </Button>
+              </div>
             </div>
           </section>
 
