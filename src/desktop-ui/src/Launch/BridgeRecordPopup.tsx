@@ -258,11 +258,11 @@ export function BridgeRecordPopup({
                     </span>
                     <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
                       <span className="truncate">
-                        {record.metadata?.clientProtocol ?? "client"}
+                        {record.metadata?.clientProtocol ?? t("client")}
                       </span>
                       <span>-&gt;</span>
                       <span className="truncate">
-                        {record.metadata?.upstreamProtocol ?? "upstream"}
+                        {record.metadata?.upstreamProtocol ?? t("upstream")}
                       </span>
                       {record.metadata?.stream && <span>SSE</span>}
                     </span>
@@ -330,8 +330,16 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
                   {record.metadata.upstreamUrl}
                 </span>
               )}
-              {record.serverStatus && <span>server {record.serverStatus}</span>}
-              {record.bridgeStatus && <span>bridge {record.bridgeStatus}</span>}
+              {record.serverStatus && (
+                <span>
+                  {t("server {{status}}", { status: record.serverStatus })}
+                </span>
+              )}
+              {record.bridgeStatus && (
+                <span>
+                  {t("bridge {{status}}", { status: record.bridgeStatus })}
+                </span>
+              )}
             </div>
           </div>
           <Button
