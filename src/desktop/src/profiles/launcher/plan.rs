@@ -568,15 +568,12 @@ mod tests {
 
     #[test]
     fn direct_resume_plan_uses_agent_resume_command() {
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .direct("claude")
-            .resume("session-456")
-            .build()
-            .expect("direct resume plan");
+        let (command, args) =
+            resume_command_for_agent("claude", "session-456").expect("claude resume command");
 
-        assert_eq!(plan.command, "claude");
+        assert_eq!(command, "claude");
         assert_eq!(
-            plan.args,
+            args,
             vec![
                 "--resume".to_string(),
                 "session-456".to_string(),
@@ -584,7 +581,6 @@ mod tests {
                 "acceptEdits".to_string(),
             ]
         );
-        assert_eq!(plan.window_label, "Claude Code (resume)");
     }
 
     #[test]

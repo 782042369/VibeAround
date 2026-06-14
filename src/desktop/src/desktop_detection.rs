@@ -345,16 +345,18 @@ mod tests {
         let root = PathBuf::from(r"C:\Users\tester\AppData\Local");
         assert!(!codex_windows_candidate_paths(&root)
             .iter()
-            .any(|path| path.to_string_lossy().contains(r"OpenAI\Codex\bin")));
+            .any(|path| windows_path_string(path).contains(r"OpenAI\Codex\bin")));
     }
 
     #[test]
     fn windows_claude_candidates_include_squirrel_root() {
         let root = PathBuf::from(r"C:\Users\tester\AppData\Local");
-        assert!(
-            claude_windows_candidate_paths(&root).contains(&PathBuf::from(
-                r"C:\Users\tester\AppData\Local\Programs\Claude\Claude.exe"
-            ))
-        );
+        assert!(claude_windows_candidate_paths(&root).iter().any(|path| {
+            windows_path_string(path) == r"C:\Users\tester\AppData\Local\Programs\Claude\Claude.exe"
+        }));
+    }
+
+    fn windows_path_string(path: &Path) -> String {
+        path.to_string_lossy().replace('/', r"\")
     }
 }
