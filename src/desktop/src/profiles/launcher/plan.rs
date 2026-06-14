@@ -157,15 +157,21 @@ impl<'a> LaunchPlanBuilder<'a> {
             .ok_or_else(|| anyhow!("agent '{}' not found in agents.json", agent_id))?;
         let workspace = crate::profiles::resolve_launch_workspace(agent_id)?;
         if agent_id == "codex-desktop" {
+            let mut env = Vec::new();
+            let mut args = Vec::new();
+            if bridge::launch_uses_local_bridge(profile, launch_target)? {
+                append_local_bridge_proxy_bypass_env(&mut env);
+                args.extend(codex_desktop_local_bridge_args());
+            }
             codex_desktop::apply_profile_overlay(profile, &self.launch_id, rendered)
                 .with_context(|| format!("prepare Codex Desktop profile '{}'", profile.id))?;
             return Ok(LaunchPlan {
-                env: Vec::new(),
+                env,
                 command: launch_command_for_agent(
                     agent_id,
                     agent.pty_command_for_current_platform(),
                 ),
-                args: Vec::new(),
+                args,
                 window_label: profile.label.clone(),
                 workspace,
                 macos_app_probe: macos_app_probe_for_direct_agent(&agent),
@@ -319,6 +325,14 @@ fn append_local_bridge_proxy_bypass_env(env: &mut Vec<(String, String)>) {
         ("NO_PROXY".to_string(), LOCAL_BRIDGE_NO_PROXY.to_string()),
         ("no_proxy".to_string(), LOCAL_BRIDGE_NO_PROXY.to_string()),
     ]);
+}
+
+fn codex_desktop_local_bridge_args() -> Vec<String> {
+    if cfg!(target_os = "macos") {
+        vec!["--args".to_string(), "--no-proxy-server".to_string()]
+    } else {
+        Vec::new()
+    }
 }
 
 #[cfg(not(test))]
@@ -485,7 +499,10 @@ mod tests {
     #[test]
     fn local_bridge_proxy_bypass_env_clears_proxy_and_sets_no_proxy() {
         let mut env = vec![
-            ("HTTP_PROXY".to_string(), "http://127.0.0.1:7897".to_string()),
+            (
+                "HTTP_PROXY".to_string(),
+                "http://127.0.0.1:7897".to_string(),
+            ),
             ("NO_PROXY".to_string(), "old.example".to_string()),
             ("OPENAI_API_KEY".to_string(), "test-key".to_string()),
         ];
@@ -507,6 +524,16 @@ mod tests {
                 1,
                 "{key} should be present exactly once"
             );
+        }
+    }
+
+    #[test]
+    fn codex_desktop_local_bridge_args_disable_macos_proxy() {
+        let args = codex_desktop_local_bridge_args();
+        if cfg!(target_os = "macos") {
+            assert_eq!(args, vec!["--args", "--no-proxy-server"]);
+        } else {
+            assert!(args.is_empty());
         }
     }
 
