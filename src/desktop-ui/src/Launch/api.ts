@@ -126,11 +126,27 @@ export interface AgentExecutableResolution {
   candidates: AgentExecutableCandidate[];
 }
 
+export interface AgentExecutableLatest {
+  path: string;
+  latestVersion?: string | null;
+  updateAvailable?: boolean | null;
+}
+
 export function getAgentExecutableResolution(
   agentId: string,
 ): Promise<AgentExecutableResolution> {
   return invoke<AgentExecutableResolution>("launcher_agent_executable_resolution", {
     agentId,
+  });
+}
+
+export function getAgentExecutableLatest(
+  agentId: string,
+  executablePath: string,
+): Promise<AgentExecutableLatest> {
+  return invoke<AgentExecutableLatest>("launcher_agent_executable_latest", {
+    agentId,
+    executablePath,
   });
 }
 

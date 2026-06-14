@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import type {
   AgentExecutableCandidate,
+  AgentExecutableLatest,
   AgentExecutableResolution,
   AgentSummary,
 } from "./api";
@@ -29,10 +30,18 @@ interface Props {
   onClose: () => void;
   onSaveExecutablePath: (path: string | null) => Promise<void>;
   onRefreshExecutableResolution?: () => Promise<void>;
+  onCheckLatest?: (path: string) => Promise<AgentExecutableLatest>;
   onUpdateAgent?: (path: string) => Promise<void>;
 }
 
 type ClientOs = "macos" | "windows" | "linux";
+type LatestState = {
+  signature: string;
+  loading: boolean;
+  latestVersion?: string | null;
+  updateAvailable?: boolean | null;
+  error?: string | null;
+};
 
 function detectClientOs(): ClientOs {
   const platform = (
@@ -71,18 +80,31 @@ function pathMatchesCandidate(
   );
 }
 
+function candidateLatestSignature(candidate: AgentExecutableCandidate): string {
+  return `${candidate.version ?? ""}\u0000${candidate.updateCommand ?? ""}`;
+}
+
 function versionSummary(
   candidate: AgentExecutableCandidate,
+  latestState: LatestState | undefined,
+  checkingEnabled: boolean,
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string | null {
-  if (candidate.updateAvailable && candidate.latestVersion) {
-    return t("New {{version}}", { version: candidate.latestVersion });
+  if (checkingEnabled && !latestState && candidate.updateCommand) {
+    return t("Checking update");
   }
-  if (candidate.updateAvailable === false && candidate.latestVersion) {
+  if (latestState?.loading) return t("Checking update");
+  const updateAvailable =
+    latestState?.updateAvailable ?? candidate.updateAvailable;
+  const latestVersion = latestState?.latestVersion ?? candidate.latestVersion;
+  if (updateAvailable && latestVersion) {
+    return t("New {{version}}", { version: latestVersion });
+  }
+  if (updateAvailable === false) {
     return t("Up to date");
   }
-  if (candidate.latestVersion) {
-    return t("Latest {{version}}", { version: candidate.latestVersion });
+  if (latestVersion) {
+    return t("Latest {{version}}", { version: latestVersion });
   }
   return null;
 }
@@ -96,6 +118,7 @@ export function AgentExecutablePathDialog({
   onClose,
   onSaveExecutablePath,
   onRefreshExecutableResolution,
+  onCheckLatest,
   onUpdateAgent,
 }: Props) {
   const { t } = useI18n();
@@ -106,12 +129,119 @@ export function AgentExecutablePathDialog({
   const [executablePath, setExecutablePath] = useState(initialPath);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [updatingPath, setUpdatingPath] = useState<string | null>(null);
+  const [latestByPath, setLatestByPath] = useState<Record<string, LatestState>>(
+    {},
+  );
+  const executableCandidates = useMemo(
+    () => executableResolution?.candidates ?? [],
+    [executableResolution],
+  );
+  const candidateLatestKey = useMemo(
+    () =>
+      executableCandidates
+        .map(
+          (candidate) =>
+            `${candidate.path}\u0000${candidateLatestSignature(candidate)}`,
+        )
+        .join("\u0001"),
+    [executableCandidates],
+  );
+  const latestAgentId = agent?.id ?? "";
+  const latestAgentDirectOnly = Boolean(agent?.direct_only);
 
   useEffect(() => {
     setExecutablePath(initialPath);
     setSaveError(null);
     setUpdatingPath(null);
+    setLatestByPath({});
   }, [agent?.id, initialPath]);
+
+  useEffect(() => {
+    if (!latestAgentId || latestAgentDirectOnly || !onCheckLatest) return;
+    if (executableLoading) {
+      setLatestByPath({});
+      return;
+    }
+    if (!executableCandidates.length) {
+      setLatestByPath({});
+      return;
+    }
+
+    let cancelled = false;
+    setLatestByPath((current) => {
+      const next: Record<string, LatestState> = {};
+      for (const candidate of executableCandidates) {
+        const signature = candidateLatestSignature(candidate);
+        const previous = current[candidate.path];
+        next[candidate.path] = current[candidate.path] ?? {
+          signature,
+          loading: Boolean(candidate.updateCommand),
+          latestVersion: candidate.latestVersion ?? null,
+          updateAvailable: candidate.updateAvailable ?? null,
+        };
+        if (previous?.signature !== signature) {
+          next[candidate.path] = {
+            signature,
+            loading: Boolean(candidate.updateCommand),
+            latestVersion: candidate.latestVersion ?? null,
+            updateAvailable: candidate.updateAvailable ?? null,
+          };
+        }
+      }
+      return next;
+    });
+
+    void (async () => {
+      for (const candidate of executableCandidates) {
+        if (!candidate.updateCommand) continue;
+        if (cancelled) return;
+        setLatestByPath((current) => ({
+          ...current,
+          [candidate.path]: {
+            ...(current[candidate.path] ?? {}),
+            signature: candidateLatestSignature(candidate),
+            loading: true,
+            error: null,
+          },
+        }));
+        try {
+          const latest = await onCheckLatest(candidate.path);
+          if (cancelled) return;
+          setLatestByPath((current) => ({
+            ...current,
+            [candidate.path]: {
+              signature: candidateLatestSignature(candidate),
+              loading: false,
+              latestVersion: latest.latestVersion ?? null,
+              updateAvailable: latest.updateAvailable ?? null,
+            },
+          }));
+        } catch (error) {
+          if (cancelled) return;
+          setLatestByPath((current) => ({
+            ...current,
+            [candidate.path]: {
+              ...(current[candidate.path] ?? {}),
+              signature: candidateLatestSignature(candidate),
+              loading: false,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    candidateLatestKey,
+    executableCandidates,
+    executableLoading,
+    latestAgentDirectOnly,
+    latestAgentId,
+    onCheckLatest,
+  ]);
 
   if (!agent) return null;
 
@@ -161,7 +291,7 @@ export function AgentExecutablePathDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="!flex max-h-[calc(100vh-64px)] w-[min(660px,calc(100vw-28px))] max-w-[calc(100vw-28px)] flex-col overflow-hidden p-0 sm:max-w-[min(660px,calc(100vw-28px))]">
+      <DialogContent className="!flex h-[420px] max-h-[calc(100vh-64px)] w-[min(660px,calc(100vw-28px))] max-w-[calc(100vw-28px)] flex-col overflow-hidden p-0 sm:max-w-[min(660px,calc(100vw-28px))]">
         <DialogHeader className="shrink-0 border-b border-border px-5 py-3 pr-12">
           <DialogTitle className="text-lg">
             {isDesktopApp
@@ -175,8 +305,8 @@ export function AgentExecutablePathDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-5">
-          <section className="space-y-2">
+        <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+          <section className="flex min-h-0 flex-1 flex-col gap-2">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
                 {isDesktopApp ? t("Desktop app") : t("Executable")}
@@ -189,19 +319,58 @@ export function AgentExecutablePathDialog({
             </div>
 
             {!isDesktopApp && (
-              <div className="space-y-2">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                 {executableLoading ? (
-                  <div className="text-[11px] text-muted-foreground">
-                    {t("Checking path")}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      {t("Scanning local CLIs")}
+                    </div>
+                    {[0, 1, 2].map((index) => (
+                      <div
+                        key={index}
+                        className="flex h-[44px] items-center gap-2 rounded-md border border-border bg-muted/20 px-2.5"
+                      >
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/20" />
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="h-2.5 w-2/3 animate-pulse rounded bg-muted-foreground/20" />
+                          <div className="h-2 w-1/2 animate-pulse rounded bg-muted-foreground/15" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : executableResolution?.candidates.length ? (
-                  executableResolution.candidates.map((candidate) => {
+                ) : executableCandidates.length ? (
+                  executableCandidates.map((candidate) => {
                     const selected = pathMatchesCandidate(
                       executablePath,
                       candidate,
                     );
-                    const latest = versionSummary(candidate, t);
+                    const candidateSignature =
+                      candidateLatestSignature(candidate);
+                    const latestState =
+                      latestByPath[candidate.path]?.signature ===
+                      candidateSignature
+                        ? latestByPath[candidate.path]
+                        : undefined;
+                    const latest = versionSummary(
+                      candidate,
+                      latestState,
+                      Boolean(onCheckLatest),
+                      t,
+                    );
                     const updating = updatingPath === candidate.path;
+                    const updateAvailable =
+                      latestState?.updateAvailable ?? candidate.updateAvailable;
+                    const checkingLatest =
+                      (Boolean(onCheckLatest) &&
+                        !latestState &&
+                        Boolean(candidate.updateCommand)) ||
+                      Boolean(latestState?.loading);
+                    const canUpdate =
+                      Boolean(onUpdateAgent) &&
+                      Boolean(candidate.updateCommand) &&
+                      !checkingLatest &&
+                      updateAvailable !== false;
                     return (
                       <div
                         key={`${candidate.source}:${candidate.path}`}
@@ -239,32 +408,36 @@ export function AgentExecutablePathDialog({
                         {latest && (
                           <span
                             className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] ${
-                              candidate.updateAvailable
+                              updateAvailable
                                 ? "border-primary/35 bg-primary/10 text-primary"
                                 : "border-border bg-muted/40 text-muted-foreground"
                             }`}
+                            title={latestState?.error ?? undefined}
                           >
+                            {checkingLatest && (
+                              <RefreshCw className="mr-1 inline h-3 w-3 animate-spin" />
+                            )}
                             {latest}
                           </span>
                         )}
-                        <Button
-                          type="button"
-                          variant={
-                            candidate.updateAvailable ? "default" : "outline"
-                          }
-                          size="xs"
-                          disabled={
-                            busy ||
-                            Boolean(updatingPath) ||
-                            !candidate.updateCommand
-                          }
-                          className="h-7 shrink-0 px-2 text-xs"
-                          title={candidate.updateCommand ?? t("No update command")}
-                          onClick={() => void updateAgent(candidate.path)}
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          {updating ? t("Updating") : t("Update")}
-                        </Button>
+                        {canUpdate && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            disabled={busy || Boolean(updatingPath)}
+                            className="h-7 shrink-0 px-1.5 text-xs text-primary hover:bg-transparent hover:text-primary hover:underline"
+                            title={
+                              candidate.updateCommand ?? t("No update command")
+                            }
+                            onClick={() => void updateAgent(candidate.path)}
+                          >
+                            <RefreshCw
+                              className={`h-3.5 w-3.5 ${updating ? "animate-spin" : ""}`}
+                            />
+                            {updating ? t("Updating") : t("Update")}
+                          </Button>
+                        )}
                       </div>
                     );
                   })
@@ -276,7 +449,7 @@ export function AgentExecutablePathDialog({
               </div>
             )}
 
-            <div className="flex gap-1.5">
+            <div className="flex shrink-0 gap-1.5 pt-1">
               <Input
                 value={executablePath}
                 disabled={busy}
@@ -304,7 +477,9 @@ export function AgentExecutablePathDialog({
           </section>
 
           {saveError && (
-            <div className="text-xs text-destructive">{saveError}</div>
+            <div className="mt-2 shrink-0 text-xs text-destructive">
+              {saveError}
+            </div>
           )}
         </div>
 

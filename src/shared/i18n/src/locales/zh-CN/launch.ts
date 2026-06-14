@@ -249,6 +249,8 @@ export const zhCNLaunch: Record<string, string> = {
     "自动检测找不到应用时，指定可执行文件。",
   Executable: "可执行文件",
   "Checking path": "正在检查路径",
+  "Scanning local CLIs": "正在扫描本地 CLI",
+  "Checking update": "正在检查更新",
   "Change agent path": "修改 Agent 路径",
   "No executable candidates found": "未找到可执行文件候选项",
   Scan: "扫描",

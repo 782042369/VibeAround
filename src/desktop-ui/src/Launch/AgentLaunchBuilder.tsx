@@ -42,6 +42,7 @@ import {
   reorderLauncherWorkspaces,
   reorderProfiles,
   getDesktopAppEntries,
+  getAgentExecutableLatest,
   getAgentExecutableResolution,
   updateLauncherAgent,
   setProfileConnection,
@@ -53,6 +54,7 @@ import {
   setLauncherTerminal,
   setLauncherWorkspace,
   type AgentSummary,
+  type AgentExecutableLatest,
   type AgentExecutableResolution,
   type LaunchSessionSummary,
   type LauncherPreferences,
@@ -834,6 +836,14 @@ export function AgentLaunchBuilder({
     }
   }
 
+  const checkAgentExecutableLatest = useCallback(
+    async (executablePath: string): Promise<AgentExecutableLatest> => {
+      if (!pathAgent) throw new Error("No agent selected");
+      return getAgentExecutableLatest(pathAgent.id, executablePath);
+    },
+    [pathAgent],
+  );
+
   function openAgentPathDialog(agent: AgentSummary) {
     setPathAgent(agent);
     if (!agent.direct_only) {
@@ -1216,6 +1226,7 @@ export function AgentLaunchBuilder({
         onRefreshExecutableResolution={() =>
           pathAgent ? refreshAgentExecutable(pathAgent.id) : Promise.resolve()
         }
+        onCheckLatest={checkAgentExecutableLatest}
         onUpdateAgent={updateAgentExecutable}
       />
     </TooltipProvider>

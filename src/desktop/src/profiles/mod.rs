@@ -66,6 +66,14 @@ pub struct AgentExecutableResolution {
     pub candidates: Vec<AgentExecutableCandidateView>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentExecutableLatestView {
+    pub path: String,
+    pub latest_version: Option<String>,
+    pub update_available: Option<bool>,
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------------
@@ -187,10 +195,10 @@ pub async fn launcher_agent_executable_resolution(
         let selected = selected_key
             .as_deref()
             .is_some_and(|key| key == candidate_key(&candidate));
-        candidate_views.push(candidate_view(&agent_id, candidate, selected).await);
+        candidate_views.push(candidate_view(&agent_id, candidate, selected));
     }
     let selected = match selected {
-        Some(candidate) => Some(candidate_view(&agent_id, candidate, true).await),
+        Some(candidate) => Some(candidate_view(&agent_id, candidate, true)),
         None => None,
     };
 
@@ -199,6 +207,44 @@ pub async fn launcher_agent_executable_resolution(
         configured_path,
         selected,
         candidates: candidate_views,
+    })
+}
+
+#[tauri::command]
+pub async fn launcher_agent_executable_latest(
+    agent_id: String,
+    executable_path: String,
+) -> Result<AgentExecutableLatestView, String> {
+    let agent_id = resources::agent_by_alias(&agent_id)
+        .map(|def| def.id.clone())
+        .ok_or_else(|| format!("unknown agent: '{agent_id}'"))?;
+    let path = PathBuf::from(executable_path.trim());
+    if !path.is_file() {
+        return Err(format!("executable path is not a file: {}", path.display()));
+    }
+
+    let detected_candidate = common::agent_detection::read_detected_agents().and_then(|detected| {
+        detected
+            .agents
+            .get(&agent_id)
+            .and_then(|detection| common::agent_detection::candidate_for_path(detection, &path))
+    });
+    let candidate = if let Some(candidate) = detected_candidate {
+        candidate
+    } else {
+        common::agent_detection::manual_candidate_with_version(&agent_id, path.clone())
+            .await
+            .map_err(|error| error.to_string())?
+    };
+    let latest_version =
+        common::agent_detection::latest_version_for_candidate(&agent_id, &candidate).await;
+    let update_available =
+        common::agent_detection::candidate_update_available(&candidate, latest_version.as_deref());
+
+    Ok(AgentExecutableLatestView {
+        path: path.to_string_lossy().to_string(),
+        latest_version,
+        update_available,
     })
 }
 
@@ -559,7 +605,7 @@ fn candidate_key(candidate: &common::agent_detection::AgentCandidate) -> String 
         .unwrap_or_else(|| candidate.path.clone())
 }
 
-async fn candidate_view(
+fn candidate_view(
     agent_id: &str,
     candidate: common::agent_detection::AgentCandidate,
     selected: bool,
@@ -573,16 +619,12 @@ async fn candidate_view(
                     "install",
                 )
             });
-    let latest_version =
-        common::agent_detection::latest_version_for_candidate(agent_id, &candidate).await;
-    let update_available =
-        common::agent_detection::candidate_update_available(&candidate, latest_version.as_deref());
     AgentExecutableCandidateView {
         path: candidate.path,
         realpath: candidate.realpath,
         version: candidate.version,
-        latest_version,
-        update_available,
+        latest_version: None,
+        update_available: None,
         update_command,
         source: candidate.source,
         source_label: candidate.source_label,
