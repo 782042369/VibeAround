@@ -302,6 +302,8 @@ Ask questions, share workflows, or which agent/provider/channel should be smooth
 [![Discord](https://img.shields.io/badge/Discord-Join%20VibeAround-5865F2?logo=discord&logoColor=white)](https://discord.gg/KsJWkY64GN)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Follow%20VibeAround-DA552F?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/vibearound)
 
+Friendly community: [LINUX DO](https://linux.do)
+
 WeChat group for Chinese-language discussion:
 
 <img src="assets/community/wechat-group-qr-2026-06-19.webp" width="180" alt="VibeAround WeChat group QR code, valid until June 19, 2026" />

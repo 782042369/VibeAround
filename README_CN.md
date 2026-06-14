@@ -303,6 +303,8 @@ bun run dev
 [![Discord](https://img.shields.io/badge/Discord-Join%20VibeAround-5865F2?logo=discord&logoColor=white)](https://discord.gg/KsJWkY64GN)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Follow%20VibeAround-DA552F?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/vibearound)
 
+友链社区：[LINUX DO](https://linux.do)
+
 微信交流群：
 
 <img src="assets/community/wechat-group-qr-2026-06-19.webp" width="180" alt="VibeAround 微信群二维码，有效期至 2026 年 6 月 19 日" />
