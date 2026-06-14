@@ -441,10 +441,11 @@ pub async fn launcher_set_agent_executable_path(
                 return Err(format!("executable path is not a file: {}", path.display()));
             }
             let detected_candidate =
-                match common::agent_detection::scan_agent_and_persist(&agent_id).await {
-                    Ok(detection) => common::agent_detection::candidate_for_path(&detection, &path),
-                    Err(_) => None,
-                };
+                common::agent_detection::read_detected_agents().and_then(|detected| {
+                    detected.agents.get(&agent_id).and_then(|detection| {
+                        common::agent_detection::candidate_for_path(detection, &path)
+                    })
+                });
             let candidate = if let Some(candidate) = detected_candidate {
                 candidate
             } else {

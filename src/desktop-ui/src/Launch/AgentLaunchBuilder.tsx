@@ -804,18 +804,16 @@ export function AgentLaunchBuilder({
   async function saveAgentExecutablePath(path: string | null) {
     if (!pathAgent) return;
     const targetAgent = pathAgent;
-    setBusy(true);
     onError(null);
     try {
       await setLauncherAgentExecutablePath(targetAgent.id, path);
-      await refreshPrefs();
-      await refreshAgentExecutable(targetAgent.id);
+      void refreshPrefs().catch((error) => {
+        onError(error instanceof Error ? error.message : String(error));
+      });
       onToast(t("Agent launch path updated"));
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
       throw error;
-    } finally {
-      setBusy(false);
     }
   }
 

@@ -128,6 +128,7 @@ export function AgentExecutablePathDialog({
   );
   const [executablePath, setExecutablePath] = useState(initialPath);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [updatingPath, setUpdatingPath] = useState<string | null>(null);
   const [latestByPath, setLatestByPath] = useState<Record<string, LatestState>>(
     {},
@@ -152,6 +153,7 @@ export function AgentExecutablePathDialog({
   useEffect(() => {
     setExecutablePath(initialPath);
     setSaveError(null);
+    setSaving(false);
     setUpdatingPath(null);
     setLatestByPath({});
   }, [agent?.id, initialPath]);
@@ -248,14 +250,18 @@ export function AgentExecutablePathDialog({
   const clientOs = detectClientOs();
   const isDesktopApp = agent.direct_only;
   const executableDirty = executablePath.trim() !== initialPath;
+  const dialogBusy = busy || saving;
 
   async function save() {
+    if (saving) return;
     setSaveError(null);
+    setSaving(true);
     try {
       await onSaveExecutablePath(executablePath.trim() || null);
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
+      setSaving(false);
     }
   }
 
@@ -361,7 +367,7 @@ export function AgentExecutablePathDialog({
                       >
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={dialogBusy}
                           className="flex min-w-0 flex-1 items-center gap-2 text-left"
                           onClick={() => setExecutablePath(candidate.path)}
                         >
@@ -404,7 +410,7 @@ export function AgentExecutablePathDialog({
                             type="button"
                             variant="ghost"
                             size="xs"
-                            disabled={busy || Boolean(updatingPath)}
+                            disabled={dialogBusy || Boolean(updatingPath)}
                             className="h-7 shrink-0 px-1.5 text-xs text-primary hover:bg-transparent hover:text-primary hover:underline"
                             title={
                               candidate.updateCommand ?? t("No update command")
@@ -435,7 +441,7 @@ export function AgentExecutablePathDialog({
               <div className="flex gap-1.5">
                 <Input
                   value={executablePath}
-                  disabled={busy}
+                  disabled={dialogBusy}
                   placeholder={
                     clientOs === "windows"
                       ? "C:\\Path\\To\\Agent.exe"
@@ -450,7 +456,7 @@ export function AgentExecutablePathDialog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={busy}
+                  disabled={dialogBusy}
                   className="h-8 px-2.5 text-xs"
                   onClick={() => void chooseExecutable()}
                 >
@@ -474,7 +480,7 @@ export function AgentExecutablePathDialog({
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={busy || executableLoading}
+                disabled={dialogBusy || executableLoading}
                 className="h-8 px-2.5 text-xs"
                 onClick={() => void onRefreshExecutableResolution?.()}
               >
@@ -488,7 +494,7 @@ export function AgentExecutablePathDialog({
               type="button"
               variant="outline"
               size="sm"
-              disabled={busy}
+              disabled={dialogBusy}
               onClick={onClose}
             >
               {t("Cancel")}
@@ -496,7 +502,7 @@ export function AgentExecutablePathDialog({
             <Button
               type="button"
               size="sm"
-              disabled={busy || !executableDirty}
+              disabled={dialogBusy || !executableDirty}
               onClick={() => void save()}
             >
               {t("Save")}
