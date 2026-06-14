@@ -76,7 +76,18 @@ export interface AgentLaunchPreference {
   profileId?: string | null;
   workspace?: string | null;
   executablePath?: string | null;
+  executable?: AgentExecutablePreference | null;
   launchArgs?: AgentLaunchArgs | null;
+}
+
+export interface AgentExecutablePreference {
+  path: string;
+  realpath?: string | null;
+  version?: string | null;
+  source: string;
+  sourceLabel: string;
+  rank: number;
+  package?: string | null;
 }
 
 export interface AgentLaunchArgs {

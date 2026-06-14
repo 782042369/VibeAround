@@ -106,6 +106,36 @@ export function rescanAgentEntries(): Promise<unknown> {
   return invoke("rescan_agent_entries");
 }
 
+export interface AgentExecutableCandidate {
+  path: string;
+  realpath?: string | null;
+  version?: string | null;
+  source: string;
+  sourceLabel: string;
+  rank: number;
+  selected: boolean;
+  updateCommand?: string | null;
+}
+
+export interface AgentExecutableResolution {
+  agentId: string;
+  configuredPath?: string | null;
+  selected?: AgentExecutableCandidate | null;
+  candidates: AgentExecutableCandidate[];
+}
+
+export function getAgentExecutableResolution(
+  agentId: string,
+): Promise<AgentExecutableResolution> {
+  return invoke<AgentExecutableResolution>("launcher_agent_executable_resolution", {
+    agentId,
+  });
+}
+
+export function updateLauncherAgent(agentId: string): Promise<void> {
+  return invoke<void>("launcher_update_agent", { agentId });
+}
+
 export interface DesktopAppDetectionFile {
   apps: Record<string, DesktopAppDetection>;
 }

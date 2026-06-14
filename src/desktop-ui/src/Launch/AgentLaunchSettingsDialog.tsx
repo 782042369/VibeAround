@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { Plus, RotateCcw, X } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
@@ -30,7 +29,6 @@ interface Props {
   busy: boolean;
   onClose: () => void;
   onSave: (launchArgs: AgentLaunchArgs) => Promise<void>;
-  onSaveExecutablePath?: (path: string | null) => Promise<void>;
 }
 
 interface ArgsEditorProps {
@@ -133,7 +131,6 @@ export function AgentLaunchSettingsDialog({
   busy,
   onClose,
   onSave,
-  onSaveExecutablePath,
 }: Props) {
   const { t } = useI18n();
   const initialArgs = useMemo(
@@ -147,9 +144,6 @@ export function AgentLaunchSettingsDialog({
   const [acpDraftArg, setAcpDraftArg] = useState("");
   const [acpError, setAcpError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [executablePath, setExecutablePath] = useState(
-    preference?.executablePath ?? "",
-  );
   const [activeTab, setActiveTab] = useState<LaunchArgTab>("terminal");
 
   useEffect(() => {
@@ -160,22 +154,19 @@ export function AgentLaunchSettingsDialog({
     setAcpDraftArg("");
     setAcpError(null);
     setSaveError(null);
-    setExecutablePath(preference?.executablePath ?? "");
     setActiveTab("terminal");
-  }, [agent?.id, initialArgs, preference?.executablePath]);
+  }, [agent?.id, initialArgs]);
 
-  if (!agent) return null;
+  if (!agent || agent.direct_only) return null;
 
   const previewWorkspace = workspacePath?.trim() || "~";
   const previewWindowLabel =
     windowLabel?.trim() || `${agent.display_name} (direct)`;
   const clientOs = detectClientOs();
   const canConfigureAcp = !agent.direct_only;
-  const isDesktopApp = agent.direct_only;
   const dirty =
-    (!isDesktopApp && !sameArgs(terminalArgs, initialArgs.terminal ?? [])) ||
-    (canConfigureAcp && !sameArgs(acpArgs, initialArgs.acp ?? [])) ||
-    (isDesktopApp && executablePath !== (preference?.executablePath ?? ""));
+    !sameArgs(terminalArgs, initialArgs.terminal ?? []) ||
+    (canConfigureAcp && !sameArgs(acpArgs, initialArgs.acp ?? []));
 
   function parseErrorMessage(error: LaunchArgParseError): string {
     switch (error) {
@@ -191,30 +182,15 @@ export function AgentLaunchSettingsDialog({
   async function save() {
     setSaveError(null);
     try {
-      if (isDesktopApp) {
-        await onSaveExecutablePath?.(executablePath.trim() || null);
-      } else {
-        await onSave({
-          ...initialArgs,
-          terminal: terminalArgs,
-          acp: canConfigureAcp ? acpArgs : initialArgs.acp,
-        });
-      }
+      await onSave({
+        ...initialArgs,
+        terminal: terminalArgs,
+        acp: canConfigureAcp ? acpArgs : initialArgs.acp,
+      });
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     }
-  }
-
-  async function chooseExecutable() {
-    const selected = await open({
-      directory: false,
-      multiple: false,
-      title: t("Choose desktop app executable"),
-      filters: clientOs === "windows" ? [{ name: "Executable", extensions: ["exe"] }] : undefined,
-    });
-    const path = Array.isArray(selected) ? selected[0] : selected;
-    if (path) setExecutablePath(path);
   }
 
   return (
@@ -230,47 +206,7 @@ export function AgentLaunchSettingsDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-          {isDesktopApp ? (
-            <section className="space-y-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
-                  {t("Desktop app")}
-                </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {t("Use a specific executable when auto-detect cannot find the app.")}
-                </div>
-              </div>
-              <div className="flex gap-1.5">
-                <Input
-                  value={executablePath}
-                  disabled={busy}
-                  placeholder={clientOs === "windows" ? "C:\\Path\\To\\App.exe" : "/Applications/App.app"}
-                  className="!h-8 min-h-8 max-h-8 font-mono !text-[11px] leading-4 placeholder:!text-[11px] md:!text-[11px] [font-variant-ligatures:none]"
-                  onChange={(event) => setExecutablePath(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  className="h-8 px-2.5 text-xs"
-                  onClick={() => void chooseExecutable()}
-                >
-                  {t("Choose")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy || !executablePath}
-                  className="h-8 px-2.5 text-xs"
-                  onClick={() => setExecutablePath("")}
-                >
-                  {t("Clear")}
-                </Button>
-              </div>
-            </section>
-          ) : (
+          <div className="space-y-3">
             <Tabs
               value={activeTab}
               onValueChange={(value) => setActiveTab(value as LaunchArgTab)}
@@ -331,7 +267,7 @@ export function AgentLaunchSettingsDialog({
                 </TabsContent>
               )}
             </Tabs>
-          )}
+          </div>
 
           {saveError && <div className="mt-3 text-xs text-destructive">{saveError}</div>}
         </div>

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   FolderOpen,
   MessageCircle,
+  Pencil,
   Rocket,
   Settings2,
   Terminal,
@@ -41,6 +42,8 @@ import {
   reorderLauncherWorkspaces,
   reorderProfiles,
   getDesktopAppEntries,
+  getAgentExecutableResolution,
+  updateLauncherAgent,
   setProfileConnection,
   setLauncherAgentExecutablePath,
   setLauncherAgentProfile,
@@ -50,6 +53,7 @@ import {
   setLauncherTerminal,
   setLauncherWorkspace,
   type AgentSummary,
+  type AgentExecutableResolution,
   type LaunchSessionSummary,
   type LauncherPreferences,
   type WorkspaceOption,
@@ -83,6 +87,7 @@ import type {
   ProfileConnectionPreference,
   ProfileSummary,
 } from "./types";
+import { AgentExecutablePathDialog } from "./AgentExecutablePathDialog";
 
 const AGENT_ORDER = [
   "codex",
@@ -149,6 +154,10 @@ export function AgentLaunchBuilder({
   const [showArchivedSessions, setShowArchivedSessions] = useState(false);
   const [sessionChoice, setSessionChoice] = useState<SessionChoice>(null);
   const [settingsAgent, setSettingsAgent] = useState<AgentSummary | null>(null);
+  const [pathAgent, setPathAgent] = useState<AgentSummary | null>(null);
+  const [agentExecutable, setAgentExecutable] =
+    useState<AgentExecutableResolution | null>(null);
+  const [agentExecutableLoading, setAgentExecutableLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const postLaunchSessionRefreshTimers = useRef<ReturnType<
     typeof setTimeout
@@ -243,6 +252,41 @@ export function AgentLaunchBuilder({
       setSessionChoice(null);
     }
   }, [agentId, prefs, profileChoiceAgentId, profiles]);
+
+  const refreshAgentExecutable = useCallback(
+    async (targetAgentId = agentId) => {
+      if (!targetAgentId) {
+        setAgentExecutable(null);
+        return;
+      }
+      if (agents.find((agent) => agent.id === targetAgentId)?.direct_only) {
+        setAgentExecutable(null);
+        setAgentExecutableLoading(false);
+        return;
+      }
+      setAgentExecutableLoading(true);
+      try {
+        const resolution = await getAgentExecutableResolution(targetAgentId);
+        if (targetAgentId === agentId) {
+          setAgentExecutable(resolution);
+        }
+      } catch (error) {
+        if (targetAgentId === agentId) {
+          setAgentExecutable(null);
+          onError(error instanceof Error ? error.message : String(error));
+        }
+      } finally {
+        if (targetAgentId === agentId) {
+          setAgentExecutableLoading(false);
+        }
+      }
+    },
+    [agentId, agents, onError],
+  );
+
+  useEffect(() => {
+    void refreshAgentExecutable(agentId);
+  }, [agentId, refreshAgentExecutable]);
 
   useEffect(() => {
     if (!prefs || !agentId) {
@@ -756,18 +800,44 @@ export function AgentLaunchBuilder({
   }
 
   async function saveAgentExecutablePath(path: string | null) {
-    if (!settingsAgent) return;
+    if (!pathAgent) return;
+    const targetAgent = pathAgent;
     setBusy(true);
     onError(null);
     try {
-      await setLauncherAgentExecutablePath(settingsAgent.id, path);
+      await setLauncherAgentExecutablePath(targetAgent.id, path);
       await refreshPrefs();
-      onToast(t("Agent launch settings updated"));
+      await refreshAgentExecutable(targetAgent.id);
+      onToast(t("Agent launch path updated"));
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function updateAgentExecutable() {
+    if (!pathAgent) return;
+    const targetAgent = pathAgent;
+    setBusy(true);
+    onError(null);
+    try {
+      await updateLauncherAgent(targetAgent.id);
+      await refreshAgentExecutable(targetAgent.id);
+      onToast(t("Agent updated"));
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openAgentPathDialog(agent: AgentSummary) {
+    setPathAgent(agent);
+    if (!agent.direct_only) {
+      void refreshAgentExecutable(agent.id);
     }
   }
 
@@ -798,6 +868,11 @@ export function AgentLaunchBuilder({
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
   const terminalArgCount = agentLaunchArgCount(selectedAgentPreference);
   const showLaunchControls = !selectedAgentIsDirectOnly;
+  const selectedExecutablePath =
+    agentExecutable?.selected?.path ??
+    selectedAgentPreference?.executable?.path ??
+    selectedAgentPreference?.executablePath ??
+    selectedAgent.pty_command;
   const showClaudeDesktopDeveloperModeHint =
     agentId === "claude-desktop" && profileChoice.kind === "profile";
 
@@ -840,7 +915,11 @@ export function AgentLaunchBuilder({
                           disabled={busy}
                           aria-label={t("Agent settings")}
                           title={t("Agent settings")}
-                          onClick={() => setSettingsAgent(selectedAgent)}
+                          onClick={() =>
+                            selectedAgent.direct_only
+                              ? openAgentPathDialog(selectedAgent)
+                              : setSettingsAgent(selectedAgent)
+                          }
                         >
                           <Settings2 className="h-4 w-4" />
                         </TooltipButton>
@@ -885,6 +964,31 @@ export function AgentLaunchBuilder({
                           summary={selectedProfileSummary}
                         />
                       </SelectorPopup>
+                      {!selectedAgentIsDirectOnly && (
+                        <div className="mt-1 flex max-w-[680px] min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+                          <Terminal className="h-3.5 w-3.5 shrink-0" />
+                          <span
+                            className="min-w-0 truncate font-mono [font-variant-ligatures:none]"
+                            title={selectedExecutablePath}
+                          >
+                            {agentExecutableLoading
+                              ? t("Checking path")
+                              : selectedExecutablePath}
+                          </span>
+                          <TooltipButton
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            disabled={busy}
+                            aria-label={t("Change agent path")}
+                            title={t("Change agent path")}
+                            onClick={() => openAgentPathDialog(selectedAgent)}
+                            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </TooltipButton>
+                        </div>
+                      )}
                       {selectedAgentIsDirectOnly && (
                         <div className="mt-1 space-y-0.5">
                           <p className="max-w-[520px] text-[11px] leading-4 text-muted-foreground">
@@ -1096,7 +1200,23 @@ export function AgentLaunchBuilder({
         busy={busy}
         onClose={() => setSettingsAgent(null)}
         onSave={saveAgentLaunchArgs}
+      />
+      <AgentExecutablePathDialog
+        agent={pathAgent}
+        preference={
+          pathAgent ? viewPrefs.agentPreferences[pathAgent.id] : undefined
+        }
+        executableResolution={pathAgent?.id === agentId ? agentExecutable : null}
+        executableLoading={
+          pathAgent?.id === agentId ? agentExecutableLoading : false
+        }
+        busy={busy}
+        onClose={() => setPathAgent(null)}
         onSaveExecutablePath={saveAgentExecutablePath}
+        onRefreshExecutableResolution={() =>
+          pathAgent ? refreshAgentExecutable(pathAgent.id) : Promise.resolve()
+        }
+        onUpdateAgent={updateAgentExecutable}
       />
     </TooltipProvider>
   );
