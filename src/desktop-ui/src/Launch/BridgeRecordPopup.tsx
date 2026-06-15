@@ -403,14 +403,14 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
           </TabsList>
           <div className="flex shrink-0 items-center gap-2">
             <div
-              className="grid h-8 grid-cols-2 rounded-md border border-border bg-muted/40 p-0.5"
+              className="inline-flex h-8 items-center gap-0.5 rounded-md border border-border bg-muted/40 p-1"
               role="group"
               aria-label={t("JSON line wrapping")}
             >
               <button
                 type="button"
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-[5px] text-muted-foreground transition-colors",
+                  "flex size-6 items-center justify-center rounded-[5px] text-muted-foreground transition-colors",
                   !wrapJson && "bg-background text-foreground shadow-sm",
                 )}
                 title={t("No wrap")}
@@ -423,7 +423,7 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
               <button
                 type="button"
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-[5px] text-muted-foreground transition-colors",
+                  "flex size-6 items-center justify-center rounded-[5px] text-muted-foreground transition-colors",
                   wrapJson && "bg-background text-foreground shadow-sm",
                 )}
                 title={t("Wrap")}
