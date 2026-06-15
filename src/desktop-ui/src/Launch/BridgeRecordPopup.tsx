@@ -197,10 +197,11 @@ export function BridgeRecordPopup({
                 <Radio className="h-4 w-4 text-primary" />
                 {t("Bridge recorder")}
               </DialogTitle>
-              <DialogDescription className="mt-1 truncate text-xs">
-                {connected ? t("Connected") : t("Disconnected")}
-                {error ? ` · ${error}` : ""}
-              </DialogDescription>
+              {error && (
+                <DialogDescription className="mt-1 truncate text-xs">
+                  {error}
+                </DialogDescription>
+              )}
             </div>
             <div
               className={cn(
