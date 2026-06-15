@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Copy, Radio, Trash2, Wifi, WifiOff } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
@@ -308,6 +308,10 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
   const [tab, setTab] = useState<PayloadTab>("originalRequest");
   const [wrapJson, setWrapJson] = useState(true);
   const payload = payloadForTab(record, tab);
+  const metadata = record.metadata;
+  const scopeLabel = metadata?.manualScope ?? metadata?.routeScope;
+  const hasStatuses =
+    record.serverStatus !== undefined || record.bridgeStatus !== undefined;
 
   useEffect(() => {
     if (!payloadForTab(record, tab)) {
@@ -319,28 +323,48 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
   return (
     <>
       <div className="shrink-0 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-            <div className="truncate font-mono text-xs text-foreground">
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="min-w-[240px] flex-1 truncate font-mono text-xs text-foreground">
               {record.requestId}
             </div>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-              <span>{record.metadata?.targetApiType ?? t("Unknown target")}</span>
-              {record.metadata?.upstreamUrl && (
-                <span className="max-w-[900px] truncate font-mono">
-                  {record.metadata.upstreamUrl}
-                </span>
-              )}
-              {record.serverStatus && (
-                <span>
-                  {t("server {{status}}", { status: record.serverStatus })}
-                </span>
-              )}
-              {record.bridgeStatus && (
-                <span>
-                  {t("bridge {{status}}", { status: record.bridgeStatus })}
-                </span>
-              )}
+            {hasStatuses && (
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                {record.serverStatus !== undefined && (
+                  <StatusPill status={record.serverStatus}>
+                    {t("server {{status}}", { status: record.serverStatus })}
+                  </StatusPill>
+                )}
+                {record.bridgeStatus !== undefined && (
+                  <StatusPill status={record.bridgeStatus}>
+                    {t("bridge {{status}}", { status: record.bridgeStatus })}
+                  </StatusPill>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <MetaPill mono>
+              <span>{metadata?.clientProtocol ?? t("client")}</span>
+              <span className="text-muted-foreground/60">-&gt;</span>
+              <span>{metadata?.upstreamProtocol ?? t("upstream")}</span>
+            </MetaPill>
+            <MetaPill>{metadata?.targetApiType ?? t("Unknown target")}</MetaPill>
+            {metadata?.model && <MetaPill mono>{metadata.model}</MetaPill>}
+            {metadata?.stream && <MetaPill>SSE</MetaPill>}
+            {scopeLabel && <MetaPill mono>{scopeLabel}</MetaPill>}
+            {metadata?.passthrough && <MetaPill>passthrough</MetaPill>}
+          </div>
+          {metadata?.upstreamUrl && (
+            <div className="flex min-w-0 items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-2 py-1.5">
+              <span className="shrink-0 text-[10px] font-medium uppercase text-muted-foreground">
+                URL
+              </span>
+              <span className="min-w-0 truncate font-mono text-[11px] text-foreground/80">
+                {metadata.upstreamUrl}
+              </span>
             </div>
+          )}
         </div>
         {record.errors.length > 0 && (
           <div className="mt-2 rounded-md border border-destructive/25 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
@@ -486,6 +510,65 @@ function payloadTabLabel(t: (value: string) => string, tab: PayloadTab) {
     case "bridgeResponse":
       return t("Bridge response");
   }
+}
+
+function MetaPill({
+  children,
+  mono = false,
+}: {
+  children: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2 text-[11px] text-muted-foreground",
+        mono && "font-mono text-foreground/75",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function StatusPill({
+  status,
+  children,
+}: {
+  status: number;
+  children: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px]",
+        statusPillClass(status),
+      )}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass(status))} />
+      {children}
+    </span>
+  );
+}
+
+function statusPillClass(status: number) {
+  if (status >= 200 && status < 300) {
+    return "border-emerald-500/25 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400";
+  }
+  if (status >= 300 && status < 400) {
+    return "border-sky-500/25 bg-sky-500/5 text-sky-700 dark:text-sky-400";
+  }
+  if (status >= 400) {
+    return "border-destructive/30 bg-destructive/5 text-destructive";
+  }
+  return "border-border bg-muted/25 text-muted-foreground";
+}
+
+function statusDotClass(status: number) {
+  if (status >= 200 && status < 300) return "bg-emerald-500";
+  if (status >= 300 && status < 400) return "bg-sky-500";
+  if (status >= 400) return "bg-destructive";
+  return "bg-muted-foreground/60";
 }
 
 function mergeRecordEvent(records: BridgeRecordEntry[], event: BridgeRecordEvent) {
