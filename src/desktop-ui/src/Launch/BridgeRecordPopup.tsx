@@ -306,6 +306,7 @@ export function BridgeRecordPopup({
 function RecordDetails({ record }: { record: BridgeRecordEntry }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<PayloadTab>("originalRequest");
+  const [wrapJson, setWrapJson] = useState(true);
   const payload = payloadForTab(record, tab);
 
   useEffect(() => {
@@ -366,20 +367,53 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
         onValueChange={(value) => setTab(value as PayloadTab)}
         className="min-h-0 flex-1 gap-0"
       >
-        <TabsList className="mx-4 mt-3 h-8 w-fit rounded-md">
-          {payloadTabs.map((value) => (
-            <TabsTrigger key={value} value={value} className="h-7 text-xs">
-              {payloadTabLabel(t, value)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="mx-4 mt-3 flex min-h-8 shrink-0 items-center justify-between gap-3">
+          <TabsList className="h-8 w-fit rounded-md">
+            {payloadTabs.map((value) => (
+              <TabsTrigger key={value} value={value} className="h-7 text-xs">
+                {payloadTabLabel(t, value)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <div
+            className="grid h-8 shrink-0 grid-cols-2 rounded-md border border-border bg-muted/40 p-0.5 text-xs"
+            role="group"
+            aria-label={t("JSON line wrapping")}
+          >
+            <button
+              type="button"
+              className={cn(
+                "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
+                wrapJson && "bg-background text-foreground shadow-sm",
+              )}
+              aria-pressed={wrapJson}
+              onClick={() => setWrapJson(true)}
+            >
+              {t("Wrap")}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
+                !wrapJson && "bg-background text-foreground shadow-sm",
+              )}
+              aria-pressed={!wrapJson}
+              onClick={() => setWrapJson(false)}
+            >
+              {t("No wrap")}
+            </button>
+          </div>
+        </div>
         {payloadTabs.map((value) => (
           <TabsContent
             key={value}
             value={value}
             className="mt-0 min-h-0 overflow-hidden px-4 pb-4 pt-3"
           >
-            <PayloadViewer payload={payloadForTab(record, value)} />
+            <PayloadViewer
+              payload={payloadForTab(record, value)}
+              wrap={wrapJson}
+            />
           </TabsContent>
         ))}
       </Tabs>
@@ -387,7 +421,13 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
   );
 }
 
-function PayloadViewer({ payload }: { payload?: RecordedPayload }) {
+function PayloadViewer({
+  payload,
+  wrap,
+}: {
+  payload?: RecordedPayload;
+  wrap: boolean;
+}) {
   const { t } = useI18n();
   if (!payload) {
     return (
@@ -402,7 +442,14 @@ function PayloadViewer({ payload }: { payload?: RecordedPayload }) {
         <span>{formatBytes(payload.byteLength)}</span>
         {payload.truncated && <span>{t("Truncated")}</span>}
       </div>
-      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-5 text-foreground [font-variant-ligatures:none]">
+      <pre
+        className={cn(
+          "min-h-0 flex-1 overflow-auto p-3 font-mono text-[11px] leading-5 text-foreground [font-variant-ligatures:none]",
+          wrap
+            ? "whitespace-pre-wrap break-words"
+            : "whitespace-pre break-normal",
+        )}
+      >
         {payloadText(payload)}
       </pre>
     </div>
