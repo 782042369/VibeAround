@@ -23,14 +23,11 @@ Arguments:
 
 The tool returns the exact session ID from VibeAround's internal state.
 
-### Method 2: Fallback — agent-specific session files
+### Method 2: Let prepare_handover auto-discover
 
-If the env vars are not set (running outside VibeAround), resolve from your agent's local session metadata:
-
-- **Claude Code**: Read `~/.claude/history.jsonl`, find the last entry whose `project` matches cwd, extract `sessionId`.
-- **Codex**: Read `~/.codex/history.jsonl`, take last line, extract `session_id`.
-- **Gemini**: Check recent sessions with `/resume`.
-- **Other agents**: Omit — the server will attempt auto-discovery.
+If the env vars are not set, return nothing. The calling skill should omit
+`session_id`; the `prepare_handover` tool will attempt workspace-aware
+auto-discovery for Qwen Code.
 
 ## Return Value
 
