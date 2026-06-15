@@ -220,7 +220,7 @@ export function BridgeRecordPopup({
           </div>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)]">
           <aside className="flex min-h-0 flex-col border-r border-border bg-muted/15">
             <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
               <span className="text-xs font-medium text-muted-foreground">
@@ -246,54 +246,61 @@ export function BridgeRecordPopup({
                   {t("No records")}
                 </div>
               ) : (
-                records.map((record) => (
-                  <button
-                    key={record.recordId}
-                    type="button"
-                    className={cn(
-                      "flex w-full min-w-0 flex-col gap-1 border-b border-border/70 px-3 py-2 text-left transition-colors",
-                      selected?.recordId === record.recordId
-                        ? "bg-background"
-                        : "hover:bg-background/60",
-                    )}
-                    onClick={() => setSelectedId(record.recordId)}
-                  >
-                    <span className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-xs font-medium">
-                        {record.metadata?.profileId ?? record.requestId.slice(0, 8)}
-                      </span>
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                        {formatTime(record.timestampMs)}
-                      </span>
-                    </span>
-                    <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
-                      <span className="truncate">
-                        {record.metadata?.clientProtocol ?? t("client")}
-                      </span>
-                      <span>-&gt;</span>
-                      <span className="truncate">
-                        {record.metadata?.upstreamProtocol ?? t("upstream")}
-                      </span>
-                      {record.metadata?.stream && <span>SSE</span>}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      {payloadPhases.map((phase) => (
-                        <span
-                          key={phase}
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            record.phases.has(phase)
-                              ? "bg-primary"
-                              : "bg-muted-foreground/25",
-                          )}
-                        />
-                      ))}
-                      {record.errors.length > 0 && (
-                        <AlertCircle className="ml-1 h-3 w-3 text-destructive" />
+                records.map((record) => {
+                  const isSelected = selected?.recordId === record.recordId;
+                  return (
+                    <button
+                      key={record.recordId}
+                      type="button"
+                      aria-current={isSelected ? "true" : undefined}
+                      className={cn(
+                        "flex w-full min-w-0 flex-col gap-1 border-b px-3 py-2 text-left transition-colors",
+                        isSelected
+                          ? "border-primary/20 bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                          : "border-border/70 hover:bg-background/60",
                       )}
-                    </span>
-                  </button>
-                ))
+                      onClick={() => setSelectedId(record.recordId)}
+                    >
+                      <span className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-xs font-medium">
+                          {record.metadata?.profileId ??
+                            record.requestId.slice(0, 8)}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                          {formatTime(record.timestampMs)}
+                        </span>
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="truncate">
+                          {record.metadata?.clientProtocol ?? t("client")}
+                        </span>
+                        <span>-&gt;</span>
+                        <span className="truncate">
+                          {record.metadata?.upstreamProtocol ?? t("upstream")}
+                        </span>
+                        {record.metadata?.stream && <span>SSE</span>}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        {payloadPhases.map((phase) => (
+                          <span
+                            key={phase}
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              record.phases.has(phase)
+                                ? "bg-primary"
+                                : "bg-muted-foreground/25",
+                            )}
+                          />
+                        ))}
+                        {record.errors.length > 0 && (
+                          <AlertCircle
+                            className="ml-1 h-3 w-3 text-destructive"
+                          />
+                        )}
+                      </span>
+                    </button>
+                  );
+                })
               )}
             </div>
           </aside>
