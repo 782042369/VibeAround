@@ -319,8 +319,7 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
   return (
     <>
       <div className="shrink-0 border-b border-border px-4 py-3">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
+        <div className="min-w-0">
             <div className="truncate font-mono text-xs text-foreground">
               {record.requestId}
             </div>
@@ -342,19 +341,6 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
                 </span>
               )}
             </div>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!payload}
-            onClick={() => {
-              if (payload) void navigator.clipboard?.writeText(payloadText(payload));
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            {t("Copy")}
-          </Button>
         </div>
         {record.errors.length > 0 && (
           <div className="mt-2 rounded-md border border-destructive/25 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
@@ -375,33 +361,48 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
               </TabsTrigger>
             ))}
           </TabsList>
-          <div
-            className="grid h-8 shrink-0 grid-cols-2 rounded-md border border-border bg-muted/40 p-0.5 text-xs"
-            role="group"
-            aria-label={t("JSON line wrapping")}
-          >
-            <button
-              type="button"
-              className={cn(
-                "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
-                wrapJson && "bg-background text-foreground shadow-sm",
-              )}
-              aria-pressed={wrapJson}
-              onClick={() => setWrapJson(true)}
+          <div className="flex shrink-0 items-center gap-2">
+            <div
+              className="grid h-8 grid-cols-2 rounded-md border border-border bg-muted/40 p-0.5 text-xs"
+              role="group"
+              aria-label={t("JSON line wrapping")}
             >
-              {t("Wrap")}
-            </button>
-            <button
+              <button
+                type="button"
+                className={cn(
+                  "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
+                  wrapJson && "bg-background text-foreground shadow-sm",
+                )}
+                aria-pressed={wrapJson}
+                onClick={() => setWrapJson(true)}
+              >
+                {t("Wrap")}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
+                  !wrapJson && "bg-background text-foreground shadow-sm",
+                )}
+                aria-pressed={!wrapJson}
+                onClick={() => setWrapJson(false)}
+              >
+                {t("No wrap")}
+              </button>
+            </div>
+            <Button
               type="button"
-              className={cn(
-                "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
-                !wrapJson && "bg-background text-foreground shadow-sm",
-              )}
-              aria-pressed={!wrapJson}
-              onClick={() => setWrapJson(false)}
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={!payload}
+              onClick={() => {
+                if (payload) void navigator.clipboard?.writeText(payloadText(payload));
+              }}
             >
-              {t("No wrap")}
-            </button>
+              <Copy className="h-3.5 w-3.5" />
+              {t("Copy")}
+            </Button>
           </div>
         </div>
         {payloadTabs.map((value) => (
