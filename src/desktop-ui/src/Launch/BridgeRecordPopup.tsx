@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlignLeft,
+  Check,
   Copy,
   Radio,
   Trash2,
@@ -453,6 +454,19 @@ function PayloadViewer({
   wrap: boolean;
 }) {
   const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setCopied(false);
+    return () => {
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current);
+        copiedTimerRef.current = null;
+      }
+    };
+  }, [payload]);
+
   if (!payload) {
     return (
       <div className="flex h-full items-center justify-center rounded-md border border-border bg-muted/20 text-xs text-muted-foreground">
@@ -470,14 +484,28 @@ function PayloadViewer({
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="-mr-1 text-muted-foreground hover:text-foreground"
-            title={t("Copy")}
-            aria-label={t("Copy")}
+            className={cn(
+              "-mr-1 text-muted-foreground hover:text-foreground",
+              copied && "text-emerald-600 hover:text-emerald-600",
+            )}
+            title={copied ? t("Copied") : t("Copy")}
+            aria-label={copied ? t("Copied") : t("Copy")}
             onClick={() => {
-              void navigator.clipboard?.writeText(payloadText(payload));
+              void copyPayloadToClipboard(payload, () => {
+                setCopied(true);
+                if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+                copiedTimerRef.current = setTimeout(() => {
+                  setCopied(false);
+                  copiedTimerRef.current = null;
+                }, 1400);
+              });
             }}
           >
-            <Copy className="h-3.5 w-3.5" />
+            {copied ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
           </Button>
         </span>
       </div>
@@ -645,6 +673,19 @@ function payloadText(payload: RecordedPayload) {
     }
   }
   return payload.text;
+}
+
+async function copyPayloadToClipboard(
+  payload: RecordedPayload,
+  onCopied: () => void,
+) {
+  try {
+    if (!navigator.clipboard) return;
+    await navigator.clipboard.writeText(payloadText(payload));
+    onCopied();
+  } catch {
+    // Keep the recorder UI quiet if clipboard permission is unavailable.
+  }
 }
 
 function formatTime(timestampMs: number) {
