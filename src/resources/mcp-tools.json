@@ -1,17 +1,33 @@
 [
   {
     "name": "get_session_id",
-    "description": "Resolve the current agent session ID. For VibeAround-managed sessions, pass VIBEAROUND_CHANNEL_KIND and VIBEAROUND_CHAT_ID. For Codex, pass agent_kind=codex so VibeAround can read Codex MCP metadata.",
+    "description": "Resolve and record the current agent session ID. Pass explicit session_id when the agent exposes one, channel_kind/chat_id for VibeAround-managed ACP sessions, or agent_kind=codex so VibeAround can read Codex MCP metadata. Include launch_id/profile_id/cwd when available so VibeAround can update the launch record.",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Explicit current session ID exposed by the agent, if available."
+        },
         "agent_kind": {
           "type": "string",
-          "description": "Agent type for MCP metadata lookup. Use codex when running inside Codex."
+          "description": "Agent type (e.g. claude, codex, pi, gemini, cursor, kiro, qwen-code)."
         },
         "agent_type": {
           "type": "string",
           "description": "Alias for agent_kind."
+        },
+        "launch_id": {
+          "type": "string",
+          "description": "Optional VibeAround launch id from $VIBEAROUND_LAUNCH_ID. If present, VibeAround records the resolved session against this launch."
+        },
+        "profile_id": {
+          "type": "string",
+          "description": "Optional VibeAround launch profile id from $VIBEAROUND_PROFILE_ID."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Absolute path to the current working directory / project workspace."
         },
         "channel_kind": {
           "type": "string",

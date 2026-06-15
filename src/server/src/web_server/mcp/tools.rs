@@ -33,48 +33,74 @@ pub(super) async fn mcp_get_session_id(
     metadata: Option<&serde_json::Value>,
     state: &AppState,
 ) -> Json<serde_json::Value> {
-    let channel_kind = arguments.get("channel_kind").and_then(|v| v.as_str());
-    let chat_id = arguments.get("chat_id").and_then(|v| v.as_str());
-    if let (Some(channel_kind), Some(chat_id)) = (channel_kind, chat_id) {
-        return mcp_get_session_id_from_route(id, channel_kind, chat_id, state).await;
+    let agent_kind = argument_string(arguments, "agent_kind")
+        .or_else(|| argument_string(arguments, "agent_type"));
+
+    if let Some(session_id) = argument_string(arguments, "session_id") {
+        record_mcp_session_observation(arguments, agent_kind.as_deref(), &session_id, "argument");
+        return mcp_text(id, &session_id);
     }
 
-    let agent_kind = arguments
-        .get("agent_kind")
-        .or_else(|| arguments.get("agent_type"))
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .unwrap_or("");
-
-    match agent_kind {
-        "codex" => match codex_session_id_from_mcp_metadata(metadata) {
-            Some(session_id) => mcp_text(id, &session_id),
-            None => mcp_error_text(
-                id,
-                "Codex did not provide a session ID in MCP metadata. Retry from Codex, or provide channel_kind/chat_id for a VibeAround-managed session.",
-            ),
-        },
-        "" => jsonrpc_err(
+    let channel_kind = argument_string(arguments, "channel_kind");
+    let chat_id = argument_string(arguments, "chat_id");
+    if let (Some(channel_kind), Some(chat_id)) = (channel_kind.as_deref(), chat_id.as_deref()) {
+        if let Some(session_id) = session_id_from_route(channel_kind, chat_id, state).await {
+            record_mcp_session_observation(arguments, agent_kind.as_deref(), &session_id, "route");
+            return mcp_text(id, &session_id);
+        }
+        return mcp_error_text(
             id,
-            -32602,
-            "Missing required arguments: provide channel_kind/chat_id or agent_kind",
-        ),
-        other => mcp_error_text(
+            "No active session found for this route. The agent session may not have started yet.",
+        );
+    }
+
+    if agent_kind.as_deref() == Some("codex") {
+        if let Some(session_id) = codex_session_id_from_mcp_metadata(metadata) {
+            record_mcp_session_observation(
+                arguments,
+                agent_kind.as_deref(),
+                &session_id,
+                "codex-mcp-metadata",
+            );
+            return mcp_text(id, &session_id);
+        }
+        return mcp_error_text(
+            id,
+            "Codex did not provide a session ID in MCP metadata. Retry from Codex, or pass session_id explicitly.",
+        );
+    }
+
+    if let (Some(agent_kind), Some(cwd)) =
+        (agent_kind.as_deref(), argument_string(arguments, "cwd"))
+    {
+        let cwd = common::workspace::normalize_workspace_cwd(PathBuf::from(cwd));
+        if let Some(session) = find_latest_session(agent_kind, &cwd) {
+            record_mcp_session_observation(arguments, Some(agent_kind), &session, "auto-discovery");
+            return mcp_text(id, &session);
+        }
+    }
+
+    match agent_kind.as_deref() {
+        Some(other) => mcp_error_text(
             id,
             &format!(
-                "MCP metadata session lookup is not supported for agent_kind '{}'. Provide channel_kind/chat_id or pass session_id explicitly.",
+                "Could not resolve session ID for agent_kind '{}'. Pass session_id explicitly or provide channel_kind/chat_id for a VibeAround-managed session.",
                 other
             ),
+        ),
+        None => jsonrpc_err(
+            id,
+            -32602,
+            "Missing required arguments: provide session_id, channel_kind/chat_id, or agent_kind",
         ),
     }
 }
 
-async fn mcp_get_session_id_from_route(
-    id: Option<serde_json::Value>,
+async fn session_id_from_route(
     channel_kind: &str,
     chat_id: &str,
     state: &AppState,
-) -> Json<serde_json::Value> {
+) -> Option<String> {
     let route = common::routing::RouteKey::new(channel_kind, chat_id);
     let state_opt = state
         .channel_hub
@@ -88,14 +114,50 @@ async fn mcp_get_session_id_from_route(
         None => None,
     };
     match state_opt {
-        Some(snapshot) if snapshot.session_id.is_some() => {
-            let sid = snapshot.session_id.unwrap();
-            mcp_text(id, &sid)
-        }
-        _ => mcp_error_text(
-            id,
-            "No active session found for this route. The agent session may not have started yet.",
-        ),
+        Some(snapshot) => snapshot.session_id,
+        None => None,
+    }
+}
+
+fn record_mcp_session_observation(
+    arguments: &Value,
+    agent_kind: Option<&str>,
+    session_id: &str,
+    source: &str,
+) {
+    let fallback_agent_kind = argument_string(arguments, "launch_target")
+        .or_else(|| argument_string(arguments, "launchTarget"));
+    let agent_kind = agent_kind
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or(fallback_agent_kind.as_deref());
+    let Some(agent_kind) = agent_kind else {
+        return;
+    };
+    let launch_id =
+        argument_string(arguments, "launch_id").or_else(|| argument_string(arguments, "launchId"));
+    if launch_id.is_none() {
+        return;
+    }
+    let profile_id = argument_string(arguments, "profile_id")
+        .or_else(|| argument_string(arguments, "profileId"));
+    let cwd = argument_string(arguments, "cwd")
+        .map(PathBuf::from)
+        .map(common::workspace::normalize_workspace_cwd);
+    if let Err(error) = common::launch_sessions::record_observed_launch_session(
+        launch_id.as_deref(),
+        agent_kind,
+        profile_id.as_deref(),
+        cwd.as_deref(),
+        session_id,
+        source,
+    ) {
+        tracing::warn!(
+            error = %error,
+            launch_id = ?launch_id,
+            agent_kind = %agent_kind,
+            "failed to record MCP-observed launch session"
+        );
     }
 }
 
@@ -129,6 +191,10 @@ fn string_field(value: &Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
+}
+
+fn argument_string(arguments: &Value, field: &str) -> Option<String> {
+    string_field(arguments, field)
 }
 
 // ---------------------------------------------------------------------------
