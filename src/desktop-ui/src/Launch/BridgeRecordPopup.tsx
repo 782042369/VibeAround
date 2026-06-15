@@ -189,6 +189,8 @@ export function BridgeRecordPopup({
       <DialogContent
         className="flex grid-rows-none flex-col gap-0 overflow-hidden p-0"
         style={dialogSize}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => event.preventDefault()}
       >
         <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
           <div className="flex items-center justify-between gap-4 pr-8">
