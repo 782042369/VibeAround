@@ -1,5 +1,14 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Copy, Radio, Trash2, Wifi, WifiOff } from "lucide-react";
+import {
+  AlertCircle,
+  AlignLeft,
+  Copy,
+  Radio,
+  Trash2,
+  Wifi,
+  WifiOff,
+  WrapText,
+} from "lucide-react";
 import { useI18n } from "@va/i18n";
 
 import { Button } from "@/components/ui/button";
@@ -307,7 +316,6 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<PayloadTab>("originalRequest");
   const [wrapJson, setWrapJson] = useState(true);
-  const payload = payloadForTab(record, tab);
   const metadata = record.metadata;
   const scopeLabel = metadata?.manualScope ?? metadata?.routeScope;
   const hasStatuses =
@@ -387,46 +395,37 @@ function RecordDetails({ record }: { record: BridgeRecordEntry }) {
           </TabsList>
           <div className="flex shrink-0 items-center gap-2">
             <div
-              className="grid h-8 grid-cols-2 rounded-md border border-border bg-muted/40 p-0.5 text-xs"
+              className="grid h-8 grid-cols-2 rounded-md border border-border bg-muted/40 p-0.5"
               role="group"
               aria-label={t("JSON line wrapping")}
             >
               <button
                 type="button"
                 className={cn(
-                  "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
+                  "flex size-7 items-center justify-center rounded-[5px] text-muted-foreground transition-colors",
                   wrapJson && "bg-background text-foreground shadow-sm",
                 )}
+                title={t("Wrap")}
+                aria-label={t("Wrap")}
                 aria-pressed={wrapJson}
                 onClick={() => setWrapJson(true)}
               >
-                {t("Wrap")}
+                <WrapText className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
                 className={cn(
-                  "min-w-16 rounded-[5px] px-2 text-muted-foreground transition-colors",
+                  "flex size-7 items-center justify-center rounded-[5px] text-muted-foreground transition-colors",
                   !wrapJson && "bg-background text-foreground shadow-sm",
                 )}
+                title={t("No wrap")}
+                aria-label={t("No wrap")}
                 aria-pressed={!wrapJson}
                 onClick={() => setWrapJson(false)}
               >
-                {t("No wrap")}
+                <AlignLeft className="h-3.5 w-3.5" />
               </button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8"
-              disabled={!payload}
-              onClick={() => {
-                if (payload) void navigator.clipboard?.writeText(payloadText(payload));
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-              {t("Copy")}
-            </Button>
           </div>
         </div>
         {payloadTabs.map((value) => (
@@ -465,7 +464,22 @@ function PayloadViewer({
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-background">
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border px-3 text-[11px] text-muted-foreground">
         <span>{formatBytes(payload.byteLength)}</span>
-        {payload.truncated && <span>{t("Truncated")}</span>}
+        <span className="flex items-center gap-1.5">
+          {payload.truncated && <span>{t("Truncated")}</span>}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="-mr-1 text-muted-foreground hover:text-foreground"
+            title={t("Copy")}
+            aria-label={t("Copy")}
+            onClick={() => {
+              void navigator.clipboard?.writeText(payloadText(payload));
+            }}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+        </span>
       </div>
       <pre
         className={cn(
