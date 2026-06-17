@@ -43,6 +43,7 @@ export function Launch({ refreshToken = 0 }: { refreshToken?: number }) {
   const [toast, setToast] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ProfileDef | null>(null);
+  const [editingAgentId, setEditingAgentId] = useState<string>("codex");
   const [connectionEditing, setConnectionEditing] =
     useState<ConnectionEditing | null>(null);
   const [bridgeRecorderOpen, setBridgeRecorderOpen] = useState(false);
@@ -75,14 +76,16 @@ export function Launch({ refreshToken = 0 }: { refreshToken?: number }) {
     return () => clearTimeout(timeout);
   }, [toast]);
 
-  function openNewEditor() {
+  function openNewEditor(agentId: string) {
+    setEditingAgentId(agentId);
     setEditing(null);
     setEditorOpen(true);
   }
 
-  async function handleEdit(summary: ProfileSummary) {
+  async function handleEdit(summary: ProfileSummary, agentId: string) {
     try {
       const full = await getProfile(summary.id);
+      setEditingAgentId(agentId);
       setEditing(full);
       setEditorOpen(true);
     } catch (e) {
@@ -146,7 +149,7 @@ export function Launch({ refreshToken = 0 }: { refreshToken?: number }) {
           onPrefsChange={setPrefs}
           onProfilesChange={setProfiles}
           onNewProfile={openNewEditor}
-          onEditProfile={(profile) => void handleEdit(profile)}
+          onEditProfile={(profile, agentId) => void handleEdit(profile, agentId)}
           onConnectionSettings={(profile, agentId) =>
             setConnectionEditing({ profile, agentId })
           }
@@ -159,6 +162,7 @@ export function Launch({ refreshToken = 0 }: { refreshToken?: number }) {
         <ProfileFormDialog
           catalog={catalog}
           initial={editing}
+          agentId={editingAgentId}
           onClose={() => {
             setEditorOpen(false);
             setEditing(null);

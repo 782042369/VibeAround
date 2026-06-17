@@ -256,3 +256,14 @@ export function setLauncherSelectedAgent(agentId: string): Promise<void> {
 export function listCatalog(): Promise<CatalogEntry[]> {
   return invoke<CatalogEntry[]>("profiles_catalog");
 }
+
+export type ProfileModelOption = unknown;
+
+export function fetchProfileModels(
+  baseUrl: string,
+  apiKey: string,
+): Promise<ProfileModelOption[]> {
+  return invoke<ProfileModelOption[]>("profiles_fetch_models", {
+    request: { baseUrl, apiKey },
+  });
+}

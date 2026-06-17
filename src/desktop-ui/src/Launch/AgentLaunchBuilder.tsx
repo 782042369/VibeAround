@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
-  FolderOpen,
   Monitor,
   Pencil,
   Rocket,
@@ -11,13 +9,9 @@ import { useI18n } from "@va/i18n";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentRailButton, TooltipButton } from "./LaunchBuilderPrimitives";
-import {
-  ProfilePanel,
-  WorkspacePanel,
-} from "./LaunchBuilderPanels";
+import { ProfilePanel } from "./LaunchBuilderPanels";
 import {
   AgentSummaryHeader,
-  LaunchSummaryPill,
   ProfileInfoPanel,
   SelectorPopup,
   type SelectorPopupId,
@@ -29,10 +23,7 @@ import {
   getProfile,
   launchProfile,
   listAgents,
-  listLauncherWorkspaces,
   listProfiles,
-  removeLauncherWorkspace,
-  reorderLauncherWorkspaces,
   reorderProfiles,
   getDesktopAppEntries,
   getAgentExecutableLatest,
@@ -43,22 +34,17 @@ import {
   setLauncherAgentProfile,
   setLauncherDefault,
   setLauncherSelectedAgent,
-  setLauncherWorkspace,
   type AgentSummary,
   type AgentExecutableLatest,
   type AgentExecutableResolution,
   type DesktopAppDetectionFile,
   type LauncherPreferences,
-  type WorkspaceOption,
 } from "./api";
 import { buildProfileCopyDraft } from "./profileClone";
 import {
   connectionAgentId,
   agentProfileId,
-  currentWorkspace,
-  agentWorkspace,
   isSelectionLaunchable,
-  isSortableWorkspace,
   mergeOrderedSubset,
   moveItemBefore,
   profileById,
@@ -80,9 +66,49 @@ const AGENT_ORDER = [
   "claude",
   "claude-desktop",
 ];
+const CLAUDE_API_TYPE = "anthropic";
+const CODEX_API_TYPE = "openai-responses";
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5";
+const DEFAULT_CODEX_MODEL = "gpt-5.5";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function agentNativeApiType(agentId: string): string | null {
+  if (agentId.startsWith("claude")) return CLAUDE_API_TYPE;
+  if (agentId.startsWith("codex")) return CODEX_API_TYPE;
+  return null;
+}
+
+function profileBelongsToAgent(profile: ProfileSummary, agentId: string): boolean {
+  const apiType = agentNativeApiType(agentId);
+  if (!apiType) return false;
+  const inferredApiType = inferLegacyGatewayApiType(profile);
+  return inferredApiType
+    ? inferredApiType === apiType
+    : profile.apiTypes.includes(apiType);
+}
+
+function inferLegacyGatewayApiType(profile: ProfileSummary): string | null {
+  if (
+    profile.provider !== "custom" ||
+    !profile.apiTypes.includes(CLAUDE_API_TYPE) ||
+    !profile.apiTypes.includes(CODEX_API_TYPE)
+  ) {
+    return null;
+  }
+
+  const claudeModel = profile.apiTypeModels[CLAUDE_API_TYPE]?.trim();
+  const codexModel = profile.apiTypeModels[CODEX_API_TYPE]?.trim();
+  const claudeCustomized = Boolean(
+    claudeModel && claudeModel !== DEFAULT_CLAUDE_MODEL,
+  );
+  const codexCustomized = Boolean(
+    codexModel && codexModel !== DEFAULT_CODEX_MODEL,
+  );
+  if (claudeCustomized === codexCustomized) return null;
+  return claudeCustomized ? CLAUDE_API_TYPE : CODEX_API_TYPE;
 }
 
 interface Props {
@@ -90,8 +116,8 @@ interface Props {
   prefs: LauncherPreferences | null;
   onPrefsChange: (prefs: LauncherPreferences) => void;
   onProfilesChange: (profiles: ProfileSummary[]) => void;
-  onNewProfile: () => void;
-  onEditProfile: (profile: ProfileSummary) => void;
+  onNewProfile: (agentId: string) => void;
+  onEditProfile: (profile: ProfileSummary, agentId: string) => void;
   onConnectionSettings: (
     profile: ProfileSummary,
     agentId: ConnectionAgentId,
@@ -119,10 +145,6 @@ export function AgentLaunchBuilder({
   const [openSelector, setOpenSelector] = useState<SelectorPopupId | null>(
     null,
   );
-  const [workspaceOptions, setWorkspaceOptions] = useState<
-    WorkspaceOption[] | null
-  >(null);
-  const [workspacesLoading, setWorkspacesLoading] = useState(false);
   const [pathAgent, setPathAgent] = useState<AgentSummary | null>(null);
   const [agentExecutable, setAgentExecutable] =
     useState<AgentExecutableResolution | null>(null);
@@ -136,14 +158,7 @@ export function AgentLaunchBuilder({
     () => (prefs ? new Set(prefs.enabledAgents) : null),
     [enabledAgentKey],
   );
-  const viewPrefs = useMemo<LauncherPreferences | null>(() => {
-    if (!prefs) return null;
-    return {
-      ...prefs,
-      workspace: agentWorkspace(prefs, agentId),
-      workspaceOptions: workspaceOptions ?? prefs.workspaceOptions,
-    };
-  }, [prefs, workspaceOptions, agentId]);
+  const viewPrefs = prefs;
 
   useEffect(() => {
     void Promise.all([
@@ -185,29 +200,27 @@ export function AgentLaunchBuilder({
     if (!prefs || !agentId) return;
     setProfileChoice((current) => {
       if (profileChoiceAgentId === agentId && current) {
+        const currentProfile = profileById(profiles, current.profileId);
         if (
-          profileSupportsAgent(
-            profileById(profiles, current.profileId),
-            agentId,
-            prefs,
-          )
+          currentProfile &&
+          profileBelongsToAgent(currentProfile, agentId) &&
+          profileSupportsAgent(currentProfile, agentId, prefs)
         ) {
           return current;
         }
       }
 
       const defaultProfileId = agentProfileId(prefs, agentId);
+      const defaultProfile = profileById(profiles, defaultProfileId);
       if (
-        defaultProfileId &&
-        profileSupportsAgent(
-          profileById(profiles, defaultProfileId),
-          agentId,
-          prefs,
-        )
+        defaultProfile &&
+        profileBelongsToAgent(defaultProfile, agentId) &&
+        profileSupportsAgent(defaultProfile, agentId, prefs)
       ) {
-        return { kind: "profile", profileId: defaultProfileId };
+        return { kind: "profile", profileId: defaultProfile.id };
       }
       const firstSupportedProfile = profiles.find((profile) =>
+        profileBelongsToAgent(profile, agentId) &&
         profileSupportsAgent(profile, agentId, prefs),
       );
       return firstSupportedProfile
@@ -252,41 +265,16 @@ export function AgentLaunchBuilder({
     void refreshAgentExecutable(agentId);
   }, [agentId, refreshAgentExecutable]);
 
-  useEffect(() => {
-    if (!prefs || !agentId) {
-      setWorkspaceOptions(null);
-      setWorkspacesLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setWorkspacesLoading(true);
-    void listLauncherWorkspaces(agentId)
-      .then((items) => {
-        if (!cancelled) setWorkspaceOptions(items);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          onError(error instanceof Error ? error.message : String(error));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setWorkspacesLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [prefs, agentId, onError]);
-
   const selectedAgent = agents.find((agent) => agent.id === agentId);
   const selectedAgentIsDirectOnly = Boolean(selectedAgent?.direct_only);
   const selectedProfile =
     profileChoice?.kind === "profile"
       ? profileById(profiles, profileChoice.profileId)
       : null;
-  const profileOptions = profiles;
-  const selectedWorkspace = currentWorkspace(viewPrefs);
+  const profileOptions = useMemo(
+    () => profiles.filter((profile) => profileBelongsToAgent(profile, agentId)),
+    [agentId, profiles],
+  );
   const selectionLaunchable = viewPrefs
     ? profileChoice
       ? isSelectionLaunchable(profileChoice, selectedProfile, agentId, viewPrefs)
@@ -357,43 +345,6 @@ export function AgentLaunchBuilder({
     }
   }
 
-  async function chooseWorkspace(path: string) {
-    if (!prefs || !agentId || path === agentWorkspace(prefs, agentId)) {
-      return;
-    }
-    setBusy(true);
-    onError(null);
-    try {
-      await setLauncherWorkspace(path, agentId);
-      await refreshPrefs();
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function chooseFolder() {
-    if (!agentId) return;
-    setBusy(true);
-    onError(null);
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t("Choose Launch Workspace"),
-      });
-      const path = Array.isArray(selected) ? selected[0] : selected;
-      if (!path) return;
-      await setLauncherWorkspace(path, agentId);
-      await refreshPrefs();
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function makeDefault(choice: ProfileChoice) {
     setBusy(true);
     onError(null);
@@ -401,41 +352,6 @@ export function AgentLaunchBuilder({
       await setLauncherDefault(agentId, choice.profileId);
       await refreshPrefs();
       onToast(t("VibeWbz default updated"));
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeWorkspace(path: string, label: string) {
-    if (!window.confirm(t('Remove workspace "{{label}}"?', { label }))) return;
-    setBusy(true);
-    onError(null);
-    try {
-      await removeLauncherWorkspace(path);
-      await refreshPrefs();
-      onToast(t("Workspace removed"));
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function reorderWorkspace(fromPath: string, toPath: string) {
-    if (!viewPrefs || fromPath === toPath) return;
-    const reorderablePaths = viewPrefs.workspaceOptions
-      .filter(isSortableWorkspace)
-      .map((workspace) => workspace.path);
-    const nextPaths = moveItemBefore(reorderablePaths, fromPath, toPath);
-    if (nextPaths === reorderablePaths) return;
-    setBusy(true);
-    onError(null);
-    try {
-      await reorderLauncherWorkspaces(nextPaths);
-      await refreshPrefs();
-      onToast(t("Workspace order updated"));
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -630,7 +546,6 @@ export function AgentLaunchBuilder({
           : t("Gateway"),
       };
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
-  const showLaunchControls = !selectedAgentIsDirectOnly;
   const desktopAppEntryForAgent = (targetAgentId: string) =>
     desktopAppEntries?.apps[targetAgentId]?.entry;
   const desktopAppPathForAgent = (targetAgentId: string): string | undefined => {
@@ -768,57 +683,6 @@ export function AgentLaunchBuilder({
                       )}
                     </>
                   </AgentSummaryHeader>
-                  {showLaunchControls && (
-                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-                      <SelectorPopup
-                        id="workspace"
-                        openSelector={openSelector}
-                        onOpenChange={setOpenSelector}
-                        widthClassName="w-[min(400px,calc(100vw-1rem))]"
-                        widthPx={400}
-                        trigger={
-                          <LaunchSummaryPill
-                            active={openSelector === "workspace"}
-                            chevron
-                            className="w-[250px]"
-                            icon={<FolderOpen className="h-4 w-4" />}
-                            onClick={() =>
-                              setOpenSelector(
-                                openSelector === "workspace"
-                                  ? null
-                                  : "workspace",
-                              )
-                            }
-                            label={t("Workspace")}
-                            title={selectedWorkspace.label}
-                            detail={
-                              workspacesLoading ? t("Loading…") : undefined
-                            }
-                          />
-                        }
-                      >
-                        <WorkspacePanel
-                          prefs={viewPrefs}
-                          loading={workspacesLoading}
-                          onSelect={(path) => {
-                            setOpenSelector(null);
-                            void chooseWorkspace(path);
-                          }}
-                          onDelete={(path, label) =>
-                            void removeWorkspace(path, label)
-                          }
-                          onReorder={(fromPath, toPath) =>
-                            void reorderWorkspace(fromPath, toPath)
-                          }
-                          onCreate={() => {
-                            setOpenSelector(null);
-                            void chooseFolder();
-                          }}
-                          busy={busy}
-                        />
-                      </SelectorPopup>
-                    </div>
-                  )}
                 </div>
                 <div className="col-span-1 flex">
                   <TooltipButton
@@ -847,14 +711,14 @@ export function AgentLaunchBuilder({
                   void chooseProfileApiType(profile, apiType)
                 }
                 onMakeDefault={makeDefault}
-                onEditProfile={onEditProfile}
+                onEditProfile={(profile) => onEditProfile(profile, agentId)}
                 onDuplicateProfile={(profile) => void duplicateProfile(profile)}
                 onConnectionSettings={onConnectionSettings}
                 onDeleteProfile={(profile) => void removeProfile(profile)}
                 onReorderProfile={(fromId, toId) =>
                   void reorderProfile(fromId, toId)
                 }
-                onNewProfile={onNewProfile}
+                onNewProfile={() => onNewProfile(agentId)}
                 busy={busy}
               />
             </section>

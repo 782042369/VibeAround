@@ -63,6 +63,9 @@ export interface ApiTypeOverrides {
   endpoint_id?: string | null;
   base_url?: string | null;
   model?: string | null;
+  claude_default_haiku_model?: string | null;
+  claude_default_sonnet_model?: string | null;
+  claude_default_opus_model?: string | null;
   reasoning_effort?: string | null;
   capabilities?: ContentCapabilities | null;
 }
