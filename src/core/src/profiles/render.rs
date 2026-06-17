@@ -430,6 +430,21 @@ fn normalize_claude_env(env: &mut Vec<(String, String)>, ctx: &BTreeMap<String, 
     push_env_if_nonempty(env, "ANTHROPIC_AUTH_TOKEN", api_key);
     push_env_if_nonempty(env, "ANTHROPIC_BASE_URL", base_url);
     push_env_if_nonempty(env, "ANTHROPIC_MODEL", model);
+    push_env_if_configured(
+        env,
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        ctx.get("claude_default_haiku_model"),
+    );
+    push_env_if_configured(
+        env,
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        ctx.get("claude_default_sonnet_model"),
+    );
+    push_env_if_configured(
+        env,
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        ctx.get("claude_default_opus_model"),
+    );
     if let Some(auto_compact_window) = auto_compact_window {
         push_env_if_nonempty(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW", auto_compact_window);
     }
@@ -446,6 +461,12 @@ fn first_env_value(env: &[(String, String)], keys: &[&str]) -> Option<String> {
 fn push_env_if_nonempty(env: &mut Vec<(String, String)>, key: &str, value: String) {
     if !value.is_empty() {
         env.push((key.to_string(), value));
+    }
+}
+
+fn push_env_if_configured(env: &mut Vec<(String, String)>, key: &str, value: Option<&String>) {
+    if let Some(value) = value {
+        env.push((key.to_string(), value.clone()));
     }
 }
 
@@ -559,6 +580,15 @@ fn build_context(
         .filter(|model| !model.trim().is_empty())
         .or_else(|| endpoint.models.first().map(|model| model.id.clone()))
         .unwrap_or_default();
+    if let Some(model) = overrides.claude_default_haiku_model {
+        ctx.insert("claude_default_haiku_model".to_string(), model);
+    }
+    if let Some(model) = overrides.claude_default_sonnet_model {
+        ctx.insert("claude_default_sonnet_model".to_string(), model);
+    }
+    if let Some(model) = overrides.claude_default_opus_model {
+        ctx.insert("claude_default_opus_model".to_string(), model);
+    }
     let model_def = catalog::find_model(endpoint, &requested_model);
     let model = model_def
         .map(|model_def| model_def.id.clone())
@@ -788,6 +818,35 @@ mod tests {
     }
 
     #[test]
+    fn claude_launch_env_includes_default_model_pins() {
+        let mut profile = gateway_profile("anthropic", "claude-sonnet-4-5");
+        let overrides = profile
+            .overrides
+            .get_mut("anthropic")
+            .expect("anthropic overrides");
+        overrides.claude_default_haiku_model = Some("claude-haiku-test".to_string());
+        overrides.claude_default_sonnet_model = Some("claude-sonnet-test".to_string());
+        overrides.claude_default_opus_model = Some("claude-opus-test".to_string());
+        let provider = catalog::custom();
+
+        let rendered =
+            render(&profile, "anthropic", "claude", provider).expect("claude profile renders");
+
+        assert_eq!(
+            env_value(&rendered.env, "ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+            Some("claude-haiku-test")
+        );
+        assert_eq!(
+            env_value(&rendered.env, "ANTHROPIC_DEFAULT_SONNET_MODEL"),
+            Some("claude-sonnet-test")
+        );
+        assert_eq!(
+            env_value(&rendered.env, "ANTHROPIC_DEFAULT_OPUS_MODEL"),
+            Some("claude-opus-test")
+        );
+    }
+
+    #[test]
     fn codex_launch_uses_gateway_responses_config_args() {
         let profile = gateway_profile("openai-responses", "gpt-5.5");
         let provider = catalog::custom();
@@ -869,7 +928,7 @@ mod tests {
                 base_url: Some("http://ai.939593.xyz".to_string()),
                 model: Some(model.to_string()),
                 reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
+                ..Default::default()
             },
         );
 

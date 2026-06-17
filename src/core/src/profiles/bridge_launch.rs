@@ -725,7 +725,7 @@ mod tests {
                 base_url: Some("http://ai.939593.xyz".to_string()),
                 model: Some(model.to_string()),
                 reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
+                ..Default::default()
             },
         );
 

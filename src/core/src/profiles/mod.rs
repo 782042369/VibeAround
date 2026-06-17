@@ -230,8 +230,7 @@ mod tests {
                 endpoint_id: Some("standard-cn".to_string()),
                 base_url: None,
                 model: None,
-                reasoning_effort: None,
-                capabilities: None,
+                ..Default::default()
             },
         );
         let profile = ProfileDef {
@@ -288,8 +287,7 @@ mod tests {
                 endpoint_id: None,
                 base_url: Some("https://api.kimi.com/coding/".to_string()),
                 model: Some("kimi-for-coding".to_string()),
-                reasoning_effort: None,
-                capabilities: None,
+                ..Default::default()
             },
         );
         let profile = ProfileDef {
@@ -325,8 +323,7 @@ mod tests {
                 endpoint_id: Some("openai-compatible".to_string()),
                 base_url: None,
                 model: Some("gemini-3.1-pro".to_string()),
-                reasoning_effort: None,
-                capabilities: None,
+                ..Default::default()
             },
         );
         let profile = ProfileDef {
