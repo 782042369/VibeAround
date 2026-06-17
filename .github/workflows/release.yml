@@ -76,7 +76,7 @@ jobs:
       - name: Build and upload release assets
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
           projectPath: src/desktop
           tauriScript: bun tauri
@@ -121,7 +121,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.TOKEN }}
         run: |
           gh release upload "${{ steps.release.outputs.tag }}" \
             "VibeWbz-win-${{ steps.release.outputs.version }}-portable.zip" \
