@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use common::agent_state;
 use common::profiles::{normalize_legacy_profile_and_persist, schema};
 use common::{config, resources};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
 use self::connections::{
@@ -69,6 +69,18 @@ pub struct AgentExecutableLatestView {
     pub path: String,
     pub latest_version: Option<String>,
     pub update_available: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileModelFetchRequest {
+    pub base_url: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiModelsResponse {
+    data: Vec<serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +159,51 @@ pub async fn profiles_google_oauth_login() -> Result<GoogleOAuthStatus, String> 
     common::profiles::google_oauth::login_with_browser_default_client()
         .await
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn profiles_fetch_models(
+    request: ProfileModelFetchRequest,
+) -> Result<Vec<serde_json::Value>, String> {
+    let base_url = request.base_url.trim().trim_end_matches('/');
+    let api_key = request.api_key.trim();
+    if base_url.is_empty() {
+        return Err("gateway address is required".to_string());
+    }
+    if api_key.is_empty() {
+        return Err("gateway key is required".to_string());
+    }
+    if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
+        return Err("gateway address must start with http:// or https://".to_string());
+    }
+
+    let url = format!("{base_url}/v1/models");
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(url)
+        .bearer_auth(api_key)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        let detail = body.trim();
+        return Err(if detail.is_empty() {
+            format!("model list request failed with HTTP {status}")
+        } else {
+            format!("model list request failed with HTTP {status}: {detail}")
+        });
+    }
+
+    let models = response
+        .json::<OpenAiModelsResponse>()
+        .await
+        .map_err(|error| error.to_string())?
+        .data;
+    Ok(models)
 }
 
 // ---------------------------------------------------------------------------
