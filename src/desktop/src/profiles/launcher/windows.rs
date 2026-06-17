@@ -65,10 +65,12 @@ fn build_powershell_script(plan: &LaunchPlan, command: &str, args: &[String]) ->
     }
     append_powershell_launch_path(&mut out);
     append_powershell_color_env(&mut out);
-    out.push_str(&format!(
-        "Set-Location -LiteralPath '{}'\n",
-        escape_powershell_single_quoted(&plan.workspace.to_string_lossy())
-    ));
+    if let Some(workspace) = &plan.workspace {
+        out.push_str(&format!(
+            "Set-Location -LiteralPath '{}'\n",
+            escape_powershell_single_quoted(&workspace.to_string_lossy())
+        ));
+    }
     out.push_str(&powershell_command_block(command, &args));
     out.push('\n');
     if let Some(process_name) = &plan.windows_process_probe {
@@ -579,7 +581,7 @@ mod tests {
             command: command.to_string(),
             args,
             window_label: "Codex Test".to_string(),
-            workspace: PathBuf::from(r"C:\Users\tester\project"),
+            workspace: Some(PathBuf::from(r"C:\Users\tester\project")),
             macos_app_probe: None,
             windows_process_probe: None,
             windows_executable_path: None,

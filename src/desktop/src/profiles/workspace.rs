@@ -161,11 +161,6 @@ pub(super) fn resolve_agent_workspace_preference(
     terminal::resolve_workspace_preference()
 }
 
-pub(super) fn resolve_launch_workspace(agent_id: &str) -> anyhow::Result<PathBuf> {
-    let agent_prefs = agent_state::read_prefs();
-    resolve_agent_workspace_preference(agent_id, &agent_prefs)
-}
-
 fn register_launcher_workspace(path: &Path) -> Result<(), String> {
     let builtin = config::builtin_workspaces_dir();
     if paths_equal(path, &builtin) {

@@ -10,7 +10,7 @@ pub(super) struct LaunchPlan {
     pub command: String,
     pub args: Vec<String>,
     pub window_label: String,
-    pub workspace: PathBuf,
+    pub workspace: Option<PathBuf>,
     pub macos_app_probe: Option<String>,
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub windows_process_probe: Option<String>,
@@ -87,9 +87,11 @@ pub(super) fn build_bash_script(plan: &LaunchPlan) -> String {
     }
     append_bash_color_env(&mut out);
 
-    let workspace = plan.workspace.to_string_lossy();
-    let cwd = shell_escape::unix::escape(std::borrow::Cow::Borrowed(workspace.as_ref()));
-    out.push_str(&format!("cd {}\n", cwd));
+    if let Some(workspace) = &plan.workspace {
+        let workspace = workspace.to_string_lossy();
+        let cwd = shell_escape::unix::escape(std::borrow::Cow::Borrowed(workspace.as_ref()));
+        out.push_str(&format!("cd {}\n", cwd));
+    }
     let command = command_with_unix_args(&plan.command, &plan.args);
     if let Some(app_name) = &plan.macos_app_probe {
         append_macos_app_launch(&mut out, &command, app_name, &plan.env);
@@ -182,7 +184,7 @@ mod tests {
             command: command.to_string(),
             args,
             window_label: "Test".to_string(),
-            workspace: Path::new("/tmp/work dir").to_path_buf(),
+            workspace: Some(Path::new("/tmp/work dir").to_path_buf()),
             macos_app_probe: None,
             windows_process_probe: None,
             windows_executable_path: None,
@@ -216,6 +218,15 @@ mod tests {
     fn build_bash_script_cd_selected_workspace() {
         let script = build_bash_script(&plan(Vec::new(), "claude", Vec::new()));
         assert!(script.contains("cd '/tmp/work dir'\n"));
+    }
+
+    #[test]
+    fn build_bash_script_uses_process_default_cwd_without_workspace() {
+        let mut launch_plan = plan(Vec::new(), "claude", Vec::new());
+        launch_plan.workspace = None;
+        let script = build_bash_script(&launch_plan);
+
+        assert!(!script.contains("\ncd "));
     }
 
     #[test]

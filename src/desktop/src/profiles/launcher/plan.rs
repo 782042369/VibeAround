@@ -7,7 +7,7 @@
 #[cfg(not(test))]
 use std::borrow::Cow;
 
-use ::common::{agent as agent_integrations, profiles, resources};
+use ::common::{profiles, resources};
 use anyhow::{anyhow, Context};
 use profiles::ProfileDef;
 
@@ -27,6 +27,7 @@ const LOCAL_BRIDGE_PROXY_ENV_KEYS: &[&str] = &[
 ];
 const VIBEWBZ_LAUNCH_ID_ENV: &str = "VIBEWBZ_LAUNCH_ID";
 const VIBEWBZ_LAUNCH_TARGET_ENV: &str = "VIBEWBZ_LAUNCH_TARGET";
+const VIBEWBZ_PROFILE_ID_ENV: &str = "VIBEWBZ_PROFILE_ID";
 
 enum LaunchTarget<'a> {
     Profile {
@@ -91,9 +92,6 @@ impl<'a> LaunchPlanBuilder<'a> {
     fn build_direct_plan(&self, agent_id: &str) -> anyhow::Result<LaunchPlan> {
         let agent = resources::agent_by_id(agent_id)
             .ok_or_else(|| anyhow!("agent '{}' not found in agents.json", agent_id))?;
-        let workspace = crate::profiles::resolve_launch_workspace(agent_id)?;
-        install_project_integrations_for_launch(agent_id, &workspace)?;
-
         if agent_id == "codex-desktop" {
             codex_desktop::cleanup_profile_overlay()
                 .context("restore Codex Desktop config before direct launch")?;
@@ -110,7 +108,7 @@ impl<'a> LaunchPlanBuilder<'a> {
             ),
             args: Vec::new(),
             window_label: format!("{} (direct)", agent.display_name),
-            workspace,
+            workspace: None,
             macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
             windows_process_probe: windows_process_probe_for_direct_agent(&agent),
             windows_executable_path: windows_executable_path_for_agent(agent_id),
@@ -126,8 +124,6 @@ impl<'a> LaunchPlanBuilder<'a> {
         let agent_id = profiles::runtime::agent_id_for(launch_target)?;
         let agent = resources::agent_by_id(agent_id)
             .ok_or_else(|| anyhow!("agent '{}' not found in agents.json", agent_id))?;
-        let workspace = crate::profiles::resolve_launch_workspace(agent_id)?;
-        install_project_integrations_for_launch(agent_id, &workspace)?;
         if agent_id == "codex-desktop" {
             let mut env = Vec::new();
             let mut args = Vec::new();
@@ -147,7 +143,7 @@ impl<'a> LaunchPlanBuilder<'a> {
                 ),
                 args,
                 window_label: profile.label.clone(),
-                workspace,
+                workspace: None,
                 macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
                 windows_process_probe: windows_process_probe_for_direct_agent(&agent),
                 windows_executable_path: windows_executable_path_for_agent(agent_id),
@@ -168,7 +164,7 @@ impl<'a> LaunchPlanBuilder<'a> {
                 ),
                 args: Vec::new(),
                 window_label: profile.label.clone(),
-                workspace,
+                workspace: None,
                 macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
                 windows_process_probe: windows_process_probe_for_direct_agent(&agent),
                 windows_executable_path: windows_executable_path_for_agent(agent_id),
@@ -182,7 +178,7 @@ impl<'a> LaunchPlanBuilder<'a> {
             command: launch_command_for_agent(agent_id, agent.pty_command_for_current_platform()),
             args: command_args,
             window_label: profile.label.clone(),
-            workspace,
+            workspace: None,
             macos_app_probe: None,
             windows_process_probe: None,
             windows_executable_path: None,
@@ -325,35 +321,15 @@ fn append_vibewbz_launch_context_env(
 ) {
     env.retain(|(key, _)| {
         key != VIBEWBZ_LAUNCH_ID_ENV
-            && key != agent_integrations::launch::VIBEWBZ_PROFILE_ID_ENV
+            && key != VIBEWBZ_PROFILE_ID_ENV
             && key != VIBEWBZ_LAUNCH_TARGET_ENV
     });
     env.push((VIBEWBZ_LAUNCH_ID_ENV.to_string(), launch_id.to_string()));
-    env.push((
-        agent_integrations::launch::VIBEWBZ_PROFILE_ID_ENV.to_string(),
-        profile.id.clone(),
-    ));
+    env.push((VIBEWBZ_PROFILE_ID_ENV.to_string(), profile.id.clone()));
     env.push((
         VIBEWBZ_LAUNCH_TARGET_ENV.to_string(),
         launch_target.to_string(),
     ));
-}
-
-fn install_project_integrations_for_launch(
-    agent_id: &str,
-    workspace: &std::path::Path,
-) -> anyhow::Result<()> {
-    let integration_agent_id = project_integration_agent_id(agent_id);
-    agent_integrations::auto_install_project_integrations(integration_agent_id, workspace)
-        .with_context(|| format!("install project integrations for {}", integration_agent_id))
-}
-
-fn project_integration_agent_id(agent_id: &str) -> &str {
-    match agent_id {
-        "claude-desktop" => "claude",
-        "codex-desktop" => "codex",
-        other => other,
-    }
 }
 
 fn append_local_bridge_proxy_bypass_env(env: &mut Vec<(String, String)>) {
@@ -465,12 +441,6 @@ mod tests {
         } else {
             assert!(args.is_empty());
         }
-    }
-
-    #[test]
-    fn desktop_launches_install_companion_cli_integrations() {
-        assert_eq!(project_integration_agent_id("codex-desktop"), "codex");
-        assert_eq!(project_integration_agent_id("claude-desktop"), "claude");
     }
 
     #[test]

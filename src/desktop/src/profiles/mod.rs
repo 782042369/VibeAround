@@ -667,10 +667,6 @@ fn candidate_view(
     }
 }
 
-pub(super) fn resolve_launch_workspace(agent_id: &str) -> anyhow::Result<PathBuf> {
-    workspace::resolve_launch_workspace(agent_id)
-}
-
 fn emit_launch_config_changed(app: &tauri::AppHandle) {
     let _ = app.emit(crate::tray::LAUNCH_CONFIG_CHANGED_EVENT, ());
 }
