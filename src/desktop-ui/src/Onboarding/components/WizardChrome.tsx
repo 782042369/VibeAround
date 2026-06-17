@@ -1,9 +1,7 @@
 import {
   Bot,
   CheckCircle2,
-  Globe,
   KeyRound,
-  MessageSquare,
   Wrench,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
@@ -110,31 +108,19 @@ function questionCopy(step: WizardStepId): {
     case "agents":
       return {
         title: "Start with your coding agents.",
-        body: "Claude Code and Codex CLI are recommended for daily vibe coding and vibe coding jobs.",
+        body: "Prepare Claude Code, Codex CLI, Claude Desktop, and Codex Desktop for this computer.",
         icon: <Bot className="h-5 w-5" />,
-      };
-    case "im":
-      return {
-        title: "Choose your messaging apps.",
-        hint: "Skip if you only use the coding agents on desktop.",
-        icon: <MessageSquare className="h-5 w-5" />,
-      };
-    case "remote":
-      return {
-        title: "Configure remote access.",
-        body: "Skip for local-only use.",
-        icon: <Globe className="h-5 w-5" />,
       };
     case "install":
       return {
         title: "Install Components.",
-        body: "System tools are checked; selected plugins and tunnel helpers are prepared.",
+        body: "先帮你检查电脑里缺什么，需要的命令行工具会自动准备好。",
         icon: <Wrench className="h-5 w-5" />,
       };
     case "configure":
       return {
-        title: "Complete the configuration.",
-        body: "Fill in API keys and other required details for your selected options.",
+        title: "Add your gateway key.",
+        body: "默认使用 http://ai.939593.xyz。这里只需要填一次 key，之后点一下就能启动对应工具。",
         icon: <KeyRound className="h-5 w-5" />,
       };
   }

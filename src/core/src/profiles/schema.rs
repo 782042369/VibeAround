@@ -1,6 +1,6 @@
 //! Profile JSON schema + on-disk CRUD.
 //!
-//! Each profile is a single flat file at `~/.vibearound/profiles/<id>.json`
+//! Each profile is a single flat file at `~/.vibewbz/profiles/<id>.json`
 //! holding the user's third-party API credentials plus the catalog provider
 //! id that describes how to render env / settings files for that endpoint.
 //!

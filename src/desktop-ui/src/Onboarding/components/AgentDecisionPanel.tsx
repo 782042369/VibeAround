@@ -1,12 +1,8 @@
-import {
-  Bot,
-  ChevronDown,
-} from "lucide-react";
+import { Bot } from "lucide-react";
 import { useI18n } from "@va/i18n";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { BrandIcon } from "@/components/brand-icon";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -29,14 +25,14 @@ export function AgentDecisionPanel({
   onToggleAgent: (id: AgentId) => void;
 }) {
   const { t } = useI18n();
-  const [showMoreAgents, setShowMoreAgents] = useState(false);
 
   const recommendedAgents = useMemo(
-    () => agents.filter((agent) => agent.id === "claude" || agent.id === "codex"),
-    [agents],
-  );
-  const otherAgents = useMemo(
-    () => agents.filter((agent) => agent.id !== "claude" && agent.id !== "codex"),
+    () =>
+      agents.filter((agent) =>
+        ["claude", "codex", "claude-desktop", "codex-desktop"].includes(
+          agent.id,
+        ),
+      ),
     [agents],
   );
 
@@ -63,40 +59,6 @@ export function AgentDecisionPanel({
             onToggle={onToggleAgent}
             t={t}
           />
-
-          {otherAgents.length > 0 && (
-            <div className="flex items-center gap-3">
-              <span className="h-px flex-1 bg-border" aria-hidden="true" />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 shrink-0 px-1 text-xs text-muted-foreground hover:bg-transparent"
-                onClick={() => setShowMoreAgents((value) => !value)}
-              >
-                <ChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 transition-transform",
-                    showMoreAgents && "rotate-180",
-                  )}
-                />
-                {showMoreAgents ? t("Hide more Coding Agents") : t("More Coding Agents")}
-              </Button>
-              <span className="h-px flex-1 bg-border" aria-hidden="true" />
-            </div>
-          )}
-
-          {otherAgents.length > 0 && showMoreAgents && (
-            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-              <AgentGrid
-                agents={otherAgents}
-                enabled={enabledAgents}
-                reports={reports}
-                onToggle={onToggleAgent}
-                t={t}
-              />
-            </div>
-          )}
         </section>
       </div>
     </div>
@@ -120,7 +82,9 @@ function AgentGrid({
     <div className="grid gap-2 sm:grid-cols-2">
       {agents.map((agent) => {
         const selected = enabled.has(agent.id);
-        const report = reports.get(`agents.${agent.id}.cli`);
+        const report = agent.direct_only
+          ? undefined
+          : reports.get(`agents.${agent.id}.cli`);
         const visibleReport =
           !selected && report?.status === "outdated"
             ? { ...report, status: "ok" as const, latestVersion: undefined, message: undefined }
@@ -160,7 +124,9 @@ function AgentGrid({
                 {agent.display_name}
               </span>
               <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                {visibleReport
+                {agent.direct_only
+                  ? t("Open desktop app")
+                  : visibleReport
                   ? compactReportLabel(visibleReport, t)
                   : t("Checking")}
               </span>

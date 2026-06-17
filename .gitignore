@@ -11,7 +11,7 @@ src/desktop/WixTools/
 src/desktop/gen/
 src/desktop/binaries/
 
-# VibeAround job workspace (if working_dir ever points into repo)
+# VibeWbz job workspace (if working_dir ever points into repo)
 projects.json
 projects.json.tmp
 workspaces/

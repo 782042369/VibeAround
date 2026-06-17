@@ -121,7 +121,7 @@ fn resolve_bridge_settings(
                 profile.auth_mode,
                 AuthMode::OauthViaCli | AuthMode::GoogleOauth
             )
-            .then(|| "vibearound-local-bridge".to_string())
+            .then(|| "vibewbz-local-bridge".to_string())
         })
         .ok_or_else(|| anyhow!("profile '{}' has no api_key credential", profile.id))?;
     let profile_model = profile
@@ -404,7 +404,7 @@ fn render_opencode_bridge_profile(
             "name": settings.provider_label,
             "options": {
                 "baseURL": bridge_base_url,
-                "apiKey": "{env:VIBEAROUND_OPENCODE_API_KEY}",
+                "apiKey": "{env:VIBEWBZ_OPENCODE_API_KEY}",
                 "setCacheKey": true
             },
             "models": Value::Object(models)
@@ -417,7 +417,7 @@ fn render_opencode_bridge_profile(
     });
 
     RenderedProfile {
-        env: vec![("VIBEAROUND_OPENCODE_API_KEY".to_string(), settings.api_key)],
+        env: vec![("VIBEWBZ_OPENCODE_API_KEY".to_string(), settings.api_key)],
         settings_files: vec![RenderedSettingsFile {
             rel_path: "opencode.json".to_string(),
             contents: serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".to_string()),
@@ -445,11 +445,11 @@ fn render_gemini_bridge_profile(
         env: vec![
             (
                 "GEMINI_API_KEY".to_string(),
-                "vibearound-local-bridge".to_string(),
+                "vibewbz-local-bridge".to_string(),
             ),
             (
                 "GOOGLE_API_KEY".to_string(),
-                "vibearound-local-bridge".to_string(),
+                "vibewbz-local-bridge".to_string(),
             ),
             (
                 "GEMINI_DEFAULT_AUTH_TYPE".to_string(),
@@ -564,16 +564,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn codex_bridge_launch_includes_catalog_context_window() {
-        let profile = dashscope_profile();
+    fn codex_bridge_launch_uses_gateway_responses_route() {
+        let profile = gateway_profile("openai-responses", "gpt-5.5");
 
         let rendered = render_bridge_launch(
             &profile,
             "codex",
             "launch-test",
             "openai-responses",
-            "openai-chat",
-            Some("qwen3.6-plus"),
+            "openai-responses",
+            None,
             None,
             &[],
         )
@@ -582,115 +582,38 @@ mod tests {
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model='qwen3.6-plus'"));
+            .any(|arg| arg == "model='gpt-5.5'"));
+        assert!(rendered.command_args.iter().any(|arg| {
+            arg == "model_providers.custom.base_url='http://127.0.0.1:12358/va/local-api/gateway-test/codex-openai-responses/openai-responses/v1'"
+        }));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_context_window=1000000"));
-    }
-
-    #[test]
-    fn codex_bridge_launch_includes_kimi_model_catalog() {
-        let profile = moonshot_profile();
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "codex",
-            "launch-test",
-            "openai-responses",
-            "anthropic",
-            Some("kimi-code"),
-            None,
-            &[],
-        )
-        .expect("codex bridge launch renders");
-
+            .any(|arg| arg == "model_providers.custom.wire_api='responses'"));
         assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg == "model='kimi-code'"));
+            .env
+            .contains(&("OPENAI_API_KEY".to_string(), "test-key".to_string())));
         assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg == "model_context_window=256000"));
-        assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg.starts_with("model_catalog_json='")));
-
-        let catalog_file = rendered
             .settings_files
             .iter()
-            .find(|settings_file| settings_file.rel_path == "codex-model-catalog-launch-test.json")
-            .expect("codex model catalog file");
-        let catalog: Value =
-            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
-        let model = &catalog["models"][0];
-        assert_eq!(model["slug"], "kimi-code");
-        assert_eq!(model["context_window"], 256_000);
-        assert_eq!(model["max_context_window"], 256_000);
+            .any(|settings_file| settings_file.rel_path == "codex-model-catalog-launch-test.json"));
+        assert!(rendered.config_env.is_none());
     }
 
     #[test]
-    fn codex_bridge_launch_includes_full_bridge_model_catalog() {
-        let profile = dashscope_profile();
+    fn codex_bridge_launch_keeps_explicit_agent_model_routes() {
+        let profile = gateway_profile("openai-responses", "gpt-5.5");
         let rendered = render_bridge_launch(
             &profile,
             "codex",
             "launch-test",
             "openai-responses",
-            "openai-chat",
-            Some("qwen3.6-plus"),
+            "openai-responses",
             None,
-            &[
-                ProfileBridgeModelRoute {
-                    upstream_model: "qwen3.6-plus".to_string(),
-                    agent_model: "gpt-5.1-codex".to_string(),
-                    capabilities: Default::default(),
-                },
-                ProfileBridgeModelRoute {
-                    upstream_model: "qwen3.5-plus".to_string(),
-                    agent_model: "gpt-5.1-mini".to_string(),
-                    capabilities: Default::default(),
-                },
-            ],
-        )
-        .expect("codex bridge launch renders");
-
-        assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg == "model='gpt-5.1-codex'"));
-        let catalog_file = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path == "codex-model-catalog-launch-test.json")
-            .expect("codex model catalog file");
-        let catalog: Value =
-            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
-        let models = catalog["models"].as_array().expect("models array");
-
-        assert_eq!(models.len(), 2);
-        assert_eq!(models[0]["slug"], "gpt-5.1-codex");
-        assert_eq!(models[0]["context_window"], 1_000_000);
-        assert_eq!(models[1]["slug"], "gpt-5.1-mini");
-        assert_eq!(models[1]["context_window"], 1_000_000);
-    }
-
-    #[test]
-    fn codex_bridge_launch_uses_custom_model_capability_overrides() {
-        let profile = dashscope_profile();
-        let rendered = render_bridge_launch(
-            &profile,
-            "codex",
-            "launch-test",
-            "openai-responses",
-            "openai-chat",
-            Some("qwen3.6-plus"),
             None,
             &[ProfileBridgeModelRoute {
-                upstream_model: "provider-new-vision-model".to_string(),
-                agent_model: "gpt-custom-vision".to_string(),
+                upstream_model: "upstream-model".to_string(),
+                agent_model: "agent-visible-model".to_string(),
                 capabilities: catalog::ContentCapabilities {
                     image_input: true,
                     file_input: true,
@@ -699,304 +622,75 @@ mod tests {
         )
         .expect("codex bridge launch renders");
 
-        let catalog_file = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path == "codex-model-catalog-launch-test.json")
-            .expect("codex model catalog file");
-        let catalog: Value =
-            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
-        let model = &catalog["models"][0];
-
-        assert_eq!(model["slug"], "gpt-custom-vision");
-        assert_eq!(
-            model["input_modalities"],
-            serde_json::json!(["text", "image", "file"])
-        );
-    }
-
-    #[test]
-    fn codex_bridge_launch_model_catalog_includes_file_modality() {
-        let profile = gemini_profile();
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "codex",
-            "launch-test",
-            "openai-responses",
-            "openai-chat",
-            None,
-            None,
-            &[],
-        )
-        .expect("codex bridge launch renders");
-        let catalog_file = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path == "codex-model-catalog-launch-test.json")
-            .expect("codex model catalog file");
-        let catalog: Value =
-            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
-        let model = &catalog["models"][0];
-
-        assert_eq!(
-            model["input_modalities"],
-            serde_json::json!(["text", "image", "file"])
-        );
-    }
-
-    #[test]
-    fn gemini_bridge_launch_points_cli_at_local_gemini_api() {
-        let profile = dashscope_profile();
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "gemini",
-            "launch-test",
-            "gemini",
-            "openai-chat",
-            Some("qwen3.6-plus"),
-            Some("gemini-2.5-flash"),
-            &[],
-        )
-        .expect("gemini bridge launch renders");
-
-        assert!(rendered.env.contains(&(
-            "GOOGLE_GEMINI_BASE_URL".to_string(),
-            "http://127.0.0.1:12358/va/local-api/dashscope-test/gemini-gemini/openai-chat"
-                .to_string()
-        )));
-        assert!(rendered.env.contains(&(
-            "GEMINI_API_KEY".to_string(),
-            "vibearound-local-bridge".to_string()
-        )));
-        assert!(rendered.env.contains(&(
-            "GOOGLE_API_KEY".to_string(),
-            "vibearound-local-bridge".to_string()
-        )));
-        assert!(rendered.env.contains(&(
-            "GEMINI_DEFAULT_AUTH_TYPE".to_string(),
-            "gemini-api-key".to_string()
-        )));
         assert!(rendered
-            .env
-            .contains(&("GEMINI_MODEL".to_string(), "gemini-2.5-flash".to_string())));
-        assert!(rendered.settings_files.is_empty());
-        assert!(rendered.config_env.is_none());
-    }
-
-    #[test]
-    fn pi_bridge_launch_extension_includes_file_input() {
-        let profile = gemini_profile();
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "pi",
-            "launch-test",
-            "openai-responses",
-            "openai-chat",
-            None,
-            Some("gpt-5.1"),
-            &[],
-        )
-        .expect("pi bridge launch renders");
-        let extension = rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model='agent-visible-model'"));
+        let catalog_file = rendered
             .settings_files
             .iter()
-            .find(|settings_file| settings_file.rel_path.ends_with(".mjs"))
-            .expect("pi extension file");
-
-        assert!(extension.contents.contains(
-            "\"input\": [\n        \"text\",\n        \"image\",\n        \"file\"\n      ]"
-        ));
+            .find(|settings_file| settings_file.rel_path == "codex-model-catalog-launch-test.json")
+            .expect("codex model catalog file");
+        let catalog: Value =
+            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
+        let model = &catalog["models"][0];
+        assert_eq!(model["slug"], "agent-visible-model");
+        assert_eq!(
+            model["input_modalities"],
+            serde_json::json!(["text", "image", "file"])
+        );
     }
 
     #[test]
-    fn pi_bridge_launch_materializes_local_provider_extension() {
-        let profile = moonshot_profile();
-
+    fn claude_bridge_launch_uses_gateway_env_shape() {
+        let profile = gateway_profile("openai-chat", "gpt-5.5");
         let rendered = render_bridge_launch(
             &profile,
-            "pi",
+            "claude",
             "launch-test",
-            "openai-responses",
             "anthropic",
-            Some("kimi-code"),
-            Some("gpt-5.1"),
-            &[],
-        )
-        .expect("pi bridge launch renders");
-
-        assert!(rendered
-            .env
-            .contains(&("VIBEAROUND_PI_API_KEY".to_string(), "test-key".to_string())));
-        assert!(rendered
-            .command_args
-            .windows(2)
-            .any(|args| args[0] == "--provider"
-                && args[1] == "vibearound-moonshot-test-bridge-openai-responses-anthropic"));
-        assert!(rendered
-            .command_args
-            .windows(2)
-            .any(|args| args[0] == "--model" && args[1] == "gpt-5.1"));
-        let extension = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path.ends_with(".mjs"))
-            .expect("pi extension file");
-        assert!(extension.contents.contains("\"api\": \"openai-responses\""));
-        assert!(extension.contents.contains(
-            "\"baseUrl\": \"http://127.0.0.1:12358/va/local-api/moonshot-test/pi-openai-responses/anthropic/v1\""
-        ));
-        assert!(rendered.config_env.is_none());
-    }
-
-    #[test]
-    fn codex_bridge_launch_keeps_gemini_alias_and_metadata() {
-        let profile = gemini_profile();
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "codex",
-            "launch-test",
-            "openai-responses",
             "openai-chat",
             None,
-            None,
+            Some("claude-sonnet-4-5"),
             &[],
         )
-        .expect("codex bridge launch renders");
+        .expect("claude bridge launch renders");
 
-        assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg == "model='gemini-3.1-pro'"));
-        assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg == "model_context_window=1048576"));
-    }
-
-    #[test]
-    fn codex_bridge_launch_can_target_native_gemini_api() {
-        let mut profile = gemini_profile();
-        profile.api_types = vec!["gemini".to_string()];
-        profile.overrides.clear();
-        profile.overrides.insert(
-            "gemini".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: None,
-                base_url: None,
-                model: Some("gemini-3.1-pro".to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
+        let keys: Vec<_> = rendered.env.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec![
+                "ANTHROPIC_API_KEY",
+                "ANTHROPIC_AUTH_TOKEN",
+                "ANTHROPIC_BASE_URL",
+                "ANTHROPIC_MODEL",
+                "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY",
+            ]
         );
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "codex",
-            "launch-test",
-            "openai-responses",
-            "gemini",
-            None,
-            None,
-            &[],
-        )
-        .expect("codex native gemini bridge launch renders");
-
-        assert!(rendered.command_args.iter().any(|arg| {
-            arg == "model_providers.gemini.base_url='http://127.0.0.1:12358/va/local-api/gemini-test/codex-openai-responses/gemini/v1'"
-        }));
-        assert!(rendered
-            .command_args
-            .iter()
-            .any(|arg| arg == "model='gemini-3.1-pro'"));
-        assert!(rendered
-            .env
-            .contains(&("OPENAI_API_KEY".to_string(), "test-key".to_string())));
-    }
-
-    #[test]
-    fn oauth_bridge_launch_uses_local_dummy_key() {
-        let mut profile = gemini_profile();
-        profile.auth_mode = AuthMode::GoogleOauth;
-        profile.credentials.clear();
-        profile.api_types = vec!["gemini".to_string()];
-        profile.overrides.clear();
-        profile.overrides.insert(
-            "gemini".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: Some("google-accounts".to_string()),
-                base_url: None,
-                model: Some("gemini-3.1-pro".to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
+        assert_eq!(
+            rendered
+                .env
+                .iter()
+                .find(|(key, _)| key == "ANTHROPIC_BASE_URL")
+                .map(|(_, value)| value.as_str()),
+            Some("http://127.0.0.1:12358/va/local-api/gateway-test/claude-anthropic/openai-chat")
         );
-
-        let rendered = render_bridge_launch(
-            &profile,
-            "codex",
-            "launch-test",
-            "openai-responses",
-            "gemini",
-            None,
-            None,
-            &[],
-        )
-        .expect("oauth bridge launch renders");
-
-        assert!(rendered.env.contains(&(
-            "OPENAI_API_KEY".to_string(),
-            "vibearound-local-bridge".to_string()
-        )));
-    }
-
-    #[test]
-    fn claude_bridge_launch_uses_standard_env_shape() {
-        for profile in [dashscope_profile(), deepseek_profile()] {
-            let rendered = render_bridge_launch(
-                &profile,
-                "claude",
-                "launch-test",
-                "anthropic",
-                "openai-chat",
-                None,
-                Some("claude-opus-4-7[1m]"),
-                &[],
-            )
-            .expect("claude bridge launch renders");
-
-            let keys: Vec<_> = rendered.env.iter().map(|(key, _)| key.as_str()).collect();
-            assert_eq!(
-                keys,
-                vec![
-                    "ANTHROPIC_API_KEY",
-                    "ANTHROPIC_AUTH_TOKEN",
-                    "ANTHROPIC_BASE_URL",
-                    "ANTHROPIC_MODEL",
-                    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY",
-                    "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
-                ]
-            );
-            assert_eq!(
-                rendered
-                    .env
-                    .iter()
-                    .find(|(key, _)| key == "CLAUDE_CODE_AUTO_COMPACT_WINDOW")
-                    .map(|(_, value)| value.as_str()),
-                Some("1000000")
-            );
-            assert!(rendered.settings_files.is_empty());
-            assert!(rendered.command_args.is_empty());
-            assert!(rendered.config_env.is_none());
-        }
+        assert_eq!(
+            rendered
+                .env
+                .iter()
+                .find(|(key, _)| key == "ANTHROPIC_MODEL")
+                .map(|(_, value)| value.as_str()),
+            Some("claude-sonnet-4-5")
+        );
+        assert!(rendered.settings_files.is_empty());
+        assert!(rendered.command_args.is_empty());
+        assert!(rendered.config_env.is_none());
     }
 
     #[test]
     fn claude_desktop_bridge_launch_reuses_claude_scope() {
-        let profile = dashscope_profile();
+        let profile = gateway_profile("openai-chat", "gpt-5.5");
         let rendered = render_bridge_launch(
             &profile,
             "claude-desktop",
@@ -1004,7 +698,7 @@ mod tests {
             "anthropic",
             "openai-chat",
             None,
-            Some("claude-opus-4-7[1m]"),
+            Some("claude-sonnet-4-5"),
             &[],
         )
         .expect("claude desktop bridge launch renders");
@@ -1015,119 +709,32 @@ mod tests {
                 .iter()
                 .find(|(key, _)| key == "ANTHROPIC_BASE_URL")
                 .map(|(_, value)| value.as_str()),
-            Some("http://127.0.0.1:12358/va/local-api/dashscope-test/claude-anthropic/openai-chat")
+            Some("http://127.0.0.1:12358/va/local-api/gateway-test/claude-anthropic/openai-chat")
         );
     }
 
-    fn dashscope_profile() -> ProfileDef {
+    fn gateway_profile(api_type: &str, model: &str) -> ProfileDef {
         let mut credentials = BTreeMap::new();
         credentials.insert("api_key".to_string(), "test-key".to_string());
 
         let mut overrides = BTreeMap::new();
         overrides.insert(
-            "openai-chat".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: Some("coding-plan".to_string()),
-                base_url: None,
-                model: Some("qwen3.6-plus".to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
-        );
-
-        ProfileDef {
-            id: "dashscope-test".to_string(),
-            label: "DashScope Test".to_string(),
-            provider: "dashscope".to_string(),
-            auth_mode: AuthMode::ApiKey,
-            api_types: vec!["openai-chat".to_string()],
-            credentials,
-            overrides,
-            use_settings_proxy: false,
-            provider_settings: Default::default(),
-        }
-    }
-
-    fn gemini_profile() -> ProfileDef {
-        let mut credentials = BTreeMap::new();
-        credentials.insert("api_key".to_string(), "test-key".to_string());
-
-        let mut overrides = BTreeMap::new();
-        overrides.insert(
-            "openai-chat".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: Some("gemini-api".to_string()),
-                base_url: None,
-                model: Some("gemini-3.1-pro".to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
-        );
-
-        ProfileDef {
-            id: "gemini-test".to_string(),
-            label: "Gemini Test".to_string(),
-            provider: "gemini".to_string(),
-            auth_mode: AuthMode::ApiKey,
-            api_types: vec!["openai-chat".to_string()],
-            credentials,
-            overrides,
-            use_settings_proxy: false,
-            provider_settings: Default::default(),
-        }
-    }
-
-    fn deepseek_profile() -> ProfileDef {
-        let mut credentials = BTreeMap::new();
-        credentials.insert("api_key".to_string(), "test-key".to_string());
-
-        let mut overrides = BTreeMap::new();
-        overrides.insert(
-            "openai-chat".to_string(),
+            api_type.to_string(),
             ApiTypeOverrides {
                 endpoint_id: None,
-                base_url: None,
-                model: Some("deepseek-v4-pro".to_string()),
+                base_url: Some("http://ai.939593.xyz".to_string()),
+                model: Some(model.to_string()),
                 reasoning_effort: Some("medium".to_string()),
                 capabilities: None,
             },
         );
 
         ProfileDef {
-            id: "deepseek-test".to_string(),
-            label: "DeepSeek Test".to_string(),
-            provider: "deepseek".to_string(),
+            id: "gateway-test".to_string(),
+            label: "VibeWbz Gateway Test".to_string(),
+            provider: "custom".to_string(),
             auth_mode: AuthMode::ApiKey,
-            api_types: vec!["openai-chat".to_string()],
-            credentials,
-            overrides,
-            use_settings_proxy: false,
-            provider_settings: Default::default(),
-        }
-    }
-
-    fn moonshot_profile() -> ProfileDef {
-        let mut credentials = BTreeMap::new();
-        credentials.insert("api_key".to_string(), "test-key".to_string());
-
-        let mut overrides = BTreeMap::new();
-        overrides.insert(
-            "anthropic".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: Some("kimi-coding".to_string()),
-                base_url: None,
-                model: Some("kimi-for-coding".to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
-        );
-
-        ProfileDef {
-            id: "moonshot-test".to_string(),
-            label: "Moonshot Test".to_string(),
-            provider: "moonshot".to_string(),
-            auth_mode: AuthMode::ApiKey,
-            api_types: vec!["anthropic".to_string()],
+            api_types: vec![api_type.to_string()],
             credentials,
             overrides,
             use_settings_proxy: false,

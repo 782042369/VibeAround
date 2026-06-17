@@ -31,7 +31,7 @@ export const zhCNLaunch: Record<string, string> = {
   "No launch agents enabled": "没有启用可启动的 Agent",
   "Loading launch settings": "正在读取启动设置",
   "Launch is already in progress": "正在启动中",
-  "VibeAround default updated": "已更新 VibeAround 默认项",
+  "VibeWbz default updated": "已更新 VibeWbz 默认项",
   Disabled: "已禁用",
   "None selected": "未选择",
   "Direct profile is fixed": "直接启动固定在顶部",
@@ -42,8 +42,9 @@ export const zhCNLaunch: Record<string, string> = {
   "Reordering unavailable while launching": "启动中暂时不能排序",
   "No actions available": "没有可用操作",
   "Quick Launch will start a new session": "快速启动会开启新会话",
-  "Use existing CLI login": "使用 CLI 已登录账号",
-  "Native CLI login": "使用 CLI 原生登录",
+  "Use gateway key": "使用中转站 key",
+  Gateway: "中转站",
+  "Configure gateway first": "请先配置中转站 key",
   "Open desktop app": "打开桌面应用",
   "Desktop app": "桌面应用",
   "Workspace and sessions are selected inside the desktop app.":
@@ -109,15 +110,32 @@ export const zhCNLaunch: Record<string, string> = {
   'Delete workspace "{{label}}"?': "删除工作区「{{label}}」？",
   'Remove workspace "{{label}}"?': "移除工作区「{{label}}」？",
   "No profiles yet": "还没有配置",
-  "Add your provider's API key once. From then on it's one click to launch claude or codex with that key already wired up — VibeAround opens a fresh Terminal window and stays out of the way.":
-    "只需保存一次服务商 API key，之后一键即可用该 key 启动 Claude 或 Codex。VibeAround 会打开新的终端窗口，其余交给 CLI 自己运行。",
+  "Add your provider's API key once. From then on it's one click to launch claude or codex with that key already wired up — VibeWbz opens a fresh Terminal window and stays out of the way.":
+    "只需保存一次服务商 API key，之后一键即可用该 key 启动 Claude 或 Codex。VibeWbz 会打开新的终端窗口，其余交给 CLI 自己运行。",
   "Add your first profile": "添加第一个配置",
   "Add a provider profile": "添加服务商配置",
+  "Configure VibeWbz Gateway": "配置中转站",
+  "Configure the default gateway profile.": "配置默认中转站。",
+  "Default gateway": "默认中转站",
+  "Profile name": "配置名称",
+  "Profile name is required": "请填写配置名称",
+  "Gateway address": "中转站地址",
+  "Gateway key": "中转站 key",
+  "Gateway key is required": "请填写中转站 key",
+  "You can keep the default address or change it.":
+    "默认使用 http://ai.939593.xyz，也可以改成你自己的地址。",
+  "How to get a gateway key": "如何获取 key 和充值",
+  "Open the official site to register, then top up after registration. Refresh the page after top-up and it can be used normally. If you have questions, ask in the group.":
+    "官网注册后，到充值页面充值；充值完刷新页面即可正常使用，有问题群里直接喊。",
+  "Open the token page, click add token, choose the features you need, then create the token.":
+    "打开令牌页面，点击添加令牌，选择需要的功能，然后创建令牌。",
+  "Official site": "官网",
+  "Top up": "充值",
+  "Create token": "创建令牌",
+  "Save gateway": "保存中转站",
   "Direct launch": "直接启动",
   "Direct launch stays pinned above profiles":
     "直接启动固定显示在配置上方",
-  "No profile — uses each CLI's existing login session":
-    "不使用配置，沿用各 CLI 已登录账号",
   "Use {{agent}} as Quick Launch default without a profile":
     "将 {{agent}} 设为不使用配置的快速启动默认项",
   "Edit profile · {{label}}": "编辑配置 · {{label}}",
@@ -187,8 +205,6 @@ export const zhCNLaunch: Record<string, string> = {
   "API key": "API key",
   "Use Azure OpenAI key": "使用 Azure OpenAI key",
   "Azure OpenAI API key": "Azure OpenAI API key",
-  "Use Gemini API key": "使用 Gemini API key",
-  "Gemini API key": "Gemini API key",
   "Use Google Cloud access token": "使用 Google Cloud access token",
   "Google Cloud access token": "Google Cloud access token",
   "Google account": "Google 账号",
@@ -212,18 +228,14 @@ export const zhCNLaunch: Record<string, string> = {
   "MiniMax API key": "MiniMax API key",
   "OpenRouter API key": "OpenRouter API key",
   "Z.AI API key": "Z.AI API key",
-  "Google Gemini / Vertex AI": "Google Gemini / Vertex AI",
   "Vertex AI (OpenAI-compatible)": "Vertex AI（OpenAI 兼容）",
   "Moonshot OpenAI-compatible": "Moonshot OpenAI 兼容",
   "Moonshot Anthropic": "Moonshot Anthropic",
-  "Used by Codex and OpenCode for reasoning/tools. Must be an Azure deployment that supports the Responses API.":
-    "Codex 和 OpenCode 会用它处理 reasoning/tools。必须是支持 Responses API 的 Azure 部署。",
   "Chat Completions fallback for CLIs/providers that cannot use Responses.":
     "给不支持 Responses 的 CLI/服务商使用的 Chat Completions 回退方案。",
   "Anthropic API": "Anthropic API",
   "OpenAI-compatible Chat": "OpenAI 兼容 Chat",
   "OpenAI Responses": "OpenAI Responses",
-  "Gemini API": "Gemini API",
   "Terminal app": "终端应用",
   Auto: "自动",
   "Force on": "强制开启",
@@ -242,15 +254,18 @@ export const zhCNLaunch: Record<string, string> = {
   "{{agent}} launch path": "{{agent}} 启动路径",
   "Configure per-agent launch arguments.": "配置每个 Agent 的启动参数。",
   Choose: "选择",
-  "Choose desktop app executable": "选择桌面应用可执行文件",
+  "Choose desktop app executable": "选择桌面应用路径",
+  "Choose desktop app path": "选择桌面应用路径",
   "Choose agent executable": "选择 Agent 可执行文件",
-  "Choose the desktop app executable.": "选择桌面应用的可执行文件。",
+  "Choose the desktop app executable.": "选择桌面应用路径。",
+  "Choose the desktop app path.": "选择桌面应用路径。",
   "Choose the desktop app launch target.": "选择桌面应用的启动目标。",
-  "Choose the CLI path used by Launch and ACP.":
-    "选择 Launch 和 ACP 使用的 CLI 路径。",
+  "Choose the CLI path used by Launch and ACP.": "选择 Agent 所在的路径。",
   "Choose the agent path.": "选择 Agent 所在的路径。",
   "Current selected path": "当前选择的路径",
   "Current launch target": "当前启动目标",
+  Download: "下载",
+  "Download {{agent}}": "下载 {{agent}}",
   "Use a specific executable when auto-detect cannot find the app.":
     "自动检测找不到应用时，指定可执行文件。",
   Executable: "可执行文件",
@@ -353,36 +368,32 @@ export const zhCNLaunch: Record<string, string> = {
   Copied: "已复制",
   "Manual setting": "手动配置",
   "{{agent}} manual setting": "{{agent}} 手动配置",
-  "Copy this snippet into the CLI config file yourself. VibeAround does not edit the file automatically.":
-    "将这段配置手动粘贴到 CLI 配置文件中。VibeAround 不会自动修改该文件。",
+  "Copy this snippet into the CLI config file yourself. VibeWbz does not edit the file automatically.":
+    "将这段配置手动粘贴到 CLI 配置文件中。VibeWbz 不会自动修改该文件。",
   "Configuration file": "配置文件",
   "How to modify": "修改方法",
-  "Open the Codex config file, then add this snippet or update the existing VibeAround profile block.":
-    "打开 Codex 配置文件，添加这段配置，或更新已有的 VibeAround 配置块。",
-  "Open the Codex config file, then add this snippet or update the existing VibeAround top-level model settings.":
-    "打开 Codex 配置文件，添加这段配置，或更新已有的 VibeAround 顶层模型设置。",
+  "Open the Codex config file, then add this snippet or update the existing VibeWbz profile block.":
+    "打开 Codex 配置文件，添加这段配置，或更新已有的 VibeWbz 配置块。",
+  "Open the Codex config file, then add this snippet or update the existing VibeWbz top-level model settings.":
+    "打开 Codex 配置文件，添加这段配置，或更新已有的 VibeWbz 顶层模型设置。",
   "Codex 0.134.0 and newer reject the old top-level profile selector, so this snippet leaves that line commented as a migration hint.":
     "Codex 0.134.0 及更新版本会拒绝旧的顶层 profile 选择器，所以这段片段会把那一行保留为注释，作为迁移提示。",
-  "Open the OpenCode config file, then add or merge this provider block.":
-    "打开 OpenCode 配置文件，然后添加或合并这段 provider 配置。",
-  "Copy the matching parts into the Gemini CLI settings and env files yourself. VibeAround does not edit them automatically.":
-    "将对应部分手动复制到 Gemini CLI 的 settings 和 env 文件中。VibeAround 不会自动编辑这些文件。",
-  "Open the Gemini CLI settings file and make sure selectedType is gemini-api-key.":
-    "打开 Gemini CLI settings 文件，确认 selectedType 为 gemini-api-key。",
-  "Open the Gemini CLI env file, then add or update these variables.":
-    "打开 Gemini CLI env 文件，然后添加或更新这些变量。",
-  "If Gemini keeps using OAuth, run /auth in Gemini CLI and choose Gemini API key.":
-    "如果 Gemini 仍然使用 OAuth，请在 Gemini CLI 中运行 /auth 并选择 Gemini API key。",
-  "Copy this extension into a local file and pass it to pi with --extension yourself. VibeAround does not edit Pi global config automatically.":
-    "将这个扩展手动复制到本地文件，并通过 --extension 传给 pi。VibeAround 不会自动编辑 Pi 全局配置。",
+  "Put the config.toml part into ~/.codex/config.toml.":
+    "把 config.toml 这一段放到 ~/.codex/config.toml。",
+  "Put the auth.json part into ~/.codex/auth.json, in the same folder as config.toml.":
+    "把 auth.json 这一段放到 ~/.codex/auth.json，和 config.toml 在同一个文件夹。",
+  "The top-level model and provider lines make Codex use this gateway by default.":
+    "顶层 model 和 provider 会让 Codex 默认使用这个中转站。",
+  "Copy this extension into a local file and pass it to pi with --extension yourself. VibeWbz does not edit Pi global config automatically.":
+    "将这个扩展手动复制到本地文件，并通过 --extension 传给 pi。VibeWbz 不会自动编辑 Pi 全局配置。",
   "Save this snippet as a local Pi extension file.":
     "将这段片段保存为本地 Pi 扩展文件。",
   "Start Pi with --extension pointing at that file, plus the provider and model shown in the snippet.":
     "启动 Pi 时通过 --extension 指向该文件，并使用片段中显示的 provider 和 model。",
-  "The top-level profile line makes plain codex use this VibeAround profile by default.":
+  "The top-level profile line makes plain codex use this VibeWbz profile by default.":
     "直接运行 codex 时默认使用顶层 profile 配置。",
-  "The top-level model and provider lines make plain codex use this VibeAround bridge by default.":
-    "顶层 model 和 provider 行会让直接运行 codex 时默认使用这个 VibeAround bridge。",
+  "The top-level model and provider lines make plain codex use this VibeWbz bridge by default.":
+    "顶层 model 和 provider 行会让直接运行 codex 时默认使用这个 VibeWbz bridge。",
   "If Codex keeps using account login instead of this bridge config, run codex logout first.":
     "如果 Codex 仍然使用账号登录而不是这段 bridge 配置，请先运行 codex logout。",
   "If Claude keeps using account login instead of this env block, run claude auth logout first.":
@@ -393,8 +404,6 @@ export const zhCNLaunch: Record<string, string> = {
     "如果已经有 env，请将这些 key 合并到现有 env 中，不要创建第二个 env。",
   "Config snippet": "配置片段",
   "Codex config snippet": "Codex 配置片段",
-  "OpenCode config snippet": "OpenCode 配置片段",
-  "Gemini config snippet": "Gemini 配置片段",
   "Pi extension snippet": "Pi 扩展片段",
   "Copy config": "复制配置",
   "Header name is required for {{context}}":

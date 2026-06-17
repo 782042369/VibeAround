@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Check, RefreshCw } from "lucide-react";
+import { Check, Download, RefreshCw } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
 import { Button } from "@/components/ui/button";
+import { openExternalUrl } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,19 @@ type LatestState = {
   error?: string | null;
 };
 
+const DESKTOP_DOWNLOAD_URLS = {
+  "claude-desktop": {
+    macos: "https://claudeapp.agentsmirror.com/latest/mac",
+    windowsX64: "https://claudeapp.agentsmirror.com/latest/win-x64",
+    windowsArm64: "https://claudeapp.agentsmirror.com/latest/win-arm64",
+  },
+  "codex-desktop": {
+    macos: "https://codexapp.agentsmirror.com/latest/mac-arm64",
+    macosIntel: "https://codexapp.agentsmirror.com/latest/mac-intel",
+    windowsX64: "https://codexapp.agentsmirror.com/latest/win",
+  },
+} as const;
+
 function detectClientOs(): ClientOs {
   const platform = (
     typeof navigator === "undefined" ? "" : navigator.platform || ""
@@ -55,6 +69,40 @@ function detectClientOs(): ClientOs {
   if (source.includes("win")) return "windows";
   if (source.includes("mac")) return "macos";
   return "linux";
+}
+
+function isLikelyArm64(): boolean {
+  const ua = (
+    typeof navigator === "undefined" ? "" : navigator.userAgent || ""
+  ).toLowerCase();
+  const platform = (
+    typeof navigator === "undefined" ? "" : navigator.platform || ""
+  ).toLowerCase();
+  return /arm|aarch64/.test(`${platform} ${ua}`);
+}
+
+function desktopDownloadUrl(
+  agentId: string,
+  clientOs: ClientOs,
+  fallback?: string | null,
+): string | null {
+  if (agentId === "claude-desktop") {
+    if (clientOs === "macos") return DESKTOP_DOWNLOAD_URLS["claude-desktop"].macos;
+    if (clientOs === "windows") {
+      return isLikelyArm64()
+        ? DESKTOP_DOWNLOAD_URLS["claude-desktop"].windowsArm64
+        : DESKTOP_DOWNLOAD_URLS["claude-desktop"].windowsX64;
+    }
+  }
+  if (agentId === "codex-desktop") {
+    if (clientOs === "macos") {
+      return isLikelyArm64()
+        ? DESKTOP_DOWNLOAD_URLS["codex-desktop"].macos
+        : DESKTOP_DOWNLOAD_URLS["codex-desktop"].macosIntel;
+    }
+    if (clientOs === "windows") return DESKTOP_DOWNLOAD_URLS["codex-desktop"].windowsX64;
+  }
+  return fallback ?? null;
 }
 
 function configuredPath(
@@ -258,6 +306,12 @@ export function AgentExecutablePathDialog({
   const clientOs = detectClientOs();
   const isDesktopApp = agent.direct_only;
   const isWindowsDesktopApp = isDesktopApp && clientOs === "windows";
+  const downloadUrl = isDesktopApp
+    ? desktopDownloadUrl(agent.id, clientOs, agent.download_url)
+    : agent.download_url;
+  const downloadLabel = isDesktopApp
+    ? t("Download {{agent}}", { agent: agent.display_name })
+    : t("Download");
   const executableDirty = executablePath.trim() !== initialPath;
   const dialogBusy = busy || saving;
 
@@ -280,7 +334,7 @@ export function AgentExecutablePathDialog({
       directory: chooseMacAppBundle,
       multiple: false,
       title: isDesktopApp
-        ? t("Choose desktop app executable")
+        ? t("Choose desktop app path")
         : t("Choose agent executable"),
       filters:
         !chooseMacAppBundle && clientOs === "windows"
@@ -305,6 +359,16 @@ export function AgentExecutablePathDialog({
     }
   }
 
+  async function downloadAgent() {
+    if (!downloadUrl) return;
+    setSaveError(null);
+    try {
+      await openExternalUrl(downloadUrl);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="!flex max-h-[calc(100vh-64px)] w-[min(660px,calc(100vw-28px))] max-w-[calc(100vw-28px)] flex-col overflow-hidden p-0 sm:max-w-[min(660px,calc(100vw-28px))]">
@@ -322,8 +386,8 @@ export function AgentExecutablePathDialog({
             {isWindowsDesktopApp
               ? t("Choose the desktop app launch target.")
               : isDesktopApp
-                ? t("Choose the desktop app executable.")
-                : t("Choose the CLI path used by Launch and ACP.")}
+                ? t("Choose the desktop app path.")
+                : t("Choose the agent path.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -333,7 +397,7 @@ export function AgentExecutablePathDialog({
               {isWindowsDesktopApp
                 ? t("Choose the desktop app launch target.")
                 : isDesktopApp
-                  ? t("Choose the desktop app executable.")
+                  ? t("Choose the desktop app path.")
                   : t("Choose the agent path.")}
             </div>
 
@@ -499,7 +563,19 @@ export function AgentExecutablePathDialog({
 
         <DialogFooter className="shrink-0 !flex-row items-center justify-between border-t border-border px-5 py-3 sm:justify-between">
           <div>
-            {!isDesktopApp && (
+            {isDesktopApp && downloadUrl ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={dialogBusy}
+                className="h-8 px-2.5 text-xs"
+                onClick={() => void downloadAgent()}
+              >
+                <Download className="h-3.5 w-3.5" />
+                {downloadLabel}
+              </Button>
+            ) : !isDesktopApp ? (
               <Button
                 type="button"
                 variant="outline"
@@ -511,7 +587,7 @@ export function AgentExecutablePathDialog({
                 <RefreshCw className="h-3.5 w-3.5" />
                 {t("Scan")}
               </Button>
-            )}
+            ) : null}
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button

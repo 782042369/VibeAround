@@ -1,7 +1,7 @@
 //! Plugin discovery and manifest schema.
 //!
 //! Plugins are disk-resident directories under either
-//! - `~/.vibearound/plugins/<plugin-slug>/` (user-installed), or
+//! - `~/.vibewbz/plugins/<plugin-slug>/` (user-installed), or
 //! - `<repo>/plugins/<plugin-slug>/` (project, dev-only),
 //!
 //! each containing a `plugin.json` manifest describing the plugin.
@@ -166,10 +166,10 @@ pub fn discover_plugins() -> HashMap<String, DiscoveredPlugin> {
     discovered
 }
 
-/// Discover plugins installed in the per-user VibeAround data directory only.
+/// Discover plugins installed in the per-user VibeWbz data directory only.
 ///
 /// Onboarding install checks use this path so development/project plugins do
-/// not make a fresh user install look complete before `~/.vibearound/plugins`
+/// not make a fresh user install look complete before `~/.vibewbz/plugins`
 /// has the requested plugin.
 pub fn discover_user_plugins() -> HashMap<String, DiscoveredPlugin> {
     let mut discovered = HashMap::new();

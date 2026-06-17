@@ -1,11 +1,6 @@
 import type { useI18n } from "@va/i18n";
 
-import type {
-  LaunchSessionSummary,
-  LauncherPreferences,
-  TerminalOption,
-  WorkspaceOption,
-} from "./api";
+import type { LauncherPreferences, WorkspaceOption } from "./api";
 import {
   CONNECTION_AGENTS,
   apiTypeProtocolLabel,
@@ -20,26 +15,10 @@ const PROXY_AGENTS = new Set<string>([
   "claude-desktop",
   "codex",
   "codex-desktop",
-  "gemini",
-  "opencode",
-  "pi",
 ]);
-const SESSION_RESUME_AGENTS = new Set<string>([
-  "claude",
-  "codex",
-  "pi",
-  "cursor",
-  "gemini",
-  "opencode",
-  "qwen-code",
-]);
-
-export type ExpandedBlock = "profile" | "workspace" | "session";
+export type ExpandedBlock = "profile" | "workspace";
 export type TranslateFn = ReturnType<typeof useI18n>["t"];
-export type ProfileChoice =
-  | { kind: "direct" }
-  | { kind: "profile"; profileId: string };
-export type SessionChoice = { kind: "session"; sessionId: string } | null;
+export type ProfileChoice = { kind: "profile"; profileId: string };
 
 export function moveItemBefore(items: string[], from: string, to: string): string[] {
   if (from === to) return items;
@@ -87,15 +66,6 @@ export function currentWorkspace(prefs: LauncherPreferences | null): WorkspaceOp
       kind: "selected",
       isDefault: false,
     }
-  );
-}
-
-export function currentTerminal(prefs: LauncherPreferences | null): TerminalOption | null {
-  if (!prefs) return null;
-  return (
-    prefs.options.find((option) => option.id === prefs.terminal) ??
-    prefs.options[0] ??
-    null
   );
 }
 
@@ -197,13 +167,12 @@ export function profileAvailability(
 }
 
 export function selectionUnavailableReason(
-  choice: ProfileChoice,
+  _choice: ProfileChoice,
   profile: ProfileSummary | null,
   agentId: string,
   prefs: LauncherPreferences,
   t: TranslateFn,
 ): string | undefined {
-  if (choice.kind === "direct") return undefined;
   if (!profile) return t("Selected profile is missing");
   return profileAvailability(profile, agentId, prefs, t).reason;
 }
@@ -280,12 +249,11 @@ export function profileSummary(
 }
 
 export function isSelectionLaunchable(
-  choice: ProfileChoice,
+  _choice: ProfileChoice,
   profile: ProfileSummary | null,
   agentId: string,
   prefs: LauncherPreferences,
 ): boolean {
-  if (choice.kind === "direct") return true;
   return profileSupportsAgent(profile, agentId, prefs);
 }
 
@@ -311,42 +279,12 @@ export function connectionAgentId(agentId: string): ConnectionAgentId | null {
   return PROXY_AGENTS.has(agentId) ? (agentId as ConnectionAgentId) : null;
 }
 
-export function agentSupportsSessionResume(agentId: string): boolean {
-  return SESSION_RESUME_AGENTS.has(agentId);
-}
-
-export function resolveSelectedSession(
-  choice: SessionChoice,
-  sessions: LaunchSessionSummary[],
-): LaunchSessionSummary | null {
-  if (choice?.kind === "session") {
-    return sessions.find((session) => session.sessionId === choice.sessionId) ?? null;
-  }
-  return null;
-}
-
 export function apiTypeProtocolDisplayLabel(apiType: string): string {
   return apiTypeProtocolLabel(apiType);
 }
 
 export function apiTypeRouteDisplayLabel(apiType: string): string {
   return apiTypeRouteLabel(apiType);
-}
-
-export function relativeTime(updatedAt: number, t: TranslateFn): string {
-  if (!updatedAt) return "-";
-  const diff = Math.max(0, Math.floor(Date.now() / 1000) - updatedAt);
-  if (diff < 60) return t("just now");
-  if (diff < 3600) {
-    return t("{{count}} min ago", { count: Math.floor(diff / 60) });
-  }
-  if (diff < 86400) {
-    return t("{{count}} h ago", { count: Math.floor(diff / 3600) });
-  }
-  if (diff < 604800) {
-    return t("{{count}} d ago", { count: Math.floor(diff / 86400) });
-  }
-  return new Date(updatedAt * 1000).toLocaleDateString();
 }
 
 export function shortPathLabel(path: string): string {
@@ -364,18 +302,6 @@ export function agentLabel(agentId: string): string {
       return "Codex";
     case "codex-desktop":
       return "Codex Desktop";
-    case "pi":
-      return "Pi";
-    case "gemini":
-      return "Gemini";
-    case "cursor":
-      return "Cursor";
-    case "kiro":
-      return "Kiro";
-    case "qwen-code":
-      return "Qwen";
-    case "opencode":
-      return "OpenCode";
     default:
       return agentId;
   }

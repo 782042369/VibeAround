@@ -92,7 +92,7 @@ fn npm_package_version_satisfied_in_dir(npm_package: &str, package_dir: &std::pa
     json.get("version").and_then(serde_json::Value::as_str) == Some(requested_version)
 }
 
-/// Auto-install an npm ACP agent package into `~/.vibearound/plugins/`.
+/// Auto-install an npm ACP agent package into `~/.vibewbz/plugins/`.
 pub async fn auto_install_npm_agent(npm_package: &str) -> anyhow::Result<()> {
     auto_install_npm_agent_with_output(npm_package)
         .await
@@ -149,7 +149,7 @@ where
 
     let pkg_json = package_dir.join("package.json");
     if !pkg_json.exists() {
-        let init = serde_json::json!({ "name": "vibearound-managed", "private": true });
+        let init = serde_json::json!({ "name": "vibewbz-managed", "private": true });
         std::fs::write(&pkg_json, serde_json::to_string_pretty(&init).unwrap())
             .context("writing package.json")?;
     }

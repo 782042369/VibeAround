@@ -810,7 +810,7 @@ fn json_error_body(message: &str) -> Value {
     json!({
         "error": {
             "message": message,
-            "type": "vibearound_bridge_error",
+            "type": "vibewbz_bridge_error",
         }
     })
 }

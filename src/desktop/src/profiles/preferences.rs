@@ -13,39 +13,23 @@ use super::workspace::{canonical_agent_id, resolve_agent_workspace_preference, W
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TerminalOption {
-    pub id: String,
-    pub label: String,
-    pub installed: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct LauncherPreferences {
-    /// `id` of the currently-preferred terminal.
-    pub terminal: String,
-    /// Every supported terminal, with an `installed` flag the UI uses to gray
-    /// out unavailable choices instead of just hiding them.
-    pub options: Vec<TerminalOption>,
     /// Resolved cwd used for profile/direct launches.
     pub workspace: String,
     /// Suggested cwd choices surfaced in the Launch header.
     pub workspace_options: Vec<WorkspaceOption>,
     /// Canonical agent id selected in the Launch tab.
     pub selected_agent: String,
-    /// Per-agent launch choices stored in `~/.vibearound/agents.json`.
+    /// Per-agent launch choices stored in `~/.vibewbz/agents.json`.
     pub agent_preferences: BTreeMap<String, AgentLaunchPreferenceSummary>,
-    /// VibeAround-wide default agent for tray quick launch and IM startup.
+    /// VibeWbz-wide default agent for tray quick launch and IM startup.
     pub default_agent: String,
-    /// Optional profile paired with the VibeAround-wide default agent.
+    /// Optional profile paired with the VibeWbz-wide default agent.
     pub default_profile_id: Option<String>,
     /// Agent ids enabled by onboarding/settings.json.
     pub enabled_agents: Vec<String>,
     /// Back-compat alias for older UI code. New writes go to agents.json.
     pub default_profiles: BTreeMap<String, String>,
-    /// Global policy for wrapping OpenAI-compatible profile launches through
-    /// VibeAround's local compatibility bridge.
-    pub compatibility_bridge: terminal::CompatibilityBridgeMode,
     /// Per-profile connection choices for launch targets that can run via
     /// the local API bridge.
     pub profile_connections: agent_state::ProfileConnectionPreferences,
@@ -62,8 +46,6 @@ pub struct AgentLaunchPreferenceSummary {
     pub executable_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executable: Option<AgentExecutablePreferenceSummary>,
-    #[serde(skip_serializing_if = "agent_state::AgentLaunchArgs::is_empty")]
-    pub launch_args: agent_state::AgentLaunchArgs,
 }
 
 #[derive(Debug, Serialize)]
@@ -82,18 +64,6 @@ pub struct AgentExecutablePreferenceSummary {
 }
 
 pub(super) fn launcher_preferences() -> LauncherPreferences {
-    let installed_ids: HashSet<&'static str> = terminal::detect_installed()
-        .iter()
-        .map(|c| c.id())
-        .collect();
-    let options = terminal::TerminalChoice::ALL
-        .iter()
-        .map(|c| TerminalOption {
-            id: c.id().to_string(),
-            label: c.label().to_string(),
-            installed: installed_ids.contains(c.id()),
-        })
-        .collect();
     let cfg = config::ensure_loaded();
     let agent_prefs = agent_state::read_prefs();
     let selected_agent = agent_state::resolve_selected_agent(&agent_prefs, &cfg);
@@ -116,8 +86,6 @@ pub(super) fn launcher_preferences() -> LauncherPreferences {
         .collect();
 
     LauncherPreferences {
-        terminal: terminal::read_preference().id().to_string(),
-        options,
         workspace,
         workspace_options: Vec::new(),
         selected_agent,
@@ -126,7 +94,6 @@ pub(super) fn launcher_preferences() -> LauncherPreferences {
         default_profile_id,
         enabled_agents: cfg.enabled_agents.clone(),
         default_profiles,
-        compatibility_bridge: terminal::read_compatibility_bridge_preference(),
         profile_connections: merged_profile_connections(&agent_prefs),
     }
 }
@@ -181,14 +148,7 @@ fn summarize_agent_preferences(
         let executable_path = executable
             .as_ref()
             .map(|executable| executable.path.clone());
-        let launch_args = stored
-            .map(|preference| preference.launch_args.clone())
-            .unwrap_or_default();
-        if profile_id.is_some()
-            || workspace.is_some()
-            || executable_path.is_some()
-            || !launch_args.is_empty()
-        {
+        if profile_id.is_some() || workspace.is_some() || executable_path.is_some() {
             out.insert(
                 agent_id,
                 AgentLaunchPreferenceSummary {
@@ -196,7 +156,6 @@ fn summarize_agent_preferences(
                     workspace,
                     executable_path,
                     executable,
-                    launch_args,
                 },
             );
         }

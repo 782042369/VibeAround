@@ -110,8 +110,8 @@ async fn drive_agent_bridge(
         )
         .connect_with(transport, async move |conn| {
             let init_req = schema::InitializeRequest::new(schema::ProtocolVersion::V1).client_info(
-                schema::Implementation::new("vibearound", env!("CARGO_PKG_VERSION"))
-                    .title("VibeAround"),
+                schema::Implementation::new("vibewbz", env!("CARGO_PKG_VERSION"))
+                    .title("VibeWbz"),
             );
             let initialize = match conn.send_request(init_req).block_task().await {
                 Ok(response) => response,

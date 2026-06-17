@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Rewrite every plugin's `@vibearound/plugin-channel-sdk` dependency to either
+// Rewrite every plugin's `@vibewbz/plugin-channel-sdk` dependency to either
 // the local source tree (dev) or the published npm version (release), then
 // reinstall.
 //
@@ -7,7 +7,7 @@
 //   We want each plugin's `package.json` to stay valid for standalone
 //   `npm install` / `bun install` outside the repo — that's how the desktop
 //   app's plugin install flow works at runtime (it copies a plugin dir into
-//   `~/.vibearound/plugins/<id>` and runs `npm install && npm run build`
+//   `~/.vibewbz/plugins/<id>` and runs `npm install && npm run build`
 //   against the public registry). A `workspace:*` specifier would break that.
 //
 // Usage (from any cwd, but paths are resolved relative to this file):
@@ -17,7 +17,7 @@
 // Lives in `src/scripts/` (tracked by the main repo) rather than
 // `src/plugins/scripts/` because `src/plugins/` is gitignored — the
 // plugins themselves live in separate git repos, but this orchestration
-// script must ship with the main VibeAround repo so `cargo tauri dev`
+// script must ship with the main VibeWbz repo so `cargo tauri dev`
 // and `cargo tauri build` can invoke it on any clone.
 //
 // Modes:
@@ -40,7 +40,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const SDK_PACKAGE_NAME = '@vibearound/plugin-channel-sdk';
+const SDK_PACKAGE_NAME = '@vibewbz/plugin-channel-sdk';
 const SDK_DIR_NAME = 'va-plugin-channel-sdk';
 const LOCAL_SPEC = 'file:../va-plugin-channel-sdk';
 

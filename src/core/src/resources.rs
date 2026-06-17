@@ -1,5 +1,4 @@
-//! Resource loader — single source of truth for agent, tunnel, plugin,
-//! MCP tool, command, and PTY environment definitions.
+//! Resource loader — single source of truth for desktop launcher resources.
 //!
 //! All data is embedded at compile time via `include_str!` and parsed
 //! once on first access via `LazyLock`.
@@ -36,13 +35,25 @@ pub struct AgentDef {
     #[serde(default)]
     pub direct_only: bool,
     #[serde(default)]
+    pub download_urls: AgentDownloadUrls,
+    #[serde(default)]
     pub install: Option<AgentInstallInfo>,
     pub acp: AgentAcpConfig,
     pub pty: AgentPtyConfig,
     #[serde(default)]
-    pub resume_template: Option<String>,
-    #[serde(default)]
     pub global_config: Option<AgentGlobalConfig>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct AgentDownloadUrls {
+    #[serde(default)]
+    pub macos_x64: Option<String>,
+    #[serde(default)]
+    pub macos_aarch64: Option<String>,
+    #[serde(default)]
+    pub windows_x64: Option<String>,
+    #[serde(default)]
+    pub windows_arm64: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -58,7 +69,7 @@ pub struct AgentAcpConfig {
     #[serde(default)]
     pub args: Vec<String>,
     /// If set, the agent is an npm package that should be pre-installed
-    /// into `~/.vibearound/plugins/` during onboarding.
+    /// into `~/.vibewbz/plugins/` during onboarding.
     pub npm_package: Option<String>,
     /// Binary name inside `node_modules/.bin/` (defaults to last segment of npm_package).
     pub bin_name: Option<String>,
@@ -120,8 +131,7 @@ pub struct AgentGlobalConfig {
     /// legacy skills in a different location than repo-shared skills.
     #[serde(default)]
     pub project_skill_dir: Option<String>,
-    /// Skill filename (default: "SKILL.md"). Override for agents using different
-    /// rule formats (e.g. "vibearound.mdc" for Cursor, "vibearound.md" for Kiro).
+    /// Skill filename (default: "SKILL.md"). Override for alternate rule formats.
     #[serde(default)]
     pub skill_filename: Option<String>,
 }
@@ -369,8 +379,7 @@ mod tests {
         // Accessing the statics triggers parsing; .expect() will panic on failure
         assert!(!AGENTS.is_empty(), "agents.json should not be empty");
         assert!(!TUNNELS.is_empty(), "tunnels.json should not be empty");
-        assert!(!PLUGINS.is_empty(), "plugins.json should not be empty");
-        assert!(!MCP_TOOLS.is_empty(), "mcp-tools.json should not be empty");
+        assert!(MCP_TOOLS.is_empty(), "mcp-tools.json should be empty");
         assert!(
             !COMMANDS.system_commands.is_empty(),
             "commands.json should not be empty"
@@ -388,44 +397,23 @@ mod tests {
     #[test]
     fn agent_lookup_works() {
         assert!(agent_by_id("claude").is_some());
-        assert!(agent_by_id("pi").is_some());
-        assert!(agent_by_id("gemini").is_some());
+        assert!(agent_by_id("codex").is_some());
+        assert!(agent_by_id("claude-desktop").is_some());
+        assert!(agent_by_id("codex-desktop").is_some());
         assert!(agent_by_alias("claude-code").is_some());
-        assert!(agent_by_alias("pi-coding-agent").is_some());
         assert!(agent_by_alias("nonexistent").is_none());
     }
 
     #[test]
     fn plugin_registry_uses_kind_and_slug() {
-        let telegram = plugin_by_id("telegram").expect("telegram plugin must exist");
-        assert!(telegram.is_kind("channel"));
-        assert_eq!(telegram.install_dir_name(), "va-plugin-channel-telegram");
-
-        assert!(PLUGINS.iter().all(|plugin| plugin.is_kind("channel")));
-        assert!(
-            plugin_by_id("deepseek").is_none(),
-            "DeepSeek is a built-in profile catalog entry, not an installable plugin"
-        );
+        assert!(PLUGINS.is_empty());
+        assert!(plugin_by_id("telegram").is_none());
     }
 
     #[test]
-    fn mcp_tools_list_injects_agent_enums() {
+    fn mcp_tools_list_is_empty() {
         let tools = mcp_tools_list_json();
         let tools_arr = tools["tools"].as_array().unwrap();
-        // Find a tool with agent_kind property
-        let handover = tools_arr
-            .iter()
-            .find(|t| t["name"] == "prepare_handover")
-            .unwrap();
-        let agent_kind_enum = &handover["inputSchema"]["properties"]["agent_kind"]["enum"];
-        assert!(agent_kind_enum.is_array());
-        let ids: Vec<&str> = agent_kind_enum
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
-        assert!(ids.contains(&"claude"));
-        assert!(ids.contains(&"gemini"));
+        assert!(tools_arr.is_empty());
     }
 }

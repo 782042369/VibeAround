@@ -1,6 +1,3 @@
-import type { ReactNode } from "react";
-import type { TunnelProvider } from "./constants";
-
 // Resource types returned by Tauri commands.
 export interface AgentSummary {
   id: string;
@@ -8,20 +5,7 @@ export interface AgentSummary {
   description: string;
   install_type?: "npm" | "script" | "path";
   direct_only?: boolean;
-}
-
-export interface TunnelSummary {
-  id: string;
-  display_name: string;
-}
-
-export interface PluginRegistryEntry {
-  id: string;
-  kind: string;
-  slug: string;
-  name: string;
-  description: string;
-  github: string;
+  download_url?: string | null;
 }
 
 export interface Settings {
@@ -54,114 +38,7 @@ export interface Settings {
     toolchain_mode?: ToolchainMode | string;
     shell_path?: boolean;
   };
-  tunnel?: {
-    provider?: string;
-    ngrok?: { auth_token?: string; domain?: string };
-    cloudflare?: { tunnel_token?: string; hostname?: string };
-  };
-  channels?: Record<string, Record<string, unknown>>;
   [key: string]: unknown;
-}
-
-export interface ChannelVerboseConfig {
-  show_thinking: boolean;
-  show_tool_use: boolean;
-}
-
-export interface PluginAuthCapabilities {
-  methods: string[];
-}
-
-export interface PluginCapabilities {
-  streaming: boolean;
-  interactiveCards: boolean;
-  reactions: boolean;
-  editMessage: boolean;
-  media: boolean;
-  auth?: PluginAuthCapabilities;
-}
-
-export interface ConfigSchemaProperty {
-  type?: string;
-  description?: string;
-  default?: string;
-  hidden?: boolean;
-}
-
-export interface ConfigSchema {
-  type?: string;
-  properties?: Record<string, ConfigSchemaProperty>;
-  required?: string[];
-}
-
-export interface DiscoveredChannelPlugin {
-  id: string;
-  name: string;
-  version: string;
-  kind: string;
-  runtime: string;
-  entry: string;
-  source: "user" | "project";
-  /** Directory name on disk; may differ from id when plugin.json declares a different id. */
-  dirName: string;
-  supportsQrcodeLogin: boolean;
-  configSchema?: ConfigSchema;
-  capabilities: PluginCapabilities;
-}
-
-export type PluginInstallStatus =
-  | "not_installed"
-  | "installing"
-  | "installed_not_built"
-  | "installed_not_discoverable"
-  | "ready";
-
-export type AuthFlowStatus = "idle" | "generating" | "waiting" | "connected" | "error";
-
-export interface AuthFlowState {
-  status: AuthFlowStatus;
-  message: string;
-  qrCodeUrl?: string;
-  sessionKey?: string;
-  resultData?: Record<string, unknown>;
-}
-
-export interface StepChannelsProps {
-  pluginRegistry: PluginRegistryEntry[];
-  discoveredPlugins: DiscoveredChannelPlugin[];
-  enabledChannels: Set<string>;
-  channelConfigs: Record<string, Record<string, string>>;
-  channelVerbose: Record<string, ChannelVerboseConfig>;
-  installingPlugins: Set<string>;
-  authStates: Record<string, AuthFlowState>;
-  onToggleChannel: (pluginId: string, enabled: boolean) => void;
-  onConfigChange: (pluginId: string, key: string, value: string) => void;
-  onVerboseChange: (
-    pluginId: string,
-    key: keyof ChannelVerboseConfig,
-    value: boolean,
-  ) => void;
-  onInstallPlugin: (pluginId: string, githubUrl: string) => void;
-  onStartAuth: (pluginId: string) => void;
-  onCancelAuth: (pluginId: string) => void;
-  switchSize?: "sm" | "default";
-  description?: ReactNode;
-  notice?: ReactNode;
-}
-
-export interface StepTunnelProps {
-  tunnels: TunnelSummary[];
-  provider: TunnelProvider;
-  onProvider: (value: TunnelProvider) => void;
-  ngrokToken: string;
-  onNgrokToken: (value: string) => void;
-  ngrokDomain: string;
-  onNgrokDomain: (value: string) => void;
-  cfToken: string;
-  onCfToken: (value: string) => void;
-  cfHostname: string;
-  onCfHostname: (value: string) => void;
-  notice?: ReactNode;
 }
 
 export type StartkitStatus =
@@ -178,11 +55,8 @@ export type StartkitStatus =
 
 export interface StartkitChoices {
   agents: string[];
-  tunnel: string;
-  channels: string[];
   source: string;
   toolchainMode: ToolchainMode;
-  shellPath: false;
 }
 
 export type ToolchainMode = "system" | "managed";

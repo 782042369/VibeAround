@@ -82,7 +82,7 @@ async function performUpdateCheck(): Promise<UpdateCheckResult> {
         name:
           typeof release.name === "string" && release.name.trim()
             ? release.name.trim()
-            : `VibeAround ${String(release.tag_name)}`,
+            : `VibeWbz ${String(release.tag_name)}`,
         htmlUrl:
           typeof release.html_url === "string" && release.html_url
             ? release.html_url
@@ -109,7 +109,7 @@ function devPreviewUpdate(): UpdateCheckResult | null {
   const params = new URLSearchParams(window.location.search);
   const enabled =
     params.get("va_update_preview") === "1" ||
-    window.localStorage.getItem("vibearound.updatePreview") === "1";
+    window.localStorage.getItem("vibewbz.updatePreview") === "1";
   if (!enabled) return null;
 
   const currentVersion = normalizeVersionLabel(__APP_VERSION_LABEL__);
@@ -120,7 +120,7 @@ function devPreviewUpdate(): UpdateCheckResult | null {
       currentVersion,
       latestVersion,
       tagName: `v${latestVersion}`,
-      name: `VibeAround v${latestVersion}`,
+      name: `VibeWbz v${latestVersion}`,
       htmlUrl: RELEASES_URL,
       publishedAt: new Date().toISOString(),
       downloadUrl: RELEASES_URL,

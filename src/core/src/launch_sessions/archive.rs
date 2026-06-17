@@ -101,7 +101,7 @@ fn write_store_unlocked(store: &ArchiveStore) -> Result<(), String> {
     fs::write(&path, data).map_err(|error| format!("failed to write archive store: {error}"))?;
     if let Err(error) = crate::auth::set_owner_only(&path) {
         tracing::warn!(
-            "[VibeAround] failed to restrict launch session archive store {:?}: {}",
+            "[VibeWbz] failed to restrict launch session archive store {:?}: {}",
             path,
             error
         );

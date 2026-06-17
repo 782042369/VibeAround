@@ -23,7 +23,7 @@ export function UpdateIndicator() {
 
   const url = release.downloadUrl ?? release.htmlUrl;
   const label = t("Update");
-  const title = t("Update to VibeAround {{version}}", {
+  const title = t("Update to VibeWbz {{version}}", {
     version: release.latestVersion,
   });
 

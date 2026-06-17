@@ -6,8 +6,7 @@
  */
 
 export type AuthMode = "api_key" | "oauth_via_cli" | "google_oauth";
-export type CompatibilityBridgeMode = "auto" | "on" | "off";
-export type ConnectionAgentId = "claude" | "codex" | "gemini" | "opencode" | "pi";
+export type ConnectionAgentId = "claude" | "codex";
 
 export interface ProfileSummary {
   id: string;
@@ -77,7 +76,6 @@ export interface AgentLaunchPreference {
   workspace?: string | null;
   executablePath?: string | null;
   executable?: AgentExecutablePreference | null;
-  launchArgs?: AgentLaunchArgs | null;
 }
 
 export interface AgentExecutablePreference {
@@ -88,11 +86,6 @@ export interface AgentExecutablePreference {
   sourceLabel: string;
   rank: number;
   package?: string | null;
-}
-
-export interface AgentLaunchArgs {
-  terminal?: string[] | null;
-  acp?: string[] | null;
 }
 
 export interface DeepSeekProviderSettings {
@@ -181,8 +174,6 @@ export function apiTypeLabel(api_type: string): string {
       return "OpenAI-compatible Chat";
     case "openai-responses":
       return "OpenAI Responses";
-    case "gemini":
-      return "Gemini GenerateContent";
     default:
       return api_type;
   }
@@ -197,8 +188,6 @@ export function apiTypeShort(api_type: string): string {
       return "openai-chat";
     case "openai-responses":
       return "responses";
-    case "gemini":
-      return "gemini";
     default:
       return api_type;
   }
@@ -212,13 +201,11 @@ export function apiTypeBadge(api_type: string): string {
       return "chat";
     case "openai-responses":
       return "responses";
-    case "gemini":
-      return "gemini";
     default:
       return api_type;
   }
 }
 
 export function isProviderApiKind(api_type: string): boolean {
-  return ["anthropic", "openai-responses", "openai-chat", "gemini"].includes(api_type);
+  return ["anthropic", "openai-responses", "openai-chat"].includes(api_type);
 }

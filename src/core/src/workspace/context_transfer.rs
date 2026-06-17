@@ -55,15 +55,15 @@ pub async fn capture(
         .unwrap_or_else(|| "default".to_string());
     let mut env_vars = vec![
         (
-            "VIBEAROUND_CHANNEL_KIND".to_string(),
+            "VIBEWBZ_CHANNEL_KIND".to_string(),
             route.channel_kind.clone(),
         ),
-        ("VIBEAROUND_CHAT_ID".to_string(), route.chat_id.clone()),
-        ("VIBEAROUND_AGENT_KIND".to_string(), agent_id.clone()),
-        ("VIBEAROUND_CONTEXT_TRANSFER".to_string(), "1".to_string()),
+        ("VIBEWBZ_CHAT_ID".to_string(), route.chat_id.clone()),
+        ("VIBEWBZ_AGENT_KIND".to_string(), agent_id.clone()),
+        ("VIBEWBZ_CONTEXT_TRANSFER".to_string(), "1".to_string()),
     ];
     let mut extra_args = Vec::new();
-    if crate::agent::launch::profile_uses_vibearound_credentials(&profile) {
+    if crate::agent::launch::profile_uses_vibewbz_credentials(&profile) {
         let applied = crate::agent::launch::materialize_profile_for_agent(
             &profile, &agent_id, workspace, route,
         )
@@ -122,14 +122,14 @@ pub fn bootstrap_prompt(
     let resource = acp::TextResourceContents::new(
         json,
         format!(
-            "memory://vibearound/context-transfer/{}.json",
+            "memory://vibewbz/context-transfer/{}.json",
             package.thread_id
         ),
     )
     .mime_type(Some("application/json".to_string()));
     Ok(vec![
         acp::ContentBlock::Text(acp::TextContent::new(
-            "You are being attached as the host agent for an existing VibeAround workspace thread. The attached resource contains replayed ACP session history from the previous host. Use it as conversation context for future user messages. Do not treat this as a new user request.",
+            "You are being attached as the host agent for an existing VibeWbz workspace thread. The attached resource contains replayed ACP session history from the previous host. Use it as conversation context for future user messages. Do not treat this as a new user request.",
         )),
         acp::ContentBlock::Resource(acp::EmbeddedResource::new(
             acp::EmbeddedResourceResource::TextResourceContents(resource),

@@ -1,4 +1,4 @@
-//! Standalone VibeAround server binary — starts the ServerDaemon from the command line.
+//! Standalone VibeWbz server binary — starts the ServerDaemon from the command line.
 
 use std::path::PathBuf;
 
@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         if let Err(e) = daemon.start(dist_path).await {
-            tracing::info!("[VibeAround] Fatal: {}", e);
+            tracing::info!("[VibeWbz] Fatal: {}", e);
         }
     });
 

@@ -1,6 +1,4 @@
-//! Axum HTTP + WebSocket server: serves Web SPA (from given dist path), WS at /ws for xterm ↔ PTY,
-//! agent chat WS at /ws/chat, live preview (/preview/:slug with iframe wrapper + reverse proxy),
-//! and MCP endpoint at /mcp.
+//! Axum HTTP server for the desktop app's local API and bridge endpoints.
 
 mod api;
 mod api_bridge;
@@ -55,7 +53,7 @@ struct WsQuery {
 #[derive(Clone)]
 pub(crate) struct AppState {
     pty_manager: Arc<PtySessionManager>,
-    dist_for_fallback: PathBuf,
+    dist_for_fallback: Option<PathBuf>,
     tunnels: Arc<TunnelManager>,
     channel_hub: Arc<ChannelManager>,
     web_channel: Arc<WebChannelManager>,
@@ -69,46 +67,6 @@ pub(crate) struct AppState {
     bridge_recorder: bridge_recording::BridgeRecorder,
 }
 
-/// Ensure web dist exists (build web first).
-fn verify_web_dist(
-    web_dist: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if !web_dist.exists() {
-        tracing::info!("[VibeAround] Web dist not found: {:?}", web_dist);
-        return Err(format!("Web dist not found: {:?}", web_dist).into());
-    }
-    if !web_dist.join("index.html").exists() {
-        tracing::info!("[VibeAround] index.html not found in {:?}", web_dist);
-        return Err(format!("index.html not found in {:?}", web_dist).into());
-    }
-    Ok(())
-}
-
-async fn spa_fallback(dist_path: PathBuf) -> Response {
-    let index_path = dist_path.join("index.html");
-    match tokio::fs::read_to_string(&index_path).await {
-        Ok(content) => Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "text/html; charset=utf-8")
-            .body(Body::from(content))
-            .unwrap_or_else(|_| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "failed to build response",
-                )
-                    .into_response()
-            }),
-        Err(e) => {
-            tracing::info!("[VibeAround] Failed to read index.html: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to load index.html: {}", e),
-            )
-                .into_response()
-        }
-    }
-}
-
 async fn spa_fallback_handler(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
@@ -119,14 +77,35 @@ async fn spa_fallback_handler(
             axum::Json(serde_json::json!({
                 "error": {
                     "message": "API route not found",
-                    "type": "vibearound_bridge_error",
+                    "type": "vibewbz_bridge_error",
                 }
             })),
         )
             .into_response();
     }
 
-    spa_fallback(state.dist_for_fallback.clone()).await
+    if let Some(dist_path) = &state.dist_for_fallback {
+        let index_path = dist_path.join("index.html");
+        if let Ok(content) = tokio::fs::read_to_string(&index_path).await {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/html; charset=utf-8")
+                .body(Body::from(content))
+                .unwrap_or_else(|_| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "failed to build response",
+                    )
+                        .into_response()
+                });
+        }
+    }
+
+    (
+        StatusCode::NOT_FOUND,
+        "desktop-only build has no web dashboard",
+    )
+        .into_response()
 }
 
 fn is_dashboard_api_path(path: &str) -> bool {
@@ -146,18 +125,20 @@ pub async fn run_web_server(
     web_channel: Arc<WebChannelManager>,
     auth_token: Arc<AuthToken>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    verify_web_dist(&dist_path)?;
-    let web_dist = dist_path
-        .canonicalize()
-        .map_err(|e| format!("Failed to resolve web dist path: {}", e))?;
+    let web_dist = if dist_path.join("index.html").exists() {
+        Some(
+            dist_path
+                .canonicalize()
+                .map_err(|e| format!("Failed to resolve web dist path: {}", e))?,
+        )
+    } else {
+        None
+    };
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    println!(
-        "[VibeAround] Web dashboard: http://127.0.0.1:{}/va/, serving from {:?}",
-        port, web_dist
-    );
+    println!("[VibeWbz] Desktop local API: http://127.0.0.1:{}/va/", port);
 
-    let assets_dir = web_dist.join("assets");
-    let brand_dir = web_dist.join("brand");
+    let assets_dir = web_dist.as_ref().map(|dist| dist.join("assets"));
+    let brand_dir = web_dist.as_ref().map(|dist| dist.join("brand"));
     let preview_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -337,11 +318,17 @@ pub async fn run_web_server(
         .route("/preview/s/{slug}", get(preview::share_preview_handler))
         // Legacy markdown route (kept for backward compatibility).
         .route("/md-preview/{slug}", get(preview::md_preview_handler))
-        .nest_service("/assets", ServeDir::new(assets_dir))
-        .nest_service("/brand", ServeDir::new(brand_dir))
         .fallback(any(spa_fallback_handler));
 
-    // ALL VibeAround routes live under `/va/` — the root `/` namespace is
+    let public = if let (Some(assets_dir), Some(brand_dir)) = (assets_dir, brand_dir) {
+        public
+            .nest_service("/assets", ServeDir::new(assets_dir))
+            .nest_service("/brand", ServeDir::new(brand_dir))
+    } else {
+        public
+    };
+
+    // ALL VibeWbz routes live under `/va/` — the root `/` namespace is
     // reserved exclusively for the cookie-based dev-server preview proxy.
     let dashboard = Router::new().merge(protected).merge(public);
 
@@ -355,14 +342,14 @@ pub async fn run_web_server(
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
             tracing::info!(
-                "[VibeAround] ⚠️  Port {} is already in use — is another VibeAround instance running?",
+                "[VibeWbz] ⚠️  Port {} is already in use — is another VibeWbz instance running?",
                 port
             );
         }
         e
     })?;
     println!(
-        "[VibeAround] Web server listening on http://127.0.0.1:{}",
+        "[VibeWbz] Web server listening on http://127.0.0.1:{}",
         port
     );
     axum::serve(

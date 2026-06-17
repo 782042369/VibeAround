@@ -1,4 +1,4 @@
-//! VibeAround core: conversation manager, agents, channels, PTY, tunnels, workspace. No UI, no HTTP.
+//! VibeWbz core: conversation manager, agents, channels, PTY, tunnels, workspace. No UI, no HTTP.
 
 pub mod agent;
 pub mod agent_detection;

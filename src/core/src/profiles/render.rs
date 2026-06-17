@@ -207,38 +207,38 @@ fn opencode_render_rules(api_type: &str) -> anyhow::Result<RenderRules> {
     match api_type {
         "openai-responses" => Ok(RenderRules {
             env: [(
-                "VIBEAROUND_OPENCODE_API_KEY".to_string(),
+                "VIBEWBZ_OPENCODE_API_KEY".to_string(),
                 "{{api_key}}".to_string(),
             )]
             .into_iter()
             .collect(),
             settings_files: vec![SettingsFileTemplate {
                 rel_path: "opencode.json".to_string(),
-                template: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"{{provider_id}}/{{model|json}}\",\n  \"provider\": {\n    \"{{provider_id}}\": {\n      \"npm\": \"@ai-sdk/openai\",\n      \"name\": \"{{provider_label|json}}\",\n      \"options\": {\n        \"baseURL\": \"{{base_url|json}}\",\n        \"apiKey\": \"{env:VIBEAROUND_OPENCODE_API_KEY}\",\n        \"setCacheKey\": true\n      },\n      \"models\": {\n        \"{{model|json}}\": { \"name\": \"{{model|json}}\" }\n      }\n    }\n  }\n}\n".to_string(),
+                template: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"{{provider_id}}/{{model|json}}\",\n  \"provider\": {\n    \"{{provider_id}}\": {\n      \"npm\": \"@ai-sdk/openai\",\n      \"name\": \"{{provider_label|json}}\",\n      \"options\": {\n        \"baseURL\": \"{{base_url|json}}\",\n        \"apiKey\": \"{env:VIBEWBZ_OPENCODE_API_KEY}\",\n        \"setCacheKey\": true\n      },\n      \"models\": {\n        \"{{model|json}}\": { \"name\": \"{{model|json}}\" }\n      }\n    }\n  }\n}\n".to_string(),
             }],
         }),
         "openai-chat" => Ok(RenderRules {
             env: [(
-                "VIBEAROUND_OPENCODE_API_KEY".to_string(),
+                "VIBEWBZ_OPENCODE_API_KEY".to_string(),
                 "{{api_key}}".to_string(),
             )]
             .into_iter()
             .collect(),
             settings_files: vec![SettingsFileTemplate {
                 rel_path: "opencode.json".to_string(),
-                template: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"{{provider_id}}/{{model|json}}\",\n  \"provider\": {\n    \"{{provider_id}}\": {\n      \"npm\": \"@ai-sdk/openai-compatible\",\n      \"name\": \"{{provider_label|json}}\",\n      \"options\": {\n        \"baseURL\": \"{{base_url|json}}\",\n        \"apiKey\": \"{env:VIBEAROUND_OPENCODE_API_KEY}\",\n        \"setCacheKey\": true\n      },\n      \"models\": {\n        \"{{model|json}}\": { \"name\": \"{{model|json}}\" }\n      }\n    }\n  }\n}\n".to_string(),
+                template: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"{{provider_id}}/{{model|json}}\",\n  \"provider\": {\n    \"{{provider_id}}\": {\n      \"npm\": \"@ai-sdk/openai-compatible\",\n      \"name\": \"{{provider_label|json}}\",\n      \"options\": {\n        \"baseURL\": \"{{base_url|json}}\",\n        \"apiKey\": \"{env:VIBEWBZ_OPENCODE_API_KEY}\",\n        \"setCacheKey\": true\n      },\n      \"models\": {\n        \"{{model|json}}\": { \"name\": \"{{model|json}}\" }\n      }\n    }\n  }\n}\n".to_string(),
             }],
         }),
         "anthropic" => Ok(RenderRules {
             env: [(
-                "VIBEAROUND_OPENCODE_API_KEY".to_string(),
+                "VIBEWBZ_OPENCODE_API_KEY".to_string(),
                 "{{api_key}}".to_string(),
             )]
             .into_iter()
             .collect(),
             settings_files: vec![SettingsFileTemplate {
                 rel_path: "opencode.json".to_string(),
-                template: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"{{provider_id}}/{{model|json}}\",\n  \"provider\": {\n    \"{{provider_id}}\": {\n      \"npm\": \"@ai-sdk/anthropic\",\n      \"name\": \"{{provider_label|json}}\",\n      \"options\": {\n        \"baseURL\": \"{{base_url|json}}\",\n        \"apiKey\": \"{env:VIBEAROUND_OPENCODE_API_KEY}\"\n      },\n      \"models\": {\n        \"{{model|json}}\": { \"name\": \"{{model|json}}\" }\n      }\n    }\n  }\n}\n".to_string(),
+                template: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"{{provider_id}}/{{model|json}}\",\n  \"provider\": {\n    \"{{provider_id}}\": {\n      \"npm\": \"@ai-sdk/anthropic\",\n      \"name\": \"{{provider_label|json}}\",\n      \"options\": {\n        \"baseURL\": \"{{base_url|json}}\",\n        \"apiKey\": \"{env:VIBEWBZ_OPENCODE_API_KEY}\"\n      },\n      \"models\": {\n        \"{{model|json}}\": { \"name\": \"{{model|json}}\" }\n      }\n    }\n  }\n}\n".to_string(),
             }],
         }),
         other => bail!("opencode launch is not wired for api kind '{}'", other),
@@ -304,7 +304,7 @@ fn command_args_for(launch_target: &str, ctx: &BTreeMap<String, String>) -> Vec<
     let Some(provider_id) = ctx.get("provider_id").filter(|v| !v.is_empty()) else {
         return args;
     };
-    let provider_key = format!("model_providers.{provider_id}");
+    let provider_key = format!("model_providers.{}", toml_key(provider_id));
     if let Some(provider_label) = ctx.get("provider_label").filter(|v| !v.is_empty()) {
         push_config(&format!("{provider_key}.name"), toml_string(provider_label));
     }
@@ -319,10 +319,17 @@ fn command_args_for(launch_target: &str, ctx: &BTreeMap<String, String>) -> Vec<
         };
         push_config(&format!("{provider_key}.wire_api"), toml_string(wire_api));
     }
-    push_config(
-        &format!("{provider_key}.env_key"),
-        toml_string(codex_provider_env_key(provider_id)),
-    );
+    if ctx.get("codex_auth_json").map(String::as_str) == Some("true") {
+        push_config(
+            &format!("{provider_key}.requires_openai_auth"),
+            "true".to_string(),
+        );
+    } else {
+        push_config(
+            &format!("{provider_key}.env_key"),
+            toml_string(codex_provider_env_key(provider_id)),
+        );
+    }
     args
 }
 
@@ -523,15 +530,30 @@ fn build_context(
         .unwrap_or_else(ApiTypeOverrides::default);
 
     let mut ctx: BTreeMap<String, String> = BTreeMap::new();
-    ctx.insert("provider_id".to_string(), profile.provider.clone());
-    ctx.insert("provider_label".to_string(), catalog.label.clone());
-    ctx.insert("api_type".to_string(), api_type.to_string());
+    let vibewbz_codex = is_vibewbz_codex_profile(profile, api_type);
+    let provider_id = if vibewbz_codex {
+        codex_provider_id_from_label(&profile.label)
+    } else {
+        profile.provider.clone()
+    };
+    ctx.insert("provider_id".to_string(), provider_id.clone());
+    ctx.insert("provider_table_key".to_string(), toml_key(&provider_id));
     ctx.insert(
-        "base_url".to_string(),
-        overrides
-            .base_url
-            .unwrap_or_else(|| endpoint.default_base_url.clone()),
+        "provider_label".to_string(),
+        if vibewbz_codex {
+            profile.label.clone()
+        } else {
+            catalog.label.clone()
+        },
     );
+    if vibewbz_codex {
+        ctx.insert("codex_auth_json".to_string(), "true".to_string());
+    }
+    ctx.insert("api_type".to_string(), api_type.to_string());
+    let base_url = overrides
+        .base_url
+        .unwrap_or_else(|| endpoint.default_base_url.clone());
+    ctx.insert("base_url".to_string(), base_url);
     let requested_model = overrides
         .model
         .filter(|model| !model.trim().is_empty())
@@ -566,6 +588,42 @@ fn build_context(
         ctx.insert(k.clone(), v.clone());
     }
     ctx
+}
+
+fn is_vibewbz_codex_profile(profile: &ProfileDef, api_type: &str) -> bool {
+    profile.provider == "custom" && api_type == "openai-responses"
+}
+
+fn codex_provider_id_from_label(label: &str) -> String {
+    let label = label.trim();
+    if label.is_empty() {
+        "VibeWbz Gateway".to_string()
+    } else {
+        label.to_string()
+    }
+}
+
+fn toml_key(key: &str) -> String {
+    if is_bare_toml_key(key) {
+        key.to_string()
+    } else {
+        json_string(key)
+    }
+}
+
+fn is_bare_toml_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+}
+
+fn json_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    out.push_str(&json_escape(s));
+    out.push('"');
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -676,58 +734,47 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::profiles::schema::{ApiTypeOverrides, AuthMode, ProfileDef};
-    use serde_json::Value;
 
     use super::*;
 
     #[test]
-    fn claude_launch_env_has_same_shape_for_anthropic_providers() {
-        for profile in [
-            anthropic_profile("deepseek", None, "deepseek-v4-pro"),
-            anthropic_profile("dashscope", Some("coding-plan"), "qwen3.6-plus"),
-            anthropic_profile("moonshot", Some("kimi-coding"), "kimi-for-coding"),
-        ] {
-            let provider = catalog::get(&profile.provider).expect("provider exists");
-            let rendered =
-                render(&profile, "anthropic", "claude", provider).expect("claude profile renders");
-            let keys: Vec<_> = rendered.env.iter().map(|(key, _)| key.as_str()).collect();
+    fn claude_launch_env_uses_gateway_anthropic_shape() {
+        let profile = gateway_profile("anthropic", "claude-sonnet-4-5");
+        let provider = catalog::custom();
+        let rendered =
+            render(&profile, "anthropic", "claude", provider).expect("claude profile renders");
+        let keys: Vec<_> = rendered.env.iter().map(|(key, _)| key.as_str()).collect();
 
-            assert_eq!(
-                keys,
-                vec![
-                    "ANTHROPIC_API_KEY",
-                    "ANTHROPIC_AUTH_TOKEN",
-                    "ANTHROPIC_BASE_URL",
-                    "ANTHROPIC_MODEL",
-                    "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
-                ]
-            );
-            assert_eq!(
-                rendered
-                    .env
-                    .iter()
-                    .find(|(key, _)| key == "ANTHROPIC_MODEL")
-                    .map(|(_, value)| value.as_str()),
-                Some(model_for(&profile))
-            );
-            assert_eq!(
-                rendered
-                    .env
-                    .iter()
-                    .find(|(key, _)| key == "CLAUDE_CODE_AUTO_COMPACT_WINDOW")
-                    .map(|(_, value)| value.as_str()),
-                Some(match profile.provider.as_str() {
-                    "moonshot" => "256000",
-                    _ => "1000000",
-                })
-            );
-        }
+        assert_eq!(
+            keys,
+            vec![
+                "ANTHROPIC_API_KEY",
+                "ANTHROPIC_AUTH_TOKEN",
+                "ANTHROPIC_BASE_URL",
+                "ANTHROPIC_MODEL",
+            ]
+        );
+        assert_eq!(
+            env_value(&rendered.env, "ANTHROPIC_API_KEY"),
+            Some("test-key")
+        );
+        assert_eq!(
+            env_value(&rendered.env, "ANTHROPIC_BASE_URL"),
+            Some("http://ai.939593.xyz")
+        );
+        assert_eq!(
+            env_value(&rendered.env, "ANTHROPIC_MODEL"),
+            Some("claude-sonnet-4-5")
+        );
+        assert!(rendered.command_args.is_empty());
+        assert!(rendered.settings_files.is_empty());
+        assert!(rendered.config_env.is_none());
     }
 
     #[test]
     fn claude_desktop_launch_uses_claude_env_shape() {
-        let profile = anthropic_profile("dashscope", Some("coding-plan"), "qwen3.6-plus");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
+        let profile = gateway_profile("anthropic", "claude-sonnet-4-5");
+        let provider = catalog::custom();
 
         let cli =
             render(&profile, "anthropic", "claude", provider).expect("claude profile renders");
@@ -741,9 +788,9 @@ mod tests {
     }
 
     #[test]
-    fn codex_launch_includes_model_catalog_for_context_window() {
-        let profile = openai_responses_profile("xai", "grok-4.3");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
+    fn codex_launch_uses_gateway_responses_config_args() {
+        let profile = gateway_profile("openai-responses", "gpt-5.5");
+        let provider = catalog::custom();
 
         let rendered =
             render(&profile, "openai-responses", "codex", provider).expect("codex profile renders");
@@ -751,60 +798,46 @@ mod tests {
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model='grok-4.3'"));
+            .any(|arg| arg == "model='gpt-5.5'"));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_context_window=1000000"));
+            .any(|arg| arg == "model_provider='VibeWbz Gateway Test'"));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg.starts_with("model_catalog_json='")));
+            .any(|arg| arg
+                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_providers.\"VibeWbz Gateway Test\".wire_api='responses'"));
+        assert!(
+            rendered
+                .command_args
+                .iter()
+                .any(|arg| arg
+                    == "model_providers.\"VibeWbz Gateway Test\".requires_openai_auth=true")
+        );
+        assert!(rendered
+            .env
+            .contains(&("OPENAI_API_KEY".to_string(), "test-key".to_string())));
+        assert!(rendered.settings_files.iter().any(|settings_file| {
+            settings_file.rel_path == "config.toml"
+                && settings_file
+                    .contents
+                    .contains("base_url = \"http://ai.939593.xyz\"")
+                && settings_file
+                    .contents
+                    .contains("[model_providers.\"VibeWbz Gateway Test\"]")
+        }));
         assert!(rendered.config_env.is_none());
-
-        let catalog_file = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path.starts_with("codex-model-catalog-"))
-            .expect("codex model catalog file");
-        let catalog: Value =
-            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
-        let model = &catalog["models"][0];
-        assert_eq!(model["slug"], "grok-4.3");
-        assert_eq!(model["context_window"], 1_000_000);
-        assert_eq!(model["max_context_window"], 1_000_000);
-        assert_eq!(
-            model["input_modalities"],
-            serde_json::json!(["text", "image"])
-        );
-    }
-
-    #[test]
-    fn codex_launch_model_catalog_includes_file_modality() {
-        let profile = openai_chat_profile("gemini", Some("gemini-api"), "gemini-2.5-flash");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
-
-        let rendered =
-            render(&profile, "openai-chat", "codex", provider).expect("codex profile renders");
-        let catalog_file = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path.starts_with("codex-model-catalog-"))
-            .expect("codex model catalog file");
-        let catalog: Value =
-            serde_json::from_str(&catalog_file.contents).expect("catalog json parses");
-        let model = &catalog["models"][0];
-
-        assert_eq!(
-            model["input_modalities"],
-            serde_json::json!(["text", "image", "file"])
-        );
     }
 
     #[test]
     fn codex_desktop_launch_uses_codex_config_args() {
-        let profile = openai_responses_profile("xai", "grok-4.3");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
+        let profile = gateway_profile("openai-responses", "gpt-5.5");
+        let provider = catalog::custom();
 
         let rendered = render(&profile, "openai-responses", "codex-desktop", provider)
             .expect("codex desktop profile renders");
@@ -812,168 +845,28 @@ mod tests {
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model='grok-4.3'"));
+            .any(|arg| arg == "model='gpt-5.5'"));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_provider='xai'"));
+            .any(|arg| arg == "model_provider='VibeWbz Gateway Test'"));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg.starts_with("model_catalog_json='")));
+            .any(|arg| arg == "model_providers.\"VibeWbz Gateway Test\".wire_api='responses'"));
         assert!(rendered.config_env.is_none());
     }
 
-    #[test]
-    fn pi_launch_materializes_openai_chat_extension() {
-        let profile = openai_chat_profile("dashscope", Some("coding-plan"), "qwen3.6-plus");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
-
-        let rendered = render(&profile, "openai-chat", "pi", provider).expect("pi profile renders");
-
-        assert!(rendered
-            .env
-            .contains(&("VIBEAROUND_PI_API_KEY".to_string(), "test-key".to_string())));
-        assert!(rendered
-            .command_args
-            .windows(2)
-            .any(|args| args[0] == "--provider"
-                && args[1] == "vibearound-dashscope-test-openai-chat"));
-        assert!(rendered
-            .command_args
-            .windows(2)
-            .any(|args| args[0] == "--model" && args[1] == "qwen3.6-plus"));
-        assert!(rendered.config_env.is_none());
-
-        let extension = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path.ends_with(".mjs"))
-            .expect("pi extension file");
-        assert!(extension.contents.contains("pi.registerProvider"));
-        assert!(extension
-            .contents
-            .contains("\"api\": \"openai-completions\""));
-        assert!(extension
-            .contents
-            .contains("\"baseUrl\": \"https://coding-intl.dashscope.aliyuncs.com/v1\""));
-        assert!(extension
-            .contents
-            .contains("\"apiKey\": \"VIBEAROUND_PI_API_KEY\""));
-        assert!(extension
-            .contents
-            .contains("\"X-DashScope-AuthType\": \"openai\""));
-        assert!(extension.contents.contains("\"contextWindow\": 1000000"));
-        assert!(extension.contents.contains("\"maxTokens\": 16384"));
-        assert!(extension.contents.contains("\"image\""));
-    }
-
-    #[test]
-    fn pi_launch_extension_includes_file_input() {
-        let profile = openai_chat_profile("gemini", Some("gemini-api"), "gemini-2.5-flash");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
-
-        let rendered = render(&profile, "openai-chat", "pi", provider).expect("pi profile renders");
-        let extension = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path.ends_with(".mjs"))
-            .expect("pi extension file");
-
-        assert!(extension.contents.contains(
-            "\"input\": [\n        \"text\",\n        \"image\",\n        \"file\"\n      ]"
-        ));
-    }
-
-    #[test]
-    fn pi_launch_preserves_anthropic_headers_and_auth_header() {
-        let profile = anthropic_profile("dashscope", Some("coding-plan"), "qwen3.6-plus");
-        let provider = catalog::get(&profile.provider).expect("provider exists");
-
-        let rendered = render(&profile, "anthropic", "pi", provider).expect("pi profile renders");
-        let extension = rendered
-            .settings_files
-            .iter()
-            .find(|settings_file| settings_file.rel_path.ends_with(".mjs"))
-            .expect("pi extension file");
-
-        assert!(extension
-            .contents
-            .contains("\"api\": \"anthropic-messages\""));
-        assert!(extension.contents.contains("\"authHeader\": true"));
-        assert!(extension
-            .contents
-            .contains("\"User-Agent\": \"claude-code/0.1.0\""));
-    }
-
-    fn anthropic_profile(provider: &str, endpoint_id: Option<&str>, model: &str) -> ProfileDef {
+    fn gateway_profile(api_type: &str, model: &str) -> ProfileDef {
         let mut credentials = BTreeMap::new();
         credentials.insert("api_key".to_string(), "test-key".to_string());
 
         let mut overrides = BTreeMap::new();
         overrides.insert(
-            "anthropic".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: endpoint_id.map(ToOwned::to_owned),
-                base_url: None,
-                model: Some(model.to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
-        );
-
-        ProfileDef {
-            id: format!("{provider}-test"),
-            label: format!("{provider} test"),
-            provider: provider.to_string(),
-            auth_mode: AuthMode::ApiKey,
-            api_types: vec!["anthropic".to_string()],
-            credentials,
-            overrides,
-            use_settings_proxy: false,
-            provider_settings: Default::default(),
-        }
-    }
-
-    fn openai_chat_profile(provider: &str, endpoint_id: Option<&str>, model: &str) -> ProfileDef {
-        let mut credentials = BTreeMap::new();
-        credentials.insert("api_key".to_string(), "test-key".to_string());
-
-        let mut overrides = BTreeMap::new();
-        overrides.insert(
-            "openai-chat".to_string(),
-            ApiTypeOverrides {
-                endpoint_id: endpoint_id.map(ToOwned::to_owned),
-                base_url: None,
-                model: Some(model.to_string()),
-                reasoning_effort: Some("medium".to_string()),
-                capabilities: None,
-            },
-        );
-
-        ProfileDef {
-            id: format!("{provider}-test"),
-            label: format!("{provider} test"),
-            provider: provider.to_string(),
-            auth_mode: AuthMode::ApiKey,
-            api_types: vec!["openai-chat".to_string()],
-            credentials,
-            overrides,
-            use_settings_proxy: false,
-            provider_settings: Default::default(),
-        }
-    }
-
-    fn openai_responses_profile(provider: &str, model: &str) -> ProfileDef {
-        let mut credentials = BTreeMap::new();
-        credentials.insert("api_key".to_string(), "test-key".to_string());
-
-        let mut overrides = BTreeMap::new();
-        overrides.insert(
-            "openai-responses".to_string(),
+            api_type.to_string(),
             ApiTypeOverrides {
                 endpoint_id: None,
-                base_url: None,
+                base_url: Some("http://ai.939593.xyz".to_string()),
                 model: Some(model.to_string()),
                 reasoning_effort: Some("medium".to_string()),
                 capabilities: None,
@@ -981,11 +874,11 @@ mod tests {
         );
 
         ProfileDef {
-            id: format!("{provider}-test"),
-            label: format!("{provider} test"),
-            provider: provider.to_string(),
+            id: "gateway-test".to_string(),
+            label: "VibeWbz Gateway Test".to_string(),
+            provider: "custom".to_string(),
             auth_mode: AuthMode::ApiKey,
-            api_types: vec!["openai-responses".to_string()],
+            api_types: vec![api_type.to_string()],
             credentials,
             overrides,
             use_settings_proxy: false,
@@ -993,11 +886,9 @@ mod tests {
         }
     }
 
-    fn model_for(profile: &ProfileDef) -> &str {
-        profile
-            .overrides
-            .get("anthropic")
-            .and_then(|overrides| overrides.model.as_deref())
-            .expect("test profile has model")
+    fn env_value<'a>(env: &'a [(String, String)], key: &str) -> Option<&'a str> {
+        env.iter()
+            .find(|(candidate, _)| candidate == key)
+            .map(|(_, value)| value.as_str())
     }
 }

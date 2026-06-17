@@ -50,27 +50,9 @@ export const CONNECTION_AGENTS: ConnectionAgentDef[] = [
     supportedApiTypes: ["openai-responses"],
     defaultApiType: "openai-responses",
   },
-  {
-    id: "pi",
-    label: "Pi",
-    supportedApiTypes: ["anthropic", "openai-responses", "openai-chat"],
-    defaultApiType: "anthropic",
-  },
-  {
-    id: "gemini",
-    label: "Gemini CLI",
-    supportedApiTypes: ["gemini"],
-    defaultApiType: "gemini",
-  },
-  {
-    id: "opencode",
-    label: "OpenCode",
-    supportedApiTypes: ["openai-responses", "openai-chat", "anthropic"],
-    defaultApiType: "openai-responses",
-  },
 ];
 
-const PROXY_TARGET_API_TYPES = ["anthropic", "openai-responses", "openai-chat", "gemini"];
+const PROXY_TARGET_API_TYPES = ["anthropic", "openai-responses", "openai-chat"];
 
 export function resolveProfileConnection(
   profile: ProfileSummary,
@@ -153,14 +135,10 @@ export function recommendedBridgeTarget(
   clientApiType: string,
 ): string | null {
   const anthropicClient =
-    clientApiType === "anthropic" &&
-    (agentId === "claude" || agentId === "opencode" || agentId === "pi");
-  const order =
-    agentId === "gemini" && clientApiType === "gemini"
-      ? ["openai-chat", "openai-responses", "anthropic"]
-      : anthropicClient
-        ? ["openai-responses", "gemini", "openai-chat", "anthropic"]
-        : ["anthropic", "gemini", "openai-chat", "openai-responses"];
+    clientApiType === "anthropic" && agentId === "claude";
+  const order = anthropicClient
+    ? ["openai-responses", "openai-chat", "anthropic"]
+    : ["anthropic", "openai-chat", "openai-responses"];
   return order.find((apiType) => profile.apiTypes.includes(apiType)) ?? null;
 }
 
@@ -172,8 +150,6 @@ export function apiTypeProtocolLabel(apiType: string): string {
       return "OpenAI Responses";
     case "openai-chat":
       return "OpenAI Chat Completions";
-    case "gemini":
-      return "Gemini GenerateContent";
     default:
       return apiType;
   }

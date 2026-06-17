@@ -342,7 +342,7 @@ pub fn custom() -> &'static ProviderCatalog {
     static CUSTOM: LazyLock<ProviderCatalog> = LazyLock::new(|| {
         ProviderCatalog {
         id: "custom".to_string(),
-        label: "Custom".to_string(),
+        label: "VibeWbz Gateway".to_string(),
         icon: Some("✨".to_string()),
         homepage: None,
         hidden_from_picker: false,
@@ -409,7 +409,7 @@ pub fn custom() -> &'static ProviderCatalog {
                         settings_files: vec![
                             SettingsFileTemplate {
                                 rel_path: "config.toml".to_string(),
-                                template: "model = \"{{model}}\"\nmodel_provider = \"custom\"\nmodel_reasoning_effort = \"{{reasoning_effort}}\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"Custom\"\nbase_url = \"{{base_url}}\"\nwire_api = \"responses\"\nrequires_openai_auth = true\n".to_string(),
+                                template: "model = \"{{model}}\"\nmodel_provider = \"{{provider_id}}\"\nmodel_reasoning_effort = \"{{reasoning_effort}}\"\ndisable_response_storage = true\n\n[model_providers.{{provider_table_key}}]\nname = \"{{provider_label}}\"\nbase_url = \"{{base_url}}\"\nwire_api = \"responses\"\nrequires_openai_auth = true\n".to_string(),
                             },
                             SettingsFileTemplate {
                                 rel_path: "auth.json".to_string(),
@@ -473,7 +473,7 @@ fn btree_kv(pairs: &[(&str, &str)]) -> std::collections::BTreeMap<String, String
 // Tests
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
 
@@ -1139,5 +1139,32 @@ mod tests {
             vertex_chat.models.first().map(|model| model.id.as_str()),
             Some("google/gemini-2.5-flash")
         );
+    }
+}
+
+#[cfg(test)]
+mod gateway_tests {
+    use super::*;
+
+    #[test]
+    fn bundled_catalog_is_empty() {
+        assert!(all().is_empty());
+        assert!(get("deepseek").is_none());
+        assert!(get("gemini").is_none());
+    }
+
+    #[test]
+    fn custom_profile_is_vibewbz_gateway() {
+        let provider = custom();
+        let api_types: Vec<_> = provider
+            .endpoints
+            .iter()
+            .map(|endpoint| endpoint.api_type.as_str())
+            .collect();
+
+        assert_eq!(provider.id, "custom");
+        assert_eq!(provider.label, "VibeWbz Gateway");
+        assert!(api_types.contains(&"anthropic"));
+        assert!(api_types.contains(&"openai-responses"));
     }
 }

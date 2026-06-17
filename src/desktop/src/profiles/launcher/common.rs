@@ -73,7 +73,7 @@ pub(super) fn build_bash_script(plan: &LaunchPlan) -> String {
     out.push_str("rm -- \"$0\"\n");
     out.push_str("set -e\n");
     out.push_str(&format!(
-        "echo \"# VibeAround profile: {}\"\n",
+        "echo \"# VibeWbz profile: {}\"\n",
         plan.window_label.replace('"', "'")
     ));
 
@@ -238,12 +238,12 @@ mod tests {
     fn build_bash_script_appends_unix_escaped_args() {
         let args = vec![
             "-c".to_string(),
-            "model_catalog_json='/tmp/VibeAround Catalog/codex.json'".to_string(),
+            "model_catalog_json='/tmp/VibeWbz Catalog/codex.json'".to_string(),
         ];
         let script = build_bash_script(&plan(Vec::new(), "codex", args));
 
         assert!(script.contains("exec codex -c 'model_catalog_json="));
-        assert!(script.contains("/tmp/VibeAround Catalog/codex.json"));
+        assert!(script.contains("/tmp/VibeWbz Catalog/codex.json"));
     }
 
     #[test]

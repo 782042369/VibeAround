@@ -20,7 +20,7 @@ import {
 } from "./launchModel";
 import type { ProfileSummary } from "./types";
 
-export type SelectorPopupId = "profile" | "terminal" | "workspace" | "session";
+export type SelectorPopupId = "profile" | "workspace";
 
 export interface LaunchProfileSummary {
   title: string;

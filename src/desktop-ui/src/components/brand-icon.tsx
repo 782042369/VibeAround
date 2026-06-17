@@ -7,28 +7,9 @@ const CLI_LOGOS: Record<string, string> = {
   "claude-desktop": "/brand/cli-claude.svg",
   codex: "/brand/cli-openai.svg",
   "codex-desktop": "/brand/cli-codex-desktop.png",
-  pi: "/brand/cli-pi.svg",
-  gemini: "/brand/cli-gemini.svg",
-  opencode: "/brand/cli-opencode.svg",
-  cursor: "/brand/cli-cursor.svg",
-  kiro: "/brand/cli-kiro.svg",
-  "qwen-code": "/brand/cli-qwen.svg",
 };
 
-const PROVIDER_LOGOS: Record<string, string> = {
-  azure: "/brand/provider-azure.svg",
-  dashscope: "/brand/provider-dashscope.svg",
-  deepseek: "/brand/provider-deepseek-color.svg",
-  gemini: "/brand/provider-gemini-color.svg",
-  mimo: "/brand/provider-mimo.svg",
-  minimax: "/brand/provider-minimax-color.svg",
-  moonshot: "/brand/provider-moonshot.webp",
-  nvidia: "/brand/provider-nvidia.svg",
-  openrouter: "/brand/provider-openrouter-color.svg",
-  volcengine: "/brand/provider-volcengine.svg",
-  xai: "/brand/provider-xai.svg",
-  zai: "/brand/provider-zai-color.svg",
-};
+const PROVIDER_LOGOS: Record<string, string> = {};
 
 const FULL_SIZE_LOGOS = new Set(["codex-desktop"]);
 

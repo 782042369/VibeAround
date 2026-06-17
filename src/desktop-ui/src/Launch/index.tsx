@@ -1,6 +1,6 @@
 /**
- * Launch tab — agent-first builder for choosing connection, workspace, and
- * session before opening a real coding-agent CLI in the user's Terminal.
+ * Launch tab — desktop builder for choosing target, profile, and workspace
+ * before opening a local CLI or desktop app.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@va/i18n";

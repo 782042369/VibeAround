@@ -2,13 +2,9 @@ import { type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
 import {
-  Archive,
   Check,
   FolderOpen,
-  History,
-  MessageCircle,
   Plus,
-  Terminal,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
@@ -20,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -28,9 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import { resolveProfileConnection } from "./connections";
 import type {
-  LaunchSessionSummary,
   LauncherPreferences,
-  TerminalOption,
   WorkspaceOption,
 } from "./api";
 import {
@@ -38,20 +31,16 @@ import {
   apiTypeProtocolDisplayLabel,
   canDeleteWorkspace,
   connectionAgentId,
-  isGlobalDefaultDirect,
   isGlobalDefaultProfile,
   isBridgeAgent,
   isSortableWorkspace,
   profileAvailability,
   profileSummary,
-  relativeTime,
   type ProfileChoice,
-  type SessionChoice,
 } from "./launchModel";
 import {
   DefaultBadge,
   DisabledMoreButton,
-  DirectProfileActionsMenu,
   DragHandle,
   ProfileActionsMenu,
   BridgeBadge,
@@ -90,62 +79,6 @@ function SelectorPanelShell({
   );
 }
 
-export function TerminalPanel({
-  options,
-  selected,
-  busy,
-  onSelect,
-}: {
-  options: TerminalOption[];
-  selected: string;
-  busy: boolean;
-  onSelect: (terminalId: string) => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <SelectorPanelShell title={t("Switch terminal")}>
-      <div className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
-        {options.map((option) => {
-          const active = option.id === selected;
-          const disabled = busy || !option.installed;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              disabled={disabled}
-              className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-foreground hover:bg-accent/50"
-              }`}
-              onClick={() => onSelect(option.id)}
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-muted-foreground">
-                <Terminal className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold">
-                  {option.label}
-                </span>
-                {!option.installed && (
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {t("{{label}} (not installed)", { label: option.label })}
-                  </span>
-                )}
-              </span>
-              {active ? (
-                <Check className="h-4 w-4 shrink-0 text-primary" />
-              ) : (
-                <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </SelectorPanelShell>
-  );
-}
-
 export function ProfilePanel({
   agentId,
   prefs,
@@ -164,7 +97,7 @@ export function ProfilePanel({
 }: {
   agentId: string;
   prefs: LauncherPreferences;
-  selected: ProfileChoice;
+  selected: ProfileChoice | null;
   profiles: ProfileSummary[];
   onSelect: (choice: ProfileChoice) => void;
   onSelectApiType: (profile: ProfileSummary, apiType: string) => void;
@@ -181,8 +114,6 @@ export function ProfilePanel({
   busy: boolean;
 }) {
   const { t } = useI18n();
-  const directIsGlobalDefault = isGlobalDefaultDirect(prefs, agentId);
-  const directActive = selected.kind === "direct";
 
   function handleProfileDragEnd(event: DragEndEvent) {
     if (event.canceled || busy) return;
@@ -203,7 +134,7 @@ export function ProfilePanel({
         >
           <DragHandle
             disabled
-            label={t("New profile")}
+            label={t("Configure gateway")}
             disabledReason={t("This item cannot be reordered")}
           />
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-primary/40 bg-primary/5 text-primary">
@@ -216,42 +147,6 @@ export function ProfilePanel({
             <div className="truncate text-[11px] text-muted-foreground">
               {t("Add a provider profile")}
             </div>
-          </div>
-        </SelectableItemCard>
-
-        <SelectableItemCard
-          active={directActive}
-          disabled={busy}
-          onSelect={() => onSelect({ kind: "direct" })}
-        >
-          <DragHandle
-            disabled
-            label={t("Direct")}
-            disabledReason={t("Direct profile is fixed")}
-          />
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-muted-foreground">
-            <Terminal className="h-6 w-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="truncate text-[13px] font-semibold">
-                {t("Direct")}
-              </span>
-              {directIsGlobalDefault && <DefaultBadge />}
-            </div>
-            <div className="truncate text-[11px] text-muted-foreground">
-              {t("Use existing CLI login")}
-            </div>
-          </div>
-          <div
-            className="flex shrink-0 flex-wrap justify-end gap-2"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <DirectProfileActionsMenu
-              isDefault={directIsGlobalDefault}
-              disabled={busy}
-              onMakeDefault={() => void onMakeDefault({ kind: "direct" })}
-            />
           </div>
         </SelectableItemCard>
 
@@ -269,8 +164,7 @@ export function ProfilePanel({
                   const summary = profileSummary(profile, agentId, prefs, t);
                   const active =
                     availability.launchable &&
-                    selected.kind === "profile" &&
-                    selected.profileId === profile.id;
+                    selected?.profileId === profile.id;
                   const globalDefaultForProfile = isGlobalDefaultProfile(
                     prefs,
                     agentId,
@@ -413,7 +307,6 @@ export function WorkspacePanel({
   onDelete,
   onReorder,
   onCreate,
-  sessionCounts,
   busy,
 }: {
   prefs: LauncherPreferences;
@@ -422,7 +315,6 @@ export function WorkspacePanel({
   onDelete: (path: string, label: string) => void;
   onReorder: (fromPath: string, toPath: string) => void;
   onCreate: () => void;
-  sessionCounts: Record<string, number>;
   busy: boolean;
 }) {
   const { t } = useI18n();
@@ -510,9 +402,6 @@ export function WorkspacePanel({
             </TooltipContent>
           </Tooltip>
         </span>
-        <span className="w-8 shrink-0 text-right font-mono text-[11px] text-muted-foreground">
-          {sessionCounts[workspace.path] ?? ""}
-        </span>
         {active ? (
           <Check className="h-4 w-4 shrink-0 text-primary" />
         ) : (
@@ -594,140 +483,6 @@ export function WorkspacePanel({
           })}
         </div>
       </DragDropProvider>
-    </SelectorPanelShell>
-  );
-}
-
-export function SessionPanel({
-  sessions,
-  selected,
-  archiveFilterAvailable,
-  resumeSupported,
-  unsupportedReason,
-  showArchived,
-  onShowArchivedChange,
-  onSelect,
-}: {
-  sessions: LaunchSessionSummary[];
-  selected: SessionChoice;
-  archiveFilterAvailable: boolean;
-  resumeSupported: boolean;
-  unsupportedReason: string;
-  showArchived: boolean;
-  onShowArchivedChange: (show: boolean) => void;
-  onSelect: (choice: SessionChoice) => void;
-}) {
-  const { t } = useI18n();
-  if (!resumeSupported) {
-    return (
-      <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-        {unsupportedReason}
-      </p>
-    );
-  }
-  return (
-    <SelectorPanelShell
-      title={t("Switch session")}
-      headerExtra={
-        archiveFilterAvailable ? (
-          <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <Archive className="h-3.5 w-3.5" />
-            <span>{t("Show archived")}</span>
-            <Switch
-              checked={showArchived}
-              onCheckedChange={onShowArchivedChange}
-              aria-label={t("Show archived")}
-            />
-          </label>
-        ) : undefined
-      }
-      footer={
-        <button
-          type="button"
-          className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors ${
-            selected === null
-              ? "bg-primary/10 text-primary"
-              : "text-foreground hover:bg-primary/5"
-          }`}
-          onClick={() => onSelect(null)}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-muted-foreground">
-            <Plus className="h-4 w-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold">
-              {t("New session")}
-            </span>
-            <span className="block truncate text-[11px] text-muted-foreground">
-              {t("Quick Launch will start a new session")}
-            </span>
-          </span>
-          {selected === null ? (
-            <Check className="h-4 w-4 shrink-0 text-primary" />
-          ) : (
-            <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-          )}
-        </button>
-      }
-    >
-      <div className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
-        {sessions.length === 0 && (
-          <p className="px-3 py-2 text-xs text-muted-foreground">
-            {t("No session in this workspace")}
-          </p>
-        )}
-        {sessions.map((session) => {
-          const isLast = session === sessions[0];
-          const active =
-            selected?.kind === "session" &&
-            selected.sessionId === session.sessionId;
-          return (
-            <button
-              type="button"
-              key={`${session.sessionId}:${session.archived ? "archived" : "active"}`}
-              className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors ${
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-foreground hover:bg-accent/50"
-              }`}
-              onClick={() =>
-                onSelect({ kind: "session", sessionId: session.sessionId })
-              }
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-muted-foreground">
-                <MessageCircle className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="truncate text-[13px] font-semibold">
-                    {session.title}
-                  </span>
-                  {session.archived && (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
-                      <Archive className="h-3 w-3" />
-                      {t("Archived")}
-                    </span>
-                  )}
-                  {isLast && (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                      <History className="h-3 w-3" />
-                      {t("Last session")}
-                    </span>
-                  )}
-                </span>
-                <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                  {session.shortId} · {relativeTime(session.updatedAt, t)}
-                </span>
-              </span>
-              {active ? (
-                <Check className="h-4 w-4 shrink-0 text-primary" />
-              ) : (
-                <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-              )}
-            </button>
-          );
-        })}
-      </div>
     </SelectorPanelShell>
   );
 }

@@ -1,18 +1,11 @@
 import { AgentDecisionPanel } from "./AgentDecisionPanel";
 import { ConfigurePanel } from "./ConfigurePanel";
-import { ImDecisionPanel } from "./ImDecisionPanel";
 import { InstallPanel } from "./InstallPanel";
-import { RemoteDecisionPanel } from "./RemoteDecisionPanel";
-import type { AgentId, TunnelProvider } from "../constants";
+import type { AgentId } from "../constants";
 import type {
   AgentSummary,
-  AuthFlowState,
-  ChannelVerboseConfig,
-  DiscoveredChannelPlugin,
-  PluginRegistryEntry,
   StartkitChoices,
   StartkitItemReport,
-  TunnelSummary,
 } from "../types";
 import type { WizardStepId } from "../wizardTypes";
 
@@ -23,15 +16,6 @@ export function OnboardingStepContent({
   reportsById,
   scanning,
   onToggleAgent,
-  pluginRegistry,
-  discoveredPlugins,
-  pluginReports,
-  enabledChannels,
-  onToggleChannel,
-  tunnels,
-  tunnelProvider,
-  tunnelReports,
-  onTunnelProvider,
   groupedReports,
   reports,
   running,
@@ -39,24 +23,8 @@ export function OnboardingStepContent({
   finalStatus,
   startkitError,
   choices,
-  channelConfigs,
-  channelVerbose,
-  installingPlugins,
-  authStates,
-  ngrokToken,
-  ngrokDomain,
-  cfToken,
-  cfHostname,
+  hasInstallChoices,
   finishError,
-  onConfigChange,
-  onVerboseChange,
-  onInstallPlugin,
-  onStartAuth,
-  onCancelAuth,
-  onNgrokToken,
-  onNgrokDomain,
-  onCfToken,
-  onCfHostname,
 }: {
   activeStep: WizardStepId;
   agents: AgentSummary[];
@@ -64,15 +32,6 @@ export function OnboardingStepContent({
   reportsById: Map<string, StartkitItemReport>;
   scanning: boolean;
   onToggleAgent: (id: AgentId) => void;
-  pluginRegistry: PluginRegistryEntry[];
-  discoveredPlugins: DiscoveredChannelPlugin[];
-  pluginReports: StartkitItemReport[];
-  enabledChannels: Set<string>;
-  onToggleChannel: (pluginId: string, enabled: boolean) => void;
-  tunnels: TunnelSummary[];
-  tunnelProvider: TunnelProvider;
-  tunnelReports: StartkitItemReport[];
-  onTunnelProvider: (value: TunnelProvider) => void;
   groupedReports: Array<{ id: string; reports: StartkitItemReport[] }>;
   reports: StartkitItemReport[];
   running: boolean;
@@ -80,28 +39,8 @@ export function OnboardingStepContent({
   finalStatus: string | null;
   startkitError: string | null;
   choices: StartkitChoices;
-  channelConfigs: Record<string, Record<string, string>>;
-  channelVerbose: Record<string, ChannelVerboseConfig>;
-  installingPlugins: Set<string>;
-  authStates: Record<string, AuthFlowState>;
-  ngrokToken: string;
-  ngrokDomain: string;
-  cfToken: string;
-  cfHostname: string;
+  hasInstallChoices: boolean;
   finishError: string | null;
-  onConfigChange: (pluginId: string, key: string, value: string) => void;
-  onVerboseChange: (
-    pluginId: string,
-    key: keyof ChannelVerboseConfig,
-    value: boolean,
-  ) => void;
-  onInstallPlugin: (pluginId: string, githubUrl: string) => void;
-  onStartAuth: (pluginId: string) => void;
-  onCancelAuth: (pluginId: string) => void;
-  onNgrokToken: (value: string) => void;
-  onNgrokDomain: (value: string) => void;
-  onCfToken: (value: string) => void;
-  onCfHostname: (value: string) => void;
 }) {
   return (
     <section
@@ -117,25 +56,6 @@ export function OnboardingStepContent({
         />
       )}
 
-      {activeStep === "im" && (
-        <ImDecisionPanel
-          pluginRegistry={pluginRegistry}
-          discoveredPlugins={discoveredPlugins}
-          pluginReports={pluginReports}
-          enabledChannels={enabledChannels}
-          onToggleChannel={onToggleChannel}
-        />
-      )}
-
-      {activeStep === "remote" && (
-        <RemoteDecisionPanel
-          tunnels={tunnels}
-          provider={tunnelProvider}
-          reports={tunnelReports}
-          onProvider={onTunnelProvider}
-        />
-      )}
-
       {activeStep === "install" && (
         <InstallPanel
           groupedReports={groupedReports}
@@ -146,39 +66,13 @@ export function OnboardingStepContent({
           finalStatus={finalStatus}
           error={startkitError}
           choices={choices}
-          tunnelProvider={tunnelProvider}
-          pluginRegistry={pluginRegistry}
-          discoveredPlugins={discoveredPlugins}
+          hasInstallChoices={hasInstallChoices}
         />
       )}
 
       {activeStep === "configure" && (
         <ConfigurePanel
-          enabledChannels={enabledChannels}
-          tunnelProvider={tunnelProvider}
-          pluginRegistry={pluginRegistry}
-          discoveredPlugins={discoveredPlugins}
-          channelConfigs={channelConfigs}
-          channelVerbose={channelVerbose}
-          installingPlugins={installingPlugins}
-          authStates={authStates}
-          tunnels={tunnels}
-          ngrokToken={ngrokToken}
-          ngrokDomain={ngrokDomain}
-          cfToken={cfToken}
-          cfHostname={cfHostname}
           finishError={finishError}
-          onToggleChannel={onToggleChannel}
-          onConfigChange={onConfigChange}
-          onVerboseChange={onVerboseChange}
-          onInstallPlugin={onInstallPlugin}
-          onStartAuth={onStartAuth}
-          onCancelAuth={onCancelAuth}
-          onProvider={onTunnelProvider}
-          onNgrokToken={onNgrokToken}
-          onNgrokDomain={onNgrokDomain}
-          onCfToken={onCfToken}
-          onCfHostname={onCfHostname}
         />
       )}
     </section>

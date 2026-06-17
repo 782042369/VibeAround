@@ -1,6 +1,6 @@
 //! Pi profile launch rendering.
 //!
-//! Pi accepts custom providers through extensions. VibeAround writes a
+//! Pi accepts custom providers through extensions. VibeWbz writes a
 //! profile-local extension per launch so provider/base URL choices stay scoped
 //! to the selected profile instead of mutating the user's global Pi config.
 
@@ -57,7 +57,7 @@ pub(super) fn render_pi_provider(
     let extension_path = extension_path.to_string_lossy().into_owned();
 
     Ok(RenderedProfile {
-        env: vec![("VIBEAROUND_PI_API_KEY".to_string(), config.api_key.clone())],
+        env: vec![("VIBEWBZ_PI_API_KEY".to_string(), config.api_key.clone())],
         settings_files: vec![RenderedSettingsFile {
             rel_path,
             contents: pi_extension_contents(&config)?,
@@ -75,7 +75,7 @@ pub(super) fn render_pi_provider(
 }
 
 pub(super) fn provider_id(profile_id: &str, api_type: &str) -> String {
-    format!("vibearound-{}-{}", slug(profile_id), slug(api_type))
+    format!("vibewbz-{}-{}", slug(profile_id), slug(api_type))
 }
 
 pub(super) fn bridge_base_url(
@@ -135,7 +135,7 @@ fn pi_extension_contents(config: &PiProviderLaunchConfig<'_>) -> anyhow::Result<
     let mut provider = Map::new();
     provider.insert("name".to_string(), json!(config.provider_label));
     provider.insert("baseUrl".to_string(), json!(config.base_url));
-    provider.insert("apiKey".to_string(), json!("VIBEAROUND_PI_API_KEY"));
+    provider.insert("apiKey".to_string(), json!("VIBEWBZ_PI_API_KEY"));
     provider.insert("api".to_string(), json!(pi_api_for(config.api_type)?));
     provider.insert(
         "models".to_string(),

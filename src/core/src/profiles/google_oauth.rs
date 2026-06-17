@@ -9,8 +9,8 @@ use url::Url;
 
 use crate::config;
 
-const OAUTH_CLIENT_ID_ENV: &str = "VIBEAROUND_GOOGLE_OAUTH_CLIENT_ID";
-const OAUTH_CLIENT_SECRET_ENV: &str = "VIBEAROUND_GOOGLE_OAUTH_CLIENT_SECRET";
+const OAUTH_CLIENT_ID_ENV: &str = "VIBEWBZ_GOOGLE_OAUTH_CLIENT_ID";
+const OAUTH_CLIENT_SECRET_ENV: &str = "VIBEWBZ_GOOGLE_OAUTH_CLIENT_SECRET";
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const TOKEN_REFRESH_SKEW_MS: u64 = 60_000;
@@ -71,7 +71,7 @@ struct OAuthClientConfig {
     client_secret: String,
 }
 
-pub fn vibearound_credentials_path() -> PathBuf {
+pub fn vibewbz_credentials_path() -> PathBuf {
     config::data_dir().join("google-oauth").join("gemini.json")
 }
 
@@ -89,7 +89,7 @@ pub fn google_application_credentials_path() -> Option<PathBuf> {
 }
 
 pub fn status() -> GoogleOAuthStatus {
-    let path = vibearound_credentials_path();
+    let path = vibewbz_credentials_path();
     let signed_in = read_credentials(&path)
         .ok()
         .map(|credentials| {
@@ -136,7 +136,7 @@ pub async fn login_with_browser(client: &reqwest::Client) -> anyhow::Result<Goog
     let response =
         exchange_authorization_code(client, &oauth_client, &callback.code, &redirect_uri).await?;
     let credentials = credentials_from_token_response(response, Some(&oauth_client));
-    write_credentials(&vibearound_credentials_path(), &credentials)
+    write_credentials(&vibewbz_credentials_path(), &credentials)
         .context("failed to save Google OAuth credentials")?;
     Ok(status())
 }
@@ -148,11 +148,11 @@ pub async fn login_with_browser_default_client() -> anyhow::Result<GoogleOAuthSt
     login_with_browser(&client).await
 }
 
-pub async fn vibearound_access_token(client: &reqwest::Client) -> anyhow::Result<String> {
-    let path = vibearound_credentials_path();
+pub async fn vibewbz_access_token(client: &reqwest::Client) -> anyhow::Result<String> {
+    let path = vibewbz_credentials_path();
     access_token_from_path(client, &path)
         .await
-        .with_context(|| format!("VibeAround Google OAuth credentials at {}", path.display()))
+        .with_context(|| format!("VibeWbz Google OAuth credentials at {}", path.display()))
 }
 
 pub async fn access_token_from_path(
@@ -298,7 +298,7 @@ async fn handle_callback_stream(
             &mut stream,
             400,
             "Bad Request",
-            "VibeAround could not read the Google OAuth callback.",
+            "VibeWbz could not read the Google OAuth callback.",
         )
         .await?;
         return Err(anyhow!("Google OAuth callback request was malformed"));
@@ -362,7 +362,7 @@ async fn send_callback_response(
     message: &str,
 ) -> std::io::Result<()> {
     let body = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>VibeAround</title></head><body><p>{message}</p></body></html>"
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>VibeWbz</title></head><body><p>{message}</p></body></html>"
     );
     let response = format!(
         "HTTP/1.1 {status} {reason}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",

@@ -1,7 +1,7 @@
 //! Terminal-app preferences.
 //!
 //! v1 supports native terminal choices per platform. The preference lives in a tiny
-//! dedicated file at `~/.vibearound/launcher.json` so adding it doesn't
+//! dedicated file at `~/.vibewbz/launcher.json` so adding it doesn't
 //! couple the Launch tab to the daemon's settings.json write path.
 //!
 //! Adding more terminals (Ghostty, WezTerm, Warp, …) is a matter of:

@@ -84,7 +84,7 @@ pub(super) async fn mcp_get_session_id(
         Some(other) => mcp_error_text(
             id,
             &format!(
-                "Could not resolve session ID for agent_kind '{}'. Pass session_id explicitly or provide channel_kind/chat_id for a VibeAround-managed session.",
+                "Could not resolve session ID for agent_kind '{}'. Pass session_id explicitly or provide channel_kind/chat_id for a VibeWbz-managed session.",
                 other
             ),
         ),
@@ -222,7 +222,7 @@ pub(super) async fn mcp_prepare_handover(
         arguments.get("profile_id").and_then(|v| v.as_str()),
     );
 
-    if common::agent::launch::profile_uses_vibearound_credentials(&profile_id) {
+    if common::agent::launch::profile_uses_vibewbz_credentials(&profile_id) {
         let agent_id = match common::resources::resolve_agent_id(agent_kind_str) {
             Ok(agent_id) => agent_id,
             Err(error) => return mcp_error_text(id, &error),
@@ -245,7 +245,7 @@ pub(super) async fn mcp_prepare_handover(
     }
 
     // Validate cwd is a known workspace.
-    // Built-in workspaces under ~/.vibearound/workspaces/ are always accepted.
+    // Built-in workspaces under ~/.vibewbz/workspaces/ are always accepted.
     let config = common::config::ensure_loaded();
     let cwd_path = common::workspace::normalize_workspace_cwd(std::path::PathBuf::from(cwd));
     let builtin_dir =
@@ -260,7 +260,7 @@ pub(super) async fn mcp_prepare_handover(
         return mcp_error_text(
             id,
             &format!(
-                "Workspace {} is not registered in VibeAround.\n\
+                "Workspace {} is not registered in VibeWbz.\n\
              Use the `register_workspace` tool to add it first, then retry.",
                 cwd_path.to_string_lossy()
             ),
@@ -301,7 +301,7 @@ pub(super) async fn mcp_prepare_handover(
         id,
         &format!(
             "Handover prepared.\n\n\
-         Tell the user to send this command in any IM chat connected to VibeAround:\n\
+         Tell the user to send this command in any IM chat connected to VibeWbz:\n\
          {}\n\n\
          The code expires in 2 minutes. After sending the command, the user's next message will resume this session.",
             pickup_cmd
@@ -310,7 +310,7 @@ pub(super) async fn mcp_prepare_handover(
 }
 
 // ---------------------------------------------------------------------------
-// register_workspace — writes to VibeAround settings.json
+// register_workspace — writes to VibeWbz settings.json
 // ---------------------------------------------------------------------------
 
 pub(super) async fn mcp_register_workspace(
@@ -714,13 +714,13 @@ fn ensure_git_head(repo_root: &Path) -> anyhow::Result<String> {
         .arg(repo_root)
         .args([
             "-c",
-            "user.name=VibeAround",
+            "user.name=VibeWbz",
             "-c",
-            "user.email=vibearound@example.invalid",
+            "user.email=vibewbz@example.invalid",
             "commit",
             "--allow-empty",
             "-m",
-            "Initialize workspace for VibeAround subagents",
+            "Initialize workspace for VibeWbz subagents",
         ])
         .output()
         .with_context(|| format!("create initial git commit in {}", repo_root.display()))?;
@@ -1131,7 +1131,7 @@ fn validate_workspace(
         return Err(mcp_error_text(
             id,
             &format!(
-                "Workspace {} is not registered in VibeAround.\n\
+                "Workspace {} is not registered in VibeWbz.\n\
              Use the `register_workspace` tool to add it first, then retry.",
                 cwd_path.display()
             ),

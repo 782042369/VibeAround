@@ -114,7 +114,7 @@ mod tests {
 
     fn temp_jsonl_path() -> PathBuf {
         std::env::temp_dir()
-            .join(format!("vibearound-workspace-store-{}", Uuid::new_v4()))
+            .join(format!("vibewbz-workspace-store-{}", Uuid::new_v4()))
             .join("workspaces.jsonl")
     }
 

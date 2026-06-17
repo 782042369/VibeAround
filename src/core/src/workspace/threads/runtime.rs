@@ -762,19 +762,19 @@ impl ThreadRuntime {
 
         let mut env_vars = vec![
             (
-                "VIBEAROUND_CHANNEL_KIND".to_string(),
+                "VIBEWBZ_CHANNEL_KIND".to_string(),
                 route.channel_kind.clone(),
             ),
-            ("VIBEAROUND_CHAT_ID".to_string(), route.chat_id.clone()),
-            ("VIBEAROUND_AGENT_KIND".to_string(), agent_id.clone()),
-            ("VIBEAROUND_THREAD_ID".to_string(), thread.id.to_string()),
+            ("VIBEWBZ_CHAT_ID".to_string(), route.chat_id.clone()),
+            ("VIBEWBZ_AGENT_KIND".to_string(), agent_id.clone()),
+            ("VIBEWBZ_THREAD_ID".to_string(), thread.id.to_string()),
             (
-                "VIBEAROUND_WORKSPACE_ID".to_string(),
+                "VIBEWBZ_WORKSPACE_ID".to_string(),
                 thread.workspace_id.to_string(),
             ),
         ];
         let mut extra_args = Vec::new();
-        if crate::agent::launch::profile_uses_vibearound_credentials(&profile) {
+        if crate::agent::launch::profile_uses_vibewbz_credentials(&profile) {
             let applied = crate::agent::launch::materialize_profile_for_agent(
                 &profile,
                 &agent_id,
@@ -886,32 +886,32 @@ impl ThreadRuntime {
 
         let mut env_vars = vec![
             (
-                "VIBEAROUND_CHANNEL_KIND".to_string(),
+                "VIBEWBZ_CHANNEL_KIND".to_string(),
                 route.channel_kind.clone(),
             ),
-            ("VIBEAROUND_CHAT_ID".to_string(), route.chat_id.clone()),
-            ("VIBEAROUND_AGENT_KIND".to_string(), agent_id.clone()),
-            ("VIBEAROUND_AGENT_ROLE".to_string(), "subagent".to_string()),
-            ("VIBEAROUND_THREAD_ID".to_string(), thread.id.to_string()),
+            ("VIBEWBZ_CHAT_ID".to_string(), route.chat_id.clone()),
+            ("VIBEWBZ_AGENT_KIND".to_string(), agent_id.clone()),
+            ("VIBEWBZ_AGENT_ROLE".to_string(), "subagent".to_string()),
+            ("VIBEWBZ_THREAD_ID".to_string(), thread.id.to_string()),
             (
-                "VIBEAROUND_WORKSPACE_ID".to_string(),
+                "VIBEWBZ_WORKSPACE_ID".to_string(),
                 thread.workspace_id.to_string(),
             ),
             (
-                "VIBEAROUND_SUBAGENT_ID".to_string(),
+                "VIBEWBZ_SUBAGENT_ID".to_string(),
                 thread_agent.id.to_string(),
             ),
             (
-                "VIBEAROUND_SUBAGENT_NAME".to_string(),
+                "VIBEWBZ_SUBAGENT_NAME".to_string(),
                 thread_agent.name.clone(),
             ),
             (
-                "VIBEAROUND_MULTI_AGENT_TURN_ID".to_string(),
+                "VIBEWBZ_MULTI_AGENT_TURN_ID".to_string(),
                 thread_agent.turn_id.to_string(),
             ),
         ];
         let mut extra_args = Vec::new();
-        if crate::agent::launch::profile_uses_vibearound_credentials(&profile) {
+        if crate::agent::launch::profile_uses_vibewbz_credentials(&profile) {
             let applied = crate::agent::launch::materialize_profile_for_agent(
                 &profile, &agent_id, &worktree, route,
             )
@@ -1265,7 +1265,7 @@ fn subagent_assignment_prompt_from_value(
 ) -> String {
     let report_schema = subagent_report_schema(agent);
     format!(
-        "You are a VibeAround subagent named {name}.\n\
+        "You are a VibeWbz subagent named {name}.\n\
          Work only inside your current git worktree. Do not merge branches or clean up worktrees.\n\
          Complete the assignment independently. You may stream progress and tool output normally.\n\
          When the assignment is complete, end your final assistant content with exactly one `va-agent-protocol` report envelope. Do not put any prose after that envelope.\n\
@@ -1282,7 +1282,7 @@ fn subagent_assignment_prompt_from_value(
 fn subagent_report_repair_prompt(agent: &ThreadAgent, error: &str) -> String {
     let report_schema = subagent_report_schema(agent);
     format!(
-        "Your previous response could not be accepted as a VibeAround subagent report.\n\
+        "Your previous response could not be accepted as a VibeWbz subagent report.\n\
          Reason: {error}\n\n\
          Do not continue task work. Emit exactly one final `va-agent-protocol` report envelope now. \
          Do not put any prose before or after the envelope.\n\
@@ -1304,7 +1304,7 @@ fn subagent_session_meta(agent: &ThreadAgent) -> acp::Meta {
     let mut meta = serde_json::Map::new();
     meta.insert("systemPrompt".to_string(), serde_json::json!(system_prompt));
     meta.insert(
-        "vibearound".to_string(),
+        "vibewbz".to_string(),
         serde_json::json!({
             "role": "subagent",
             "system_prompt": system_prompt,
@@ -1318,7 +1318,7 @@ fn subagent_session_meta(agent: &ThreadAgent) -> acp::Meta {
 
 fn subagent_system_prompt(agent: &ThreadAgent) -> String {
     format!(
-        "You are a VibeAround subagent named {name}. Work only inside your assigned git worktree. \
+        "You are a VibeWbz subagent named {name}. Work only inside your assigned git worktree. \
          Treat host assignments wrapped in <va-agent-protocol> as control messages. \
          You may stream ordinary progress messages for the web UI, but control/report data must be wrapped in <va-agent-protocol>. \
          Your completion report envelope must be the final content you emit, with no prose after it. \

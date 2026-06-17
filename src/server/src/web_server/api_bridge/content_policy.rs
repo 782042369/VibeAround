@@ -390,6 +390,16 @@ mod tests {
         }
     }
 
+    fn vision_profile(model: &str) -> ProfileDef {
+        let mut profile = profile("custom", model);
+        let overrides = profile.overrides.get_mut("openai-chat").unwrap();
+        overrides.capabilities = Some(ContentCapabilities {
+            image_input: true,
+            file_input: false,
+        });
+        profile
+    }
+
     fn image_request(model: &str) -> UniversalRequest {
         UniversalRequest {
             model: Some(model.to_string()),
@@ -411,22 +421,22 @@ mod tests {
     #[test]
     fn rejects_image_for_text_only_model() {
         let error = validate_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
-            &image_request("deepseek-v4-pro"),
+            &image_request("text-only-model"),
         )
         .unwrap_err();
 
-        assert!(error.contains("DeepSeek model 'deepseek-v4-pro'"));
+        assert!(error.contains("VibeWbz Gateway model 'text-only-model'"));
         assert!(error.contains("image input"));
     }
 
     #[test]
     fn allows_catalog_image_model() {
         validate_request_content(
-            &profile("dashscope", "qwen3.6-plus"),
+            &vision_profile("vision-model"),
             "openai-chat",
-            &image_request("qwen3.6-plus"),
+            &image_request("vision-model"),
         )
         .unwrap();
     }
@@ -434,17 +444,14 @@ mod tests {
     #[test]
     fn suggests_compatible_models_from_same_endpoint() {
         let error = validate_request_content(
-            &profile("dashscope", "glm-5.1"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
-            &image_request("glm-5.1"),
+            &image_request("text-only-model"),
         )
         .unwrap_err();
 
-        assert!(error.contains("Alibaba DashScope model 'glm-5.1'"));
-        assert!(error.contains("Compatible models for image input on this endpoint"));
-        assert!(error.contains("qwen3.6-plus"));
-        assert!(error.contains("qwen3.5-plus"));
-        assert!(error.contains("kimi-k2.5"));
+        assert!(error.contains("VibeWbz Gateway model 'text-only-model'"));
+        assert!(!error.contains("Compatible models for image input on this endpoint"));
     }
 
     #[test]
@@ -469,7 +476,7 @@ mod tests {
     fn bridge_model_capability_overrides_allow_custom_media() {
         let mut request = image_request("provider-new-vision-model");
         let result = sanitize_request_content_with_capabilities(
-            &profile("dashscope", "provider-new-vision-model"),
+            &profile("custom", "provider-new-vision-model"),
             "openai-chat",
             &mut request,
             Some(&ContentCapabilities {
@@ -497,7 +504,7 @@ mod tests {
         };
 
         let error = validate_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
             &request,
         )
@@ -521,7 +528,7 @@ mod tests {
         };
 
         let error = validate_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
             &request,
         )
@@ -532,10 +539,10 @@ mod tests {
 
     #[test]
     fn sanitizes_image_for_text_only_model() {
-        let mut request = image_request("deepseek-v4-pro");
+        let mut request = image_request("text-only-model");
 
         let result = sanitize_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
             &mut request,
         );
@@ -550,19 +557,16 @@ mod tests {
             panic!("expected placeholder text");
         };
         assert!(text.contains("Image attachment omitted"));
-        assert!(text.contains("DeepSeek deepseek-v4-pro"));
+        assert!(text.contains("VibeWbz Gateway text-only-model"));
         assert!(text.contains("Do not infer image contents"));
     }
 
     #[test]
     fn leaves_supported_image_model_unchanged() {
-        let mut request = image_request("qwen3.6-plus");
+        let mut request = image_request("vision-model");
 
-        let result = sanitize_request_content(
-            &profile("dashscope", "qwen3.6-plus"),
-            "openai-chat",
-            &mut request,
-        );
+        let result =
+            sanitize_request_content(&vision_profile("vision-model"), "openai-chat", &mut request);
 
         assert!(!result.changed());
         assert!(request_content_usage(&request).image_input);
@@ -571,7 +575,7 @@ mod tests {
     #[test]
     fn sanitizes_file_inside_tool_result() {
         let mut request = UniversalRequest {
-            model: Some("deepseek-v4-pro".to_string()),
+            model: Some("text-only-model".to_string()),
             input: vec![UniversalItem::ToolResult {
                 tool_call_id: "call_1".to_string(),
                 content: vec![ContentBlock::File {
@@ -588,7 +592,7 @@ mod tests {
         };
 
         let result = sanitize_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
             &mut request,
         );
@@ -620,7 +624,7 @@ mod tests {
         };
 
         let result = sanitize_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
             &mut request,
         );
@@ -636,7 +640,7 @@ mod tests {
     #[test]
     fn claude_image_history_to_text_only_chat_does_not_forward_image() {
         let raw_anthropic = json!({
-            "model": "deepseek-v4-pro",
+            "model": "text-only-model",
             "max_tokens": 1024,
             "messages": [{
                 "role": "user",
@@ -658,7 +662,7 @@ mod tests {
             .unwrap();
 
         let result = sanitize_request_content(
-            &profile("deepseek", "deepseek-v4-pro"),
+            &profile("custom", "text-only-model"),
             "openai-chat",
             &mut request,
         );

@@ -13,6 +13,10 @@ import { LanguageMenu } from "@/components/LanguageMenu";
 import { cn } from "@/lib/utils";
 
 import {
+  rescanDesktopAppEntries,
+  type DesktopAppDetectionFile,
+} from "../Launch/api";
+import {
   OnboardingFooter,
   type FooterAction,
   type PrimaryAction,
@@ -20,43 +24,71 @@ import {
 import { OnboardingStepContent } from "./components/OnboardingStepContent";
 import { StartkitAdvancedMenu } from "./components/StartkitAdvancedMenu";
 import { ProgressStepper, QuestionPane } from "./components/WizardChrome";
-import { useChannelAuth } from "./hooks/useChannelAuth";
 import { useStartkitFlow } from "./hooks/useStartkitFlow";
-import { defaultChannelVerbose } from "./lib/channelConfig";
 import { buildSettings } from "./lib/buildSettings";
 import { useOnboardingInitialLoad } from "./hooks/useOnboardingInitialLoad";
 import {
   agentCheckingReport,
   agentIdFromReport,
-  agentIdFromSdkReport,
-  agentSdkCheckingReport,
   groupReportsFromReports,
   itemCheckSignature,
-  localPluginReport,
   markReportsUpdating,
-  mergeLocalReportsById,
   mergeReportsById,
-  pluginCheckingReport,
-  pluginIdFromReport,
-  tunnelCheckingReport,
-  tunnelReportMatchesProvider,
 } from "./lib/checkReports";
 import { WIZARD_STEPS, type WizardStepId } from "./wizardTypes";
 import type {
   AgentSummary,
-  ChannelVerboseConfig,
-  DiscoveredChannelPlugin,
-  PluginRegistryEntry,
   Settings,
   StartkitChoices,
   StartkitItemReport,
   StartkitManifestSummary,
   ToolchainMode,
-  TunnelSummary,
 } from "./types";
-import type { AgentId, TunnelProvider } from "./constants";
+import type { AgentId } from "./constants";
 
 const DEFAULT_TOOLCHAIN_MODE: ToolchainMode = "system";
+
+function desktopAgentIdFromReport(report: StartkitItemReport): string | null {
+  const match = /^agents\.([^.]+)\.desktop$/.exec(report.id);
+  return match?.[1] ?? null;
+}
+
+function desktopAgentReports(
+  selectedAgents: AgentSummary[],
+  detection: DesktopAppDetectionFile | null,
+): StartkitItemReport[] {
+  return selectedAgents.map((agent) => {
+    const app = detection?.apps[agent.id] ?? null;
+    const installed = Boolean(app?.installed);
+    return {
+      id: `agents.${agent.id}.desktop`,
+      label: agent.display_name,
+      group: "agents",
+      category: "agents",
+      status: installed ? "ok" : "blocked",
+      path: app?.entry?.path ?? (installed ? app?.launchCommand : undefined),
+      message: installed ? "Desktop app is ready" : undefined,
+      actions: [],
+      manualUrl: installed ? undefined : agent.download_url ?? undefined,
+      secret: false,
+    };
+  });
+}
+
+function desktopAgentCheckingReports(
+  selectedAgents: AgentSummary[],
+): StartkitItemReport[] {
+  return selectedAgents.map((agent) => ({
+    id: `agents.${agent.id}.desktop`,
+    label: agent.display_name,
+    group: "agents",
+    category: "agents",
+    status: "running",
+    message: "Checking desktop app",
+    actions: [],
+    secret: false,
+  }));
+}
 
 export default function Onboarding() {
   const { t } = useI18n();
@@ -70,122 +102,65 @@ export default function Onboarding() {
     null,
   );
   const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [tunnels, setTunnels] = useState<TunnelSummary[]>([]);
-  const [pluginRegistry, setPluginRegistry] = useState<PluginRegistryEntry[]>(
-    [],
-  );
-  const [discoveredPlugins, setDiscoveredPlugins] = useState<
-    DiscoveredChannelPlugin[]
-  >([]);
 
   const [downloadSource, setDownloadSource] = useState("global");
   const [toolchainMode, setToolchainMode] =
     useState<ToolchainMode>(DEFAULT_TOOLCHAIN_MODE);
   const [enabledAgents, setEnabledAgents] = useState<Set<AgentId>>(new Set());
-  const [enabledChannels, setEnabledChannels] = useState<Set<string>>(
-    new Set(),
-  );
-  const [channelConfigs, setChannelConfigs] = useState<
-    Record<string, Record<string, string>>
-  >({});
-  const [channelVerbose, setChannelVerbose] = useState<
-    Record<string, ChannelVerboseConfig>
-  >({});
-  const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(
-    new Set(),
-  );
-
-  const [tunnelProvider, setTunnelProvider] =
-    useState<TunnelProvider>("none");
-  const [ngrokToken, setNgrokToken] = useState("");
-  const [ngrokDomain, setNgrokDomain] = useState("");
-  const [cfToken, setCfToken] = useState("");
-  const [cfHostname, setCfHostname] = useState("");
   const [finishError, setFinishError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
 
   const startkit = useStartkitFlow();
   const checkedAgentLocalSignaturesRef = useRef<Set<string>>(new Set());
   const checkedAgentUpdateSignaturesRef = useRef<Set<string>>(new Set());
-  const checkedPluginSignaturesRef = useRef<Set<string>>(new Set());
-  const checkedAgentSdkSignaturesRef = useRef<Set<string>>(new Set());
-  const checkedTunnelSignaturesRef = useRef<Set<string>>(new Set());
   const checkedInstallScanSignaturesRef = useRef<Set<string>>(new Set());
   const previousStartkitOptionsRef = useRef<string | null>(null);
-  const refreshedPluginsAfterInstallRef = useRef(false);
   const [agentInstallReports, setAgentInstallReports] = useState<
     StartkitItemReport[]
   >([]);
-  const [pluginUpdateReports, setPluginUpdateReports] = useState<
+  const checkedDesktopScanSignaturesRef = useRef<Set<string>>(new Set());
+  const [desktopInstallReports, setDesktopInstallReports] = useState<
     StartkitItemReport[]
   >([]);
-  const [agentSdkReports, setAgentSdkReports] = useState<StartkitItemReport[]>(
-    [],
-  );
-  const [tunnelReports, setTunnelReports] = useState<StartkitItemReport[]>([]);
+  const [desktopScanNonce, setDesktopScanNonce] = useState(0);
 
   useOnboardingInitialLoad({
     setSettings,
     setLoaded,
     setManifest,
     setAgents,
-    setTunnels,
-    setPluginRegistry,
-    setDiscoveredPlugins,
     setDownloadSource,
     setToolchainMode,
     setEnabledAgents,
-    setEnabledChannels,
-    setChannelConfigs,
-    setChannelVerbose,
-    setTunnelProvider,
-    setNgrokToken,
-    setNgrokDomain,
-    setCfToken,
-    setCfHostname,
   });
-
-  const registryPluginIds = useMemo(
-    () => new Set(pluginRegistry.map((plugin) => plugin.id)),
-    [pluginRegistry],
-  );
 
   const choices: StartkitChoices = useMemo(
     () => ({
-      agents: Array.from(enabledAgents),
-      tunnel: tunnelProvider,
-      channels: Array.from(enabledChannels),
+      agents: agents
+        .filter((agent) => enabledAgents.has(agent.id) && !agent.direct_only)
+        .map((agent) => agent.id),
       source: downloadSource,
       toolchainMode,
-      shellPath: false,
     }),
     [
+      agents,
       enabledAgents,
-      tunnelProvider,
-      enabledChannels,
       downloadSource,
       toolchainMode,
     ],
   );
+  const selectedDesktopAgents = useMemo(
+    () => agents.filter((agent) => enabledAgents.has(agent.id) && agent.direct_only),
+    [agents, enabledAgents],
+  );
+  const hasCliInstallChoices = choices.agents.length > 0;
+  const hasInstallChoices = hasCliInstallChoices || selectedDesktopAgents.length > 0;
 
   const finalSettings = useMemo(
     () => {
       const built = buildSettings({
         settings,
-        configureAgents: true,
-        configureChannels: true,
-        configureTunnel: true,
         enabledAgents,
-        enabledChannels,
-        registryPluginIds,
-        channelConfigs,
-        channelVerbose,
-        discoveredPlugins,
-        tunnelProvider,
-        ngrokToken,
-        ngrokDomain,
-        cfToken,
-        cfHostname,
       });
       return {
         ...built,
@@ -202,16 +177,6 @@ export default function Onboarding() {
     [
       settings,
       enabledAgents,
-      enabledChannels,
-      registryPluginIds,
-      channelConfigs,
-      channelVerbose,
-      discoveredPlugins,
-      tunnelProvider,
-      ngrokToken,
-      ngrokDomain,
-      cfToken,
-      cfHostname,
       downloadSource,
       toolchainMode,
     ],
@@ -220,11 +185,8 @@ export default function Onboarding() {
   const agentStatusChoices = useMemo<StartkitChoices>(
     () => ({
       agents: [],
-      tunnel: "none",
-      channels: [],
       source: downloadSource,
       toolchainMode,
-      shellPath: false,
     }),
     [downloadSource, toolchainMode],
   );
@@ -285,25 +247,20 @@ export default function Onboarding() {
     previousStartkitOptionsRef.current = signature;
     checkedAgentLocalSignaturesRef.current.clear();
     checkedAgentUpdateSignaturesRef.current.clear();
-    checkedPluginSignaturesRef.current.clear();
-    checkedAgentSdkSignaturesRef.current.clear();
-    checkedTunnelSignaturesRef.current.clear();
     checkedInstallScanSignaturesRef.current.clear();
+    checkedDesktopScanSignaturesRef.current.clear();
     setAgentInstallReports([]);
-    setPluginUpdateReports([]);
-    setAgentSdkReports([]);
-    setTunnelReports([]);
+    setDesktopInstallReports([]);
     startkit.reset();
   }, [downloadSource, loaded, startkit.reset, toolchainMode]);
 
   useEffect(() => {
     if (!loaded || activeStep !== "install" || startkit.running || startkit.scanning) return;
+    if (!hasCliInstallChoices) return;
     const signature = itemCheckSignature(
       "install",
       downloadSource,
       [...choices.agents].sort().join(","),
-      [...choices.channels].sort().join(","),
-      choices.tunnel,
       choices.toolchainMode,
     );
     if (checkedInstallScanSignaturesRef.current.has(signature)) return;
@@ -315,6 +272,7 @@ export default function Onboarding() {
     choices,
     downloadSource,
     finalSettings,
+    hasCliInstallChoices,
     loaded,
     startkit.running,
     startkit.scanning,
@@ -322,55 +280,40 @@ export default function Onboarding() {
   ]);
 
   useEffect(() => {
-    if (!loaded || activeStep !== "install" || startkit.running || startkit.scanning) return;
-    const agentIds = Array.from(enabledAgents).sort();
-    const pendingAgentIds = agentIds.filter((agentId) => {
-      const signature = itemCheckSignature(agentId, "agent-sdk", toolchainMode);
-      return !checkedAgentSdkSignaturesRef.current.has(signature);
-    });
-    if (pendingAgentIds.length === 0) return;
-    for (const agentId of pendingAgentIds) {
-      checkedAgentSdkSignaturesRef.current.add(
-        itemCheckSignature(agentId, "agent-sdk", toolchainMode),
-      );
+    if (!loaded || activeStep !== "install" || selectedDesktopAgents.length === 0) {
+      setDesktopInstallReports([]);
+      return;
     }
+    const signature = itemCheckSignature(
+      "desktop",
+      desktopScanNonce,
+      selectedDesktopAgents.map((agent) => agent.id).sort().join(","),
+    );
+    if (checkedDesktopScanSignaturesRef.current.has(signature)) return;
+    checkedDesktopScanSignaturesRef.current.add(signature);
 
-    for (const agentId of pendingAgentIds) {
-      setAgentSdkReports((previous) =>
-        mergeReportsById(previous, [
-          agentSdkCheckingReport(agentId, agents),
-        ]),
-      );
-
-      void invoke<StartkitItemReport[]>("scan_agent_sdk_status", {
-        choices: {
-          ...agentStatusChoices,
-          agents: [agentId],
-        },
+    setDesktopInstallReports(desktopAgentCheckingReports(selectedDesktopAgents));
+    void rescanDesktopAppEntries()
+      .then((detection) => {
+        setDesktopInstallReports(desktopAgentReports(selectedDesktopAgents, detection));
       })
-        .then((reports) => {
-          setAgentSdkReports((previous) =>
-            mergeReportsById(previous, reports),
-          );
-        })
-        .catch((error) => {
-          console.error(`failed to scan ${agentId} agent SDK status`, error);
-        });
-    }
+      .catch((error) => {
+        console.error("failed to scan desktop app install status", error);
+        setDesktopInstallReports(desktopAgentReports(selectedDesktopAgents, null));
+      });
   }, [
     activeStep,
-    agentStatusChoices,
-    agents,
-    enabledAgents,
+    desktopScanNonce,
     loaded,
-    startkit.running,
-    startkit.scanning,
-    toolchainMode,
+    selectedDesktopAgents,
   ]);
 
   useEffect(() => {
     if (!loaded || activeStep !== "agents" || agents.length === 0 || startkit.running) return;
-    const agentIds = agents.map((agent) => agent.id).sort();
+    const agentIds = agents
+      .filter((agent) => !agent.direct_only)
+      .map((agent) => agent.id)
+      .sort();
     const pendingAgentIds = agentIds.filter((agentId) => {
       const signature = itemCheckSignature(agentId, "local", toolchainMode);
       return !checkedAgentLocalSignaturesRef.current.has(signature);
@@ -432,132 +375,6 @@ export default function Onboarding() {
     startkit.running,
   ]);
 
-  useEffect(() => {
-    if (!loaded || (activeStep !== "im" && activeStep !== "install")) return;
-    if (pluginRegistry.length === 0) return;
-    setPluginUpdateReports((previous) =>
-      mergeLocalReportsById(
-        previous,
-        pluginRegistry.map((entry) =>
-          localPluginReport(entry, discoveredPlugins),
-        ),
-      ),
-    );
-  }, [activeStep, discoveredPlugins, loaded, pluginRegistry]);
-
-  useEffect(() => {
-    if (!loaded || (activeStep !== "im" && activeStep !== "install") || startkit.running) return;
-    const pluginIds = Array.from(enabledChannels).sort();
-    if (pluginIds.length === 0) return;
-    const pendingPluginIds = pluginIds.filter((id) => {
-      const discovered = discoveredPlugins.find((plugin) => plugin.id === id);
-      const signature = itemCheckSignature(
-        id,
-        discovered?.version ?? "not-installed",
-        "plugin",
-      );
-      return !checkedPluginSignaturesRef.current.has(signature);
-    });
-    if (pendingPluginIds.length === 0) return;
-    for (const id of pendingPluginIds) {
-      const discovered = discoveredPlugins.find((plugin) => plugin.id === id);
-      checkedPluginSignaturesRef.current.add(
-        itemCheckSignature(id, discovered?.version ?? "not-installed", "plugin"),
-      );
-    }
-
-    for (const pluginId of pendingPluginIds) {
-      setPluginUpdateReports((previous) =>
-        mergeReportsById(previous, [
-          pluginCheckingReport(pluginId, pluginRegistry, discoveredPlugins),
-        ]),
-      );
-
-      void invoke<StartkitItemReport[]>("check_plugin_updates", {
-        request: { pluginIds: [pluginId] },
-      })
-        .then((reports) => {
-          setPluginUpdateReports((previous) =>
-            mergeReportsById(previous, reports),
-          );
-        })
-        .catch((error) => {
-          console.error(`failed to check ${pluginId} plugin updates`, error);
-        });
-    }
-  }, [
-    activeStep,
-    discoveredPlugins,
-    enabledChannels,
-    loaded,
-    pluginRegistry,
-    startkit.running,
-  ]);
-
-  useEffect(() => {
-    if (!loaded || activeStep !== "remote" || tunnels.length === 0) return;
-    const tunnelIds = tunnels
-      .map((tunnel) => tunnel.id)
-      .filter((id) => id !== "none")
-      .sort();
-    const pendingTunnelIds = tunnelIds.filter((id) => {
-      const signature = itemCheckSignature(id, "tunnel", toolchainMode);
-      return !checkedTunnelSignaturesRef.current.has(signature);
-    });
-    if (pendingTunnelIds.length === 0) return;
-    for (const id of pendingTunnelIds) {
-      checkedTunnelSignaturesRef.current.add(
-        itemCheckSignature(id, "tunnel", toolchainMode),
-      );
-    }
-
-    for (const tunnelId of pendingTunnelIds) {
-      setTunnelReports((previous) =>
-        mergeReportsById(previous, [
-          tunnelCheckingReport(tunnelId, tunnels),
-        ]),
-      );
-
-      void invoke<StartkitItemReport[]>("scan_tunnel_status", {
-        settings,
-        choices: {
-          ...agentStatusChoices,
-          tunnel: tunnelId,
-        },
-      })
-        .then((reports) => {
-          setTunnelReports((previous) =>
-            mergeReportsById(previous, reports),
-          );
-        })
-        .catch((error) => {
-          console.error(`failed to scan ${tunnelId} tunnel status`, error);
-        });
-    }
-  }, [
-    activeStep,
-    agentStatusChoices,
-    loaded,
-    settings,
-    tunnels,
-    toolchainMode,
-  ]);
-
-  useEffect(() => {
-    if (startkit.running) {
-      refreshedPluginsAfterInstallRef.current = false;
-      return;
-    }
-    if (!startkit.complete || refreshedPluginsAfterInstallRef.current) return;
-    refreshedPluginsAfterInstallRef.current = true;
-
-    void invoke<DiscoveredChannelPlugin[]>("list_channel_plugins")
-      .then(setDiscoveredPlugins)
-      .catch((error) => {
-        console.error("failed to refresh channel plugins", error);
-      });
-  }, [startkit.complete, startkit.running]);
-
   const toggleAgent = useCallback((id: AgentId) => {
     setEnabledAgents((previous) => {
       const next = new Set(previous);
@@ -566,76 +383,6 @@ export default function Onboarding() {
       return next;
     });
   }, []);
-
-  const toggleChannel = useCallback((pluginId: string, enabled: boolean) => {
-    setEnabledChannels((prev) => {
-      const next = new Set(prev);
-      if (enabled) next.add(pluginId);
-      else next.delete(pluginId);
-      return next;
-    });
-    if (enabled) {
-      setChannelVerbose((prev) =>
-        prev[pluginId] ? prev : { ...prev, [pluginId]: defaultChannelVerbose() },
-      );
-    }
-  }, []);
-
-  const updateChannelConfig = useCallback(
-    (pluginId: string, key: string, value: string) => {
-      setChannelConfigs((prev) => ({
-        ...prev,
-        [pluginId]: { ...(prev[pluginId] ?? {}), [key]: value },
-      }));
-    },
-    [],
-  );
-
-  const updateChannelVerbose = useCallback(
-    (
-      pluginId: string,
-      key: keyof ChannelVerboseConfig,
-      value: boolean,
-    ) => {
-      setChannelVerbose((prev) => ({
-        ...prev,
-        [pluginId]: {
-          ...(prev[pluginId] ?? defaultChannelVerbose()),
-          [key]: value,
-        },
-      }));
-    },
-    [],
-  );
-
-  const installPlugin = useCallback(
-    async (pluginId: string, githubUrl: string) => {
-      setInstallingPlugins((prev) => new Set(prev).add(pluginId));
-      try {
-        await invoke("install_plugin", { request: { pluginId, githubUrl } });
-        const plugins = await invoke<DiscoveredChannelPlugin[]>(
-          "list_channel_plugins",
-        );
-        setDiscoveredPlugins(plugins);
-      } catch (error) {
-        console.error(`Failed to install plugin ${pluginId}:`, error);
-      } finally {
-        setInstallingPlugins((prev) => {
-          const next = new Set(prev);
-          next.delete(pluginId);
-          return next;
-        });
-      }
-    },
-    [],
-  );
-
-  const { authStates, startAuth, cancelAuth } = useChannelAuth({
-    active: activeStep === "configure",
-    discoveredPlugins,
-    channelConfigs,
-    onConfigChange: updateChannelConfig,
-  });
 
   const finishOnboarding = useCallback(async () => {
     setFinishing(true);
@@ -651,35 +398,29 @@ export default function Onboarding() {
 
   const cachedInstallReports = useMemo(() => {
     const selectedAgents = new Set(choices.agents);
-    const selectedChannels = new Set(choices.channels);
+    const selectedDesktopAgentIds = new Set(
+      selectedDesktopAgents.map((agent) => agent.id),
+    );
     return mergeReportsById([], [
       ...agentInstallReports.filter((report) => {
         const agentId = agentIdFromReport(report);
         return agentId ? selectedAgents.has(agentId) : false;
       }),
-      ...agentSdkReports.filter((report) => {
-        const agentId = agentIdFromSdkReport(report);
-        return agentId ? selectedAgents.has(agentId) : false;
+      ...desktopInstallReports.filter((report) => {
+        const agentId = desktopAgentIdFromReport(report);
+        return agentId ? selectedDesktopAgentIds.has(agentId) : false;
       }),
-      ...pluginUpdateReports.filter((report) => {
-        const pluginId = pluginIdFromReport(report);
-        return pluginId ? selectedChannels.has(pluginId) : false;
-      }),
-      ...tunnelReports.filter((report) =>
-        tunnelReportMatchesProvider(report, choices.tunnel),
-      ),
     ]);
   }, [
     agentInstallReports,
-    agentSdkReports,
     choices.agents,
-    choices.channels,
-    choices.tunnel,
-    pluginUpdateReports,
-    tunnelReports,
+    desktopInstallReports,
+    selectedDesktopAgents,
   ]);
   const installReports = useMemo(() => {
-    if (startkit.running || startkit.complete) return startkit.reports;
+    if (startkit.running || startkit.complete) {
+      return mergeReportsById(cachedInstallReports, startkit.reports);
+    }
     if (startkit.scanning) {
       return mergeReportsById(cachedInstallReports, startkit.reports);
     }
@@ -734,41 +475,33 @@ export default function Onboarding() {
     startkit.complete &&
     (startkit.finalStatus === "complete" || startkit.finalStatus === "needs_input");
   const canContinueFromInstall =
-    installCompletedSuccessfully ||
+    !hasInstallChoices ||
+    (installCompletedSuccessfully && !hasBlockingReport) ||
     (hasScanned && !installReportsRunning && !hasRunnableInstallWork && !hasBlockingReport);
   const activeIndex = WIZARD_STEPS.findIndex((step) => step.id === activeStep);
 
   const goNext = useCallback(() => {
-    if (activeStep === "agents") setActiveStep("im");
-    else if (activeStep === "im") setActiveStep("remote");
-    else if (activeStep === "remote") setActiveStep("install");
+    if (activeStep === "agents") setActiveStep("install");
     else if (activeStep === "install") setActiveStep("configure");
   }, [activeStep]);
 
   const goBack = useCallback(() => {
-    if (activeStep === "im") setActiveStep("agents");
-    else if (activeStep === "remote") setActiveStep("im");
-    else if (activeStep === "install") setActiveStep("remote");
+    if (activeStep === "install") setActiveStep("agents");
     else if (activeStep === "configure") setActiveStep("install");
-  }, [activeStep]);
-
-  const skipStep = useCallback(() => {
-    if (activeStep === "im") {
-      setEnabledChannels(new Set());
-      setActiveStep("remote");
-    } else if (activeStep === "remote") {
-      setTunnelProvider("none");
-      setActiveStep("install");
-    }
   }, [activeStep]);
 
   const rerunInstallScan = useCallback(() => {
     checkedInstallScanSignaturesRef.current.clear();
     checkedAgentLocalSignaturesRef.current.clear();
-    checkedTunnelSignaturesRef.current.clear();
+    checkedDesktopScanSignaturesRef.current.clear();
     setAgentInstallReports([]);
-    setTunnelReports([]);
-    void startkit.scan(finalSettings, choices);
+    setDesktopInstallReports([]);
+    setDesktopScanNonce((value) => value + 1);
+    if (choices.agents.length > 0) {
+      void startkit.scan(finalSettings, choices);
+    } else {
+      startkit.reset();
+    }
   }, [choices, finalSettings, startkit]);
 
   const primaryAction = useMemo<PrimaryAction>(() => {
@@ -833,7 +566,7 @@ export default function Onboarding() {
 
     if (activeStep === "configure") {
       return {
-        label: finishing ? t("Launching...") : t("Launch VibeAround"),
+        label: finishing ? t("Launching...") : t("Launch VibeWbz"),
         icon: finishing ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
@@ -861,6 +594,7 @@ export default function Onboarding() {
     hasRunnableInstallWork,
     hasScanned,
     hasBlockingReport,
+    hasInstallChoices,
     installCompletedSuccessfully,
     installReports,
     installReportsRunning,
@@ -924,7 +658,7 @@ export default function Onboarding() {
         />
         <div className="relative z-10 flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-[13px] font-semibold text-foreground">
-            VibeAround
+            VibeWbz
           </span>
           <span className="font-mono text-[10px] text-muted-foreground/60">
             @{__APP_VERSION_LABEL__}
@@ -957,15 +691,6 @@ export default function Onboarding() {
           reportsById={agentReportsById}
           scanning={startkit.scanning || installReportsRunning}
           onToggleAgent={toggleAgent}
-          pluginRegistry={pluginRegistry}
-          discoveredPlugins={discoveredPlugins}
-          pluginReports={pluginUpdateReports}
-          enabledChannels={enabledChannels}
-          onToggleChannel={toggleChannel}
-          tunnels={tunnels}
-          tunnelProvider={tunnelProvider}
-          tunnelReports={tunnelReports}
-          onTunnelProvider={setTunnelProvider}
           groupedReports={groupedReports}
           reports={installReports}
           running={startkit.running}
@@ -973,24 +698,8 @@ export default function Onboarding() {
           finalStatus={startkit.finalStatus}
           startkitError={startkit.error}
           choices={choices}
-          channelConfigs={channelConfigs}
-          channelVerbose={channelVerbose}
-          installingPlugins={installingPlugins}
-          authStates={authStates}
-          ngrokToken={ngrokToken}
-          ngrokDomain={ngrokDomain}
-          cfToken={cfToken}
-          cfHostname={cfHostname}
+          hasInstallChoices={hasInstallChoices}
           finishError={finishError}
-          onConfigChange={updateChannelConfig}
-          onVerboseChange={updateChannelVerbose}
-          onInstallPlugin={installPlugin}
-          onStartAuth={startAuth}
-          onCancelAuth={cancelAuth}
-          onNgrokToken={setNgrokToken}
-          onNgrokDomain={setNgrokDomain}
-          onCfToken={setCfToken}
-          onCfHostname={setCfHostname}
         />
       </main>
 
@@ -1002,7 +711,6 @@ export default function Onboarding() {
         primaryAction={primaryAction}
         secondaryAction={secondaryAction}
         onBack={goBack}
-        onSkip={skipStep}
         onCancel={() => void startkit.cancel()}
       />
     </div>

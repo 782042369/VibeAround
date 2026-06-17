@@ -81,9 +81,9 @@ jobs:
           projectPath: src/desktop
           tauriScript: bun tauri
           tagName: ${{ steps.release.outputs.tag }}
-          releaseName: VibeAround ${{ steps.release.outputs.tag }}
+          releaseName: VibeWbz ${{ steps.release.outputs.tag }}
           releaseBody: |
-            VibeAround desktop release.
+            VibeWbz desktop release.
 
             Assets built by GitHub Actions:
             - Windows x64 installer
@@ -100,14 +100,14 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.release.outputs.version }}"
-          $dist = "VibeAround-win-$version-portable"
+          $dist = "VibeWbz-win-$version-portable"
           $zip = "$dist.zip"
 
           Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
           Remove-Item -Force $zip -ErrorAction SilentlyContinue
 
           New-Item -ItemType Directory -Force $dist | Out-Null
-          Copy-Item "src/target/release/vibearound-desktop.exe" "$dist/VibeAround.exe"
+          Copy-Item "src/target/release/vibewbz-desktop.exe" "$dist/VibeWbz.exe"
 
           New-Item -ItemType Directory -Force "$dist/_up_/web" | Out-Null
           Copy-Item -Recurse "src/web/dist" "$dist/_up_/web/dist"
@@ -124,5 +124,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ steps.release.outputs.tag }}" \
-            "VibeAround-win-${{ steps.release.outputs.version }}-portable.zip" \
+            "VibeWbz-win-${{ steps.release.outputs.version }}-portable.zip" \
             --clobber

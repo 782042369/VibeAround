@@ -138,9 +138,9 @@ pub async fn require_auth(
             "id": serde_json::Value::Null,
             "error": {
                 "code": -32001,
-                "message": "Unauthorized — VibeAround MCP requires a token. \
+                "message": "Unauthorized — VibeWbz MCP requires a token. \
                             Restart your coding agent so it reloads the MCP \
-                            config written by the VibeAround daemon \
+                            config written by the VibeWbz daemon \
                             (includes ?token=… in the URL).",
             },
         }));

@@ -7,10 +7,8 @@ use crate::profiles::terminal::{self, TerminalChoice};
 
 pub(super) fn spawn(plan: LaunchPlan) -> anyhow::Result<()> {
     let script = build_bash_script(&plan);
-    let script_path = std::env::temp_dir().join(format!(
-        "vibearound-launch-{}.command",
-        uuid::Uuid::new_v4()
-    ));
+    let script_path =
+        std::env::temp_dir().join(format!("vibewbz-launch-{}.command", uuid::Uuid::new_v4()));
     std::fs::write(&script_path, &script)
         .with_context(|| format!("write launch script {:?}", script_path))?;
     std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o700))

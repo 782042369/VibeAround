@@ -40,11 +40,11 @@ pub fn enriched_env() -> &'static HashMap<String, String> {
     })
 }
 
-/// Return the environment VibeAround should pass to child processes.
+/// Return the environment VibeWbz should pass to child processes.
 ///
 /// This is the cached shell environment captured from the user's login shell.
-/// In VibeAround-managed toolchain mode, managed npm package binaries are
-/// prepended so agent/tunnel packages installed under `~/.vibearound/plugins`
+/// In VibeWbz-managed toolchain mode, managed npm package binaries are
+/// prepended so agent/tunnel packages installed under `~/.vibewbz/plugins`
 /// win over user PATH entries. Node.js and Git themselves still come from the
 /// user's system environment.
 pub fn child_env() -> HashMap<String, String> {
@@ -72,7 +72,7 @@ pub fn std_command(program: &str) -> std::process::Command {
     cmd
 }
 
-/// Return npm registry flags for installs started from VibeAround.
+/// Return npm registry flags for installs started from VibeWbz.
 ///
 /// Startkit lets users choose a download source during onboarding. Native
 /// Startkit scripts get the source through `STARTKIT_NPM_REGISTRY`; Rust-side
@@ -84,7 +84,7 @@ pub fn npm_registry_args() -> Vec<String> {
 }
 
 pub fn npm_registry_url() -> Option<String> {
-    for key in ["STARTKIT_NPM_REGISTRY", "VIBEAROUND_NPM_REGISTRY"] {
+    for key in ["STARTKIT_NPM_REGISTRY", "VIBEWBZ_NPM_REGISTRY"] {
         if let Ok(value) = std::env::var(key) {
             let value = value.trim();
             if !value.is_empty() {
@@ -128,7 +128,7 @@ fn hide_windows_console_std(cmd: &mut std::process::Command) {
 fn hide_windows_console_std(_: &mut std::process::Command) {}
 
 /// Directory where npm-based ACP agent packages are installed.
-/// Shared with channel plugins at `~/.vibearound/plugins/` so common
+/// Shared with channel plugins at `~/.vibewbz/plugins/` so common
 /// dependencies (e.g. `@agentclientprotocol/sdk`, `zod`) are deduped.
 pub fn acp_agents_dir() -> std::path::PathBuf {
     crate::config::data_dir().join("plugins")
@@ -202,7 +202,7 @@ fn ensure_user_path_dir_inner(path: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("opening shell profile {:?}", profile))?;
     writeln!(
         file,
-        "\n# VibeAround Startkit PATH\ncase \":$PATH:\" in\n  *:\"{expression}\":*) ;;\n  *) export PATH=\"$PATH:{expression}\" ;;\nesac"
+        "\n# VibeWbz Startkit PATH\ncase \":$PATH:\" in\n  *:\"{expression}\":*) ;;\n  *) export PATH=\"$PATH:{expression}\" ;;\nesac"
     )
     .with_context(|| format!("updating shell profile {:?}", profile))?;
     Ok(())
@@ -294,7 +294,7 @@ foreach ($part in $parts) {
 
 /// Resolve the JS entry point for a pre-installed npm ACP agent binary.
 ///
-/// Looks up `~/.vibearound/plugins/node_modules/.bin/<bin_name>`.
+/// Looks up `~/.vibewbz/plugins/node_modules/.bin/<bin_name>`.
 /// On Unix the `.bin/` entries are symlinks to the actual JS file — we
 /// follow the symlink.  On Windows npm creates `.cmd` wrappers; we parse
 /// them to extract the JS path.
@@ -672,14 +672,14 @@ IF EXIST "%dp0%\node.exe" (
 
 endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\..\@zed-industries\codex-acp\bin\codex-acp.js" %*
 "#;
-        let bin_dir = std::path::Path::new(r"C:\Users\jazze\.vibearound\plugins\node_modules\.bin");
+        let bin_dir = std::path::Path::new(r"C:\Users\jazze\.vibewbz\plugins\node_modules\.bin");
 
         let entries = windows_npm_cmd_js_entries(content, bin_dir);
 
         assert_eq!(
             entries,
             vec![std::path::PathBuf::from(
-                r"C:\Users\jazze\.vibearound\plugins\node_modules\.bin\..\@zed-industries\codex-acp\bin\codex-acp.js"
+                r"C:\Users\jazze\.vibewbz\plugins\node_modules\.bin\..\@zed-industries\codex-acp\bin\codex-acp.js"
             )]
         );
     }
@@ -703,9 +703,9 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\..\@z
     fn strips_extended_path_prefix_before_passing_entry_to_node() {
         assert_eq!(
             windows_user_path(std::path::PathBuf::from(
-                r"\\?\C:\Users\jazze\.vibearound\plugins\entry.js"
+                r"\\?\C:\Users\jazze\.vibewbz\plugins\entry.js"
             )),
-            std::path::PathBuf::from(r"C:\Users\jazze\.vibearound\plugins\entry.js")
+            std::path::PathBuf::from(r"C:\Users\jazze\.vibewbz\plugins\entry.js")
         );
         assert_eq!(
             windows_user_path(std::path::PathBuf::from(

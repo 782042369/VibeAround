@@ -150,7 +150,7 @@ pub async fn upload_chat_file_handler(
     })?;
     if let Err(error) = common::auth::set_owner_only(&path) {
         tracing::warn!(
-            "[VibeAround] failed to restrict uploaded chat file {:?}: {}",
+            "[VibeWbz] failed to restrict uploaded chat file {:?}: {}",
             path,
             error
         );

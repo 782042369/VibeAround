@@ -65,7 +65,7 @@ mod tests {
         let catalog = [("User-Agent".to_string(), "catalog".to_string())]
             .into_iter()
             .collect();
-        let custom = [("X-Title".to_string(), "VibeAround".to_string())]
+        let custom = [("X-Title".to_string(), "VibeWbz".to_string())]
             .into_iter()
             .collect();
 
@@ -79,7 +79,7 @@ mod tests {
         );
         assert_eq!(
             headers.get("x-title").and_then(|value| value.to_str().ok()),
-            Some("VibeAround")
+            Some("VibeWbz")
         );
         assert_eq!(headers.len(), 2);
     }

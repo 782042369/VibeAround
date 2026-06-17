@@ -2,7 +2,7 @@
 //!
 //! Codex Desktop reads the shared `~/.codex/config.toml`, while the CLI can
 //! take profile-specific `-c` args. For desktop profile launches, reconcile our
-//! previous marker blocks first, then write a fresh VibeAround-owned overlay.
+//! previous marker blocks first, then write a fresh VibeWbz-owned overlay.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use profiles::{render::RenderedProfile, ProfileDef};
 
 use super::codex;
 
-const MARKER: &str = "VIBEAROUND-CODEX-DESKTOP";
+const MARKER: &str = "VIBEWBZ-CODEX-DESKTOP";
 const ROOT_KEYS: &[&str] = &[
     "model",
     "model_provider",
@@ -46,6 +46,9 @@ pub(super) fn apply_profile_overlay(
 ) -> anyhow::Result<()> {
     let env = profiles::runtime::materialize_env(&profile.id, rendered.clone())
         .with_context(|| format!("materialize Codex Desktop profile '{}'", profile.id))?;
+    if let Some(token) = env_value(&env, "OPENAI_API_KEY") {
+        write_auth_json(&codex_auth_path(), &token)?;
+    }
     let overlay = CodexDesktopOverlay::from_rendered(profile, launch_id, &rendered, &env);
     apply_overlay_to_path(&codex_config_path(), &overlay)
 }
@@ -56,6 +59,17 @@ pub(super) fn cleanup_profile_overlay() -> anyhow::Result<()> {
 
 fn codex_config_path() -> PathBuf {
     config::home_dir().join(".codex").join("config.toml")
+}
+
+fn codex_auth_path() -> PathBuf {
+    config::home_dir().join(".codex").join("auth.json")
+}
+
+fn write_auth_json(path: &Path, token: &str) -> anyhow::Result<()> {
+    let contents = serde_json::to_string_pretty(&serde_json::json!({
+        "OPENAI_API_KEY": token,
+    }))?;
+    write_file_if_changed(path, &(contents + "\n"))
 }
 
 fn apply_overlay_to_path(path: &Path, overlay: &CodexDesktopOverlay) -> anyhow::Result<()> {
@@ -70,7 +84,7 @@ fn cleanup_overlay_at_path(path: &Path) -> anyhow::Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error).with_context(|| format!("read Codex config {:?}", path)),
     };
-    let next = cleanup_vibearound_blocks(&current);
+    let next = cleanup_vibewbz_blocks(&current);
     write_config_if_changed(path, &current, next)
 }
 
@@ -78,26 +92,33 @@ fn write_config_if_changed(path: &Path, current: &str, next: String) -> anyhow::
     if next == current {
         return Ok(());
     }
+    write_file_if_changed(path, &next)
+}
+
+fn write_file_if_changed(path: &Path, contents: &str) -> anyhow::Result<()> {
+    if matches!(std::fs::read_to_string(path), Ok(current) if current == contents) {
+        return Ok(());
+    }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
-            .with_context(|| format!("create Codex config dir {:?}", parent))?;
+            .with_context(|| format!("create Codex dir {:?}", parent))?;
     }
     let tmp = path.with_file_name(format!(
         ".{}.{}.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("config.toml"),
+            .unwrap_or("codex-file"),
         uuid::Uuid::new_v4()
     ));
-    std::fs::write(&tmp, next).with_context(|| format!("write Codex config temp {:?}", tmp))?;
-    auth::set_owner_only(&tmp).with_context(|| format!("chmod Codex config temp {:?}", tmp))?;
-    std::fs::rename(&tmp, path).with_context(|| format!("replace Codex config {:?}", path))?;
-    auth::set_owner_only(path).with_context(|| format!("chmod Codex config {:?}", path))?;
+    std::fs::write(&tmp, contents).with_context(|| format!("write Codex temp {:?}", tmp))?;
+    auth::set_owner_only(&tmp).with_context(|| format!("chmod Codex temp {:?}", tmp))?;
+    std::fs::rename(&tmp, path).with_context(|| format!("replace Codex file {:?}", path))?;
+    auth::set_owner_only(path).with_context(|| format!("chmod Codex file {:?}", path))?;
     Ok(())
 }
 
 fn apply_overlay_to_string(current: &str, overlay: &CodexDesktopOverlay) -> String {
-    let cleaned = cleanup_vibearound_blocks(current);
+    let cleaned = cleanup_vibewbz_blocks(current);
     let (body, restore_lines) = remove_conflicting_root_keys(&cleaned);
     let mut sections = Vec::new();
     if !restore_lines.is_empty() {
@@ -117,7 +138,7 @@ fn apply_overlay_to_string(current: &str, overlay: &CodexDesktopOverlay) -> Stri
     ensure_trailing_newline(out)
 }
 
-fn cleanup_vibearound_blocks(input: &str) -> String {
+fn cleanup_vibewbz_blocks(input: &str) -> String {
     let lines: Vec<&str> = input.lines().collect();
     let mut out = Vec::new();
     let mut i = 0;
@@ -173,15 +194,19 @@ impl CodexDesktopOverlay {
         profile: &ProfileDef,
         launch_id: &str,
         rendered: &RenderedProfile,
-        env: &[(String, String)],
+        _env: &[(String, String)],
     ) -> Self {
         let entries = config_entries_from_args(&rendered.command_args);
-        let provider_id = format!("vibearound_{}", safe_config_key(&profile.id));
         let original_provider = entries
             .iter()
             .find(|(key, _)| key == "model_provider")
             .and_then(|(_, value)| parse_toml_string(value))
             .unwrap_or_else(|| profile.provider.clone());
+        let provider_id = if profile.provider == "custom" {
+            original_provider.clone()
+        } else {
+            format!("vibewbz_{}", safe_config_key(&profile.id))
+        };
 
         let mut root_entries = Vec::new();
         for (key, value) in &entries {
@@ -208,14 +233,8 @@ impl CodexDesktopOverlay {
             }
         }
 
-        if let Some(token) = provider_token(&provider_entries, env) {
-            provider_entries.remove("env_key");
-            provider_entries.remove("requires_openai_auth");
-            provider_entries.insert(
-                "experimental_bearer_token".to_string(),
-                codex::toml_string(&token),
-            );
-        }
+        provider_entries.remove("env_key");
+        provider_entries.insert("requires_openai_auth".to_string(), "true".to_string());
 
         Self {
             launch_id: launch_id.to_string(),
@@ -245,25 +264,6 @@ fn config_entries_from_args(args: &[String]) -> Vec<(String, String)> {
         }
     }
     out
-}
-
-fn provider_token(
-    provider_entries: &BTreeMap<String, String>,
-    env: &[(String, String)],
-) -> Option<String> {
-    let env_key = provider_entries
-        .get("env_key")
-        .and_then(|value| parse_toml_string(value));
-    env_key
-        .as_deref()
-        .and_then(|key| env_value(env, key))
-        .or_else(|| {
-            if env.len() == 1 {
-                Some(env[0].1.clone())
-            } else {
-                None
-            }
-        })
 }
 
 fn env_value(env: &[(String, String)], key: &str) -> Option<String> {
@@ -451,11 +451,11 @@ url = "http://127.0.0.1:12358/mcp"
 
         let next = apply_overlay_to_string(current, &overlay());
 
-        assert!(next.contains("# VIBEAROUND-CODEX-DESKTOP BEGIN RESTORE"));
+        assert!(next.contains("# VIBEWBZ-CODEX-DESKTOP BEGIN RESTORE"));
         assert!(next.contains("# model = \"gpt-5-codex\""));
-        assert!(next.contains("model_provider = 'vibearound_deepseek-main'"));
-        assert!(next.contains("[model_providers.vibearound_deepseek-main]"));
-        assert!(next.contains("experimental_bearer_token = 'sk-test'"));
+        assert!(next.contains("model_provider = 'vibewbz_deepseek-main'"));
+        assert!(next.contains("[model_providers.vibewbz_deepseek-main]"));
+        assert!(next.contains("requires_openai_auth = true"));
         assert!(!next.contains("env_key = 'OPENAI_API_KEY'"));
         assert!(next.contains("[mcp_servers.local]\nurl = \"http://127.0.0.1:12358/mcp\""));
     }
@@ -463,27 +463,27 @@ url = "http://127.0.0.1:12358/mcp"
     #[test]
     fn cleanup_restores_previous_root_keys_and_removes_provider_block() {
         let with_overlay = apply_overlay_to_string("model = \"gpt-5-codex\"\n", &overlay());
-        let cleaned = cleanup_vibearound_blocks(&with_overlay);
+        let cleaned = cleanup_vibewbz_blocks(&with_overlay);
 
         assert!(cleaned.contains("model = \"gpt-5-codex\""));
         assert!(!cleaned.contains(MARKER));
-        assert!(!cleaned.contains("[model_providers.vibearound_deepseek-main]"));
+        assert!(!cleaned.contains("[model_providers.vibewbz_deepseek-main]"));
     }
 
     #[test]
-    fn overlay_is_idempotent_for_vibearound_blocks() {
+    fn overlay_is_idempotent_for_vibewbz_blocks() {
         let first = apply_overlay_to_string("model = \"gpt-5-codex\"\n", &overlay());
         let second = apply_overlay_to_string(&first, &overlay());
 
         assert_eq!(
             second
-                .matches("# VIBEAROUND-CODEX-DESKTOP BEGIN ACTIVE")
+                .matches("# VIBEWBZ-CODEX-DESKTOP BEGIN ACTIVE")
                 .count(),
             1
         );
         assert_eq!(
             second
-                .matches("[model_providers.vibearound_deepseek-main]")
+                .matches("[model_providers.vibewbz_deepseek-main]")
                 .count(),
             1
         );
@@ -492,7 +492,7 @@ url = "http://127.0.0.1:12358/mcp"
     #[test]
     fn cleanup_overlay_at_path_restores_config_for_direct_launch() {
         let dir = std::env::temp_dir().join(format!(
-            "vibearound-codex-desktop-test-{}",
+            "vibewbz-codex-desktop-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&dir).expect("create temp dir");
@@ -505,6 +505,20 @@ url = "http://127.0.0.1:12358/mcp"
         let cleaned = std::fs::read_to_string(&path).expect("read cleaned config");
         assert!(cleaned.contains("model = \"gpt-5-codex\""));
         assert!(!cleaned.contains(MARKER));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn auth_json_is_written_next_to_config_toml() {
+        let dir =
+            std::env::temp_dir().join(format!("vibewbz-codex-auth-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let auth_path = dir.join("auth.json");
+
+        write_auth_json(&auth_path, "sk-test").expect("write auth json");
+
+        let contents = std::fs::read_to_string(&auth_path).expect("read auth json");
+        assert_eq!(contents, "{\n  \"OPENAI_API_KEY\": \"sk-test\"\n}\n");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

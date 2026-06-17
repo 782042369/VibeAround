@@ -1,4 +1,4 @@
-//! VibeAround server crate: Axum HTTP + WebSocket, and the unified ServerDaemon entry point.
+//! VibeWbz server crate: Axum HTTP + WebSocket, and the unified ServerDaemon entry point.
 
 pub mod api_types;
 pub mod openai_bridge;
@@ -26,7 +26,7 @@ use common::workspace::WorkspaceThreadManager;
 
 const CHANNEL_INPUT_WORKER_COUNT: usize = 64;
 
-/// Unified daemon that starts and manages all VibeAround services.
+/// Unified daemon that starts and manages all VibeWbz services.
 /// Both the server binary and the desktop (Tauri) binary use this.
 pub struct ServerDaemon {
     pub tunnels: Arc<TunnelManager>,
@@ -139,7 +139,7 @@ impl ServerDaemon {
         Arc::clone(&self.auth_token)
     }
 
-    /// Write the auth token file to `~/.vibearound/auth.json` so that
+    /// Write the auth token file to `~/.vibewbz/auth.json` so that
     /// out-of-process consumers (tray, cross-origin desktop-ui) can read
     /// the current token without an IPC round-trip.
     ///
@@ -157,7 +157,7 @@ impl ServerDaemon {
             .is_ok()
         {
             return Err(anyhow!(
-                "Port {} is already in use — another VibeAround instance may be running",
+                "Port {} is already in use — another VibeWbz instance may be running",
                 self.port
             ));
         }

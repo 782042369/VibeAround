@@ -1,4 +1,4 @@
-const REASONING_BLOB_PREFIX: &str = "vibearound.reasoning.hex.v1:";
+const REASONING_BLOB_PREFIX: &str = "vibewbz.reasoning.hex.v1:";
 
 pub(crate) fn encode_reasoning_content(content: &str) -> String {
     let mut out = String::with_capacity(REASONING_BLOB_PREFIX.len() + content.len() * 2);
@@ -26,6 +26,6 @@ mod tests {
     fn reasoning_blob_encodes_utf8_content() {
         let encoded = encode_reasoning_content("I should call the tool.\n然后继续。");
 
-        assert!(encoded.starts_with("vibearound.reasoning.hex.v1:"));
+        assert!(encoded.starts_with("vibewbz.reasoning.hex.v1:"));
     }
 }

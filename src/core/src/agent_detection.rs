@@ -981,7 +981,7 @@ fn source_label(spec: &AgentCommandSpec, source: &str) -> String {
         .and_then(|source| source.label.clone())
         .unwrap_or_else(|| {
             match source {
-                "npm_managed" => "VibeAround npm",
+                "npm_managed" => "VibeWbz npm",
                 "npm_global" => "npm global",
                 "bun_global" => "Bun global",
                 "homebrew_formula" => "Homebrew formula",
@@ -1263,9 +1263,8 @@ mod tests {
     fn npm_installability_comes_from_source_catalog() {
         assert!(agent_uses_npm_install("codex"));
         assert!(agent_uses_npm_install("claude"));
-        assert!(agent_uses_npm_install("gemini"));
-        assert!(agent_uses_npm_install("qwen-code"));
-        assert!(!agent_uses_npm_install("cursor"));
+        assert!(!agent_uses_npm_install("codex-desktop"));
+        assert!(!agent_uses_npm_install("claude-desktop"));
     }
 
     #[test]
@@ -1301,7 +1300,7 @@ mod tests {
                 0,
                 false,
                 "npm_managed",
-                Path::new("/tmp/.vibearound/npm/bin/codex"),
+                Path::new("/tmp/.vibewbz/npm/bin/codex"),
                 None
             )
         );
@@ -1359,7 +1358,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "windows")]
     fn dedupe_agent_command_paths_prefers_cmd_over_other_windows_shims() {
-        let bin_dir = std::env::temp_dir().join("vibearound-agent-detection-windows-shims");
+        let bin_dir = std::env::temp_dir().join("vibewbz-agent-detection-windows-shims");
         let paths = vec![
             (bin_dir.join("codex"), true),
             (bin_dir.join("codex.cmd"), true),
@@ -1376,7 +1375,7 @@ mod tests {
     #[test]
     fn system_selection_prefers_system_candidate() {
         let system = test_candidate("/usr/local/bin/codex", "npm_global", 0);
-        let managed = test_candidate("/tmp/.vibearound/npm/bin/codex", "npm_managed", 10_000);
+        let managed = test_candidate("/tmp/.vibewbz/npm/bin/codex", "npm_managed", 10_000);
         let detection = AgentDetection {
             default_candidate: Some(managed.clone()),
             system_selected: Some(system.clone()),
@@ -1400,7 +1399,7 @@ mod tests {
 
     #[test]
     fn managed_startkit_selection_accepts_managed_candidate_for_npm_agents() {
-        let managed = test_candidate("/tmp/.vibearound/npm/bin/codex", "npm_managed", 10_000);
+        let managed = test_candidate("/tmp/.vibewbz/npm/bin/codex", "npm_managed", 10_000);
         let detection = AgentDetection {
             default_candidate: Some(managed.clone()),
             system_selected: Some(managed.clone()),
@@ -1420,7 +1419,7 @@ mod tests {
     #[test]
     fn system_selection_uses_selected_path_and_ignores_unselected_candidates() {
         let system = test_candidate("/usr/local/bin/codex", "npm_global", 0);
-        let managed = test_candidate("/tmp/.vibearound/npm/bin/codex", "npm_managed", 10_000);
+        let managed = test_candidate("/tmp/.vibewbz/npm/bin/codex", "npm_managed", 10_000);
         let detection = AgentDetection {
             default_candidate: Some(managed.clone()),
             system_selected: Some(system.clone()),
@@ -1513,19 +1512,19 @@ mod tests {
     #[test]
     fn homebrew_package_name_comes_from_upgrade_command() {
         assert_eq!(
-            homebrew_package_name_from_command("gemini", "homebrew_formula").as_deref(),
-            Some("gemini-cli")
+            homebrew_package_name_from_command("codex", "homebrew_cask").as_deref(),
+            Some("codex")
         );
         assert_eq!(
-            homebrew_package_name_from_command("kiro", "homebrew_cask").as_deref(),
-            Some("kiro-cli")
+            homebrew_package_name_from_command("claude", "homebrew_cask").as_deref(),
+            Some("claude-code")
         );
     }
 
     #[test]
     fn candidate_for_path_matches_detected_realpath() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "vibearound-agent-detection-test-{}",
+            "vibewbz-agent-detection-test-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");

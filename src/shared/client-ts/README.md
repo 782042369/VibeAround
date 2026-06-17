@@ -1,13 +1,11 @@
 # @va/client
 
-Hand-written TypeScript shared between the web dashboard (`src/web/`)
-and the Tauri desktop-ui (`src/desktop-ui/`).
+Hand-written TypeScript shared by the Tauri desktop UI.
 
 ## What's here
 
-- `src/routes.ts` — `VA_PREFIX` + base-URL builders. The single place
-  that encodes the daemon's route layout (matches
-  `.nest("/va", ...)` in `src/server/src/web_server/mod.rs`).
+- `src/routes.ts` — `VA_PREFIX` + loopback URL builders. The single place
+  that encodes the daemon's route layout.
 - `src/schemas.ts` — zod schemas + inferred types for all HTTP/WS
   wire shapes, plus hand-maintained constants (`AGENT_IDS`,
   `PREVIEW_SHARE_TTL_SECS`).

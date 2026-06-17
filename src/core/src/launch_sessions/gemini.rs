@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn metadata_from_jsonl_reads_first_line_only() {
         let path = std::env::temp_dir().join(format!(
-            "vibearound-gemini-session-{}.jsonl",
+            "vibewbz-gemini-session-{}.jsonl",
             std::process::id()
         ));
         fs::write(
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn metadata_from_json_prefers_summary_title() {
         let path = std::env::temp_dir().join(format!(
-            "vibearound-gemini-session-{}.json",
+            "vibewbz-gemini-session-{}.json",
             std::process::id()
         ));
         fs::write(

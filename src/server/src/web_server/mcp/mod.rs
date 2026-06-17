@@ -3,7 +3,7 @@
 //! Implements a JSON-RPC 2.0 server for the Model Context Protocol.
 //! Methods: initialize, notifications/initialized, tools/list, tools/call.
 //! Optional resource/prompt list methods return empty lists so clients that
-//! probe the full MCP surface do not treat VibeAround as disconnected.
+//! probe the full MCP surface do not treat VibeWbz as disconnected.
 //!
 //! Most MCP tools are stateless — they validate inputs and return text.
 //! Collaboration tools are the exception: `initialize_subagents` creates
@@ -62,7 +62,7 @@ fn mcp_initialize(id: Option<serde_json::Value>) -> Json<serde_json::Value> {
         serde_json::json!({
             "protocolVersion": "2025-03-26",
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "vibearound", "version": env!("CARGO_PKG_VERSION") }
+            "serverInfo": { "name": "vibewbz", "version": env!("CARGO_PKG_VERSION") }
         }),
     )
 }

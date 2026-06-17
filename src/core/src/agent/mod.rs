@@ -1,7 +1,7 @@
 //! Agent — one ACP-speaking coding CLI instance.
 //!
 //! An "agent" here is a concrete coding CLI (Claude, Codex, Gemini, Cursor…)
-//! wired up to talk to VibeAround over ACP. Each live [`Conversation`] owns
+//! wired up to talk to VibeWbz over ACP. Each live [`Conversation`] owns
 //! at most one [`Agent`] at a time; switching/killing the CLI spawns a new
 //! one.
 //!
@@ -14,7 +14,7 @@
 //! - **Install** ([`install`]) — auto-install missing agent binaries (npm
 //!   packages or native CLIs with an install command). Called eagerly at
 //!   onboarding and lazily on `Agent::spawn` miss.
-//! - **Integrations** ([`mcp`], [`skills`]) — install the VibeAround MCP
+//! - **Integrations** ([`mcp`], [`skills`]) — install the VibeWbz MCP
 //!   server URL and SKILL files. New launches use project-scoped workspace
 //!   config; global helpers remain for cleanup of older installs.
 //!
@@ -107,7 +107,7 @@ pub fn auto_install_project_integrations(agent: &str, workspace: &Path) -> anyho
     )
 }
 
-/// Remove VibeAround-managed integrations from global legacy locations and
+/// Remove VibeWbz-managed integrations from global legacy locations and
 /// every known project workspace.
 pub fn uninstall_managed_integrations(remove_mcp: bool, remove_skills: bool) -> anyhow::Result<()> {
     let mut errors = Vec::new();
@@ -152,7 +152,7 @@ pub fn uninstall_managed_integrations(remove_mcp: bool, remove_skills: bool) -> 
     }
 }
 
-/// Remove VibeAround-managed integrations from legacy global locations only.
+/// Remove VibeWbz-managed integrations from legacy global locations only.
 pub fn uninstall_legacy_integrations(remove_mcp: bool, remove_skills: bool) -> anyhow::Result<()> {
     let mut errors = Vec::new();
     for agent in resources::agent_ids() {

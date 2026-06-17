@@ -22,7 +22,7 @@
 //!
 //! - `orphan_sweep()` runs at daemon startup and kills any leftover
 //!   `node` processes whose command line references
-//!   `/.vibearound/plugins/` or an ACP agent package, whose parent is
+//!   `/.vibewbz/plugins/` or an ACP agent package, whose parent is
 //!   either init (PID 1 on Unix) or no longer alive. This self-heals
 //!   from crashes, `kill -9`, and abrupt laptop sleeps.
 //!
@@ -40,7 +40,7 @@ use tokio::process::Child;
 /// structured logging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessKind {
-    /// Channel plugin process (node running under ~/.vibearound/plugins/).
+    /// Channel plugin process (node running under ~/.vibewbz/plugins/).
     ChannelPlugin,
     /// ACP coding-agent child (node running the ACP bridge package).
     AcpAgent,
@@ -171,7 +171,7 @@ impl ChildRegistry {
 /// Sweep stale child processes left over from a previous crash.
 ///
 /// Matches any `node` process whose command line contains either
-/// `/.vibearound/plugins/` (channel plugins) or a known ACP package name
+/// `/.vibewbz/plugins/` (channel plugins) or a known ACP package name
 /// (`@agentclientprotocol/`, `@zed-industries/claude-code-acp`, etc.), AND
 /// whose parent process is either init (PID 1) or no longer alive. Kills
 /// them via SIGKILL.
@@ -198,7 +198,7 @@ pub fn orphan_sweep() {
             continue;
         }
 
-        // Only consider `node` processes — VibeAround's subprocesses are all
+        // Only consider `node` processes — VibeWbz's subprocesses are all
         // node right now. Tighten if we ever spawn other runtimes.
         let name = proc_.name().to_string_lossy().to_lowercase();
         if !name.contains("node") {
@@ -213,8 +213,8 @@ pub fn orphan_sweep() {
             .collect::<Vec<_>>()
             .join(" ");
 
-        let is_plugin = cmdline.contains("/.vibearound/plugins/")
-            || cmdline.contains("\\.vibearound\\plugins\\");
+        let is_plugin =
+            cmdline.contains("/.vibewbz/plugins/") || cmdline.contains("\\.vibewbz\\plugins\\");
         let is_agent_acp = cmdline.contains("@agentclientprotocol/")
             || cmdline.contains("@zed-industries/claude-code-acp")
             || cmdline.contains("claude-agent-acp")

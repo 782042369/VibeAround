@@ -76,37 +76,6 @@ export async function authedWsUrl(path: string): Promise<string> {
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
-/**
- * Append the current auth token as a `?token=` query parameter to an HTTP
- * URL. Used when opening the dashboard (or a tunnel URL) in an external
- * browser — the SPA reads the token on first load, stores it in
- * sessionStorage, then strips the query via `history.replaceState`.
- *
- * Accepts both loopback URLs (`http://127.0.0.1:12358`) and arbitrary
- * tunnel URLs. The token is identical in both cases because the server
- * validates it regardless of which host it was reached on.
- */
-async function authedDashboardUrl(url: string): Promise<string> {
-  const token = await getToken();
-  if (!token) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}token=${encodeURIComponent(token)}`;
-}
-
-/**
- * Open a daemon URL (loopback dashboard or tunnel) in the user's default
- * external browser, with the auth token automatically appended. Use this
- * instead of a raw `<a href>` anywhere the target is a daemon-backed page.
- *
- * Goes through the `open_external_url` Tauri command rather than
- * `window.open`, because `window.open` inside a Tauri webview creates a
- * child webview instead of handing off to the OS-level browser.
- */
-export async function openDashboardUrl(url: string): Promise<void> {
-  const withToken = await authedDashboardUrl(url);
-  await openExternalUrl(withToken);
-}
-
 export async function openExternalUrl(url: string): Promise<void> {
   try {
     await invoke("open_external_url", { url });

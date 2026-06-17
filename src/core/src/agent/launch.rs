@@ -1,4 +1,4 @@
-//! Helpers for launching ACP agents with VibeAround profiles applied.
+//! Helpers for launching ACP agents with VibeWbz profiles applied.
 
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,10 +13,10 @@ pub struct AppliedProfile {
     pub command_args: Vec<String>,
 }
 
-pub const VIBEAROUND_PROFILE_ID_ENV: &str = "VIBEAROUND_PROFILE_ID";
+pub const VIBEWBZ_PROFILE_ID_ENV: &str = "VIBEWBZ_PROFILE_ID";
 pub const DIRECT_PROFILE_ID: &str = "direct";
 
-pub fn profile_uses_vibearound_credentials(profile: &str) -> bool {
+pub fn profile_uses_vibewbz_credentials(profile: &str) -> bool {
     !matches!(
         profile.trim().to_ascii_lowercase().as_str(),
         "default" | "none" | "off" | DIRECT_PROFILE_ID
@@ -38,8 +38,8 @@ pub fn normalize_launch_profile_id(profile_id: Option<&str>) -> String {
 
 pub fn append_profile_id_env(env: &mut Vec<(String, String)>, profile_id: Option<&str>) {
     let profile_id = normalize_launch_profile_id(profile_id);
-    env.retain(|(key, _)| key != VIBEAROUND_PROFILE_ID_ENV);
-    env.push((VIBEAROUND_PROFILE_ID_ENV.to_string(), profile_id));
+    env.retain(|(key, _)| key != VIBEWBZ_PROFILE_ID_ENV);
+    env.push((VIBEWBZ_PROFILE_ID_ENV.to_string(), profile_id));
 }
 
 pub fn materialize_profile_for_agent(
@@ -78,9 +78,9 @@ pub fn materialize_profile_for_agent(
     if route.bridge_target_api_type.is_none() {
         profiles::runtime::append_settings_proxy_env(&profile, &mut env)?;
     }
-    env.push(("VIBEAROUND_LAUNCH_ID".to_string(), launch_id));
+    env.push(("VIBEWBZ_LAUNCH_ID".to_string(), launch_id));
     append_profile_id_env(&mut env, Some(&profile.id));
-    env.push(("VIBEAROUND_LAUNCH_TARGET".to_string(), agent_id.to_string()));
+    env.push(("VIBEWBZ_LAUNCH_TARGET".to_string(), agent_id.to_string()));
 
     Ok(AppliedProfile { env, command_args })
 }
@@ -98,7 +98,7 @@ mod tests {
             env,
             vec![
                 ("OTHER".to_string(), "1".to_string()),
-                (VIBEAROUND_PROFILE_ID_ENV.to_string(), "direct".to_string()),
+                (VIBEWBZ_PROFILE_ID_ENV.to_string(), "direct".to_string()),
             ]
         );
     }
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn append_profile_id_env_replaces_existing_value() {
         let mut env = vec![
-            (VIBEAROUND_PROFILE_ID_ENV.to_string(), "old".to_string()),
+            (VIBEWBZ_PROFILE_ID_ENV.to_string(), "old".to_string()),
             ("OTHER".to_string(), "1".to_string()),
         ];
         append_profile_id_env(&mut env, Some("profile-a"));
@@ -129,10 +129,7 @@ mod tests {
             env,
             vec![
                 ("OTHER".to_string(), "1".to_string()),
-                (
-                    VIBEAROUND_PROFILE_ID_ENV.to_string(),
-                    "profile-a".to_string()
-                ),
+                (VIBEWBZ_PROFILE_ID_ENV.to_string(), "profile-a".to_string()),
             ]
         );
     }

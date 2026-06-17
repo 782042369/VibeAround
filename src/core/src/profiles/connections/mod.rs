@@ -3,7 +3,7 @@
 //!
 //! A profile's raw `api_types` tell us which provider protocols it exposes.
 //! A launch target also depends on per-profile agent preferences: which client
-//! protocol the agent should speak and whether VibeAround should bridge that
+//! protocol the agent should speak and whether VibeWbz should bridge that
 //! client protocol to another provider protocol.
 
 use std::collections::BTreeMap;
@@ -466,10 +466,7 @@ fn client_route_available(
 }
 
 fn is_bridge_target_api_type(api_type: &str) -> bool {
-    matches!(
-        api_type,
-        "anthropic" | "openai-responses" | "openai-chat" | "gemini"
-    )
+    matches!(api_type, "anthropic" | "openai-responses" | "openai-chat")
 }
 
 fn recommended_bridge_target(
@@ -478,17 +475,12 @@ fn recommended_bridge_target(
     client_api_type: &str,
 ) -> Option<String> {
     let order: &[&str] = match (agent_id, client_api_type) {
-        ("claude", "anthropic")
-        | ("claude-desktop", "anthropic")
-        | ("opencode", "anthropic")
-        | ("pi", "anthropic") => &["openai-responses", "gemini", "openai-chat", "anthropic"],
-        ("codex", "openai-responses")
-        | ("codex-desktop", "openai-responses")
-        | ("opencode", "openai-responses")
-        | ("opencode", "openai-chat")
-        | ("pi", "openai-responses")
-        | ("pi", "openai-chat") => &["anthropic", "gemini", "openai-chat", "openai-responses"],
-        ("gemini", "gemini") => &["openai-chat", "openai-responses", "anthropic"],
+        ("claude", "anthropic") | ("claude-desktop", "anthropic") => {
+            &["openai-responses", "openai-chat", "anthropic"]
+        }
+        ("codex", "openai-responses") | ("codex-desktop", "openai-responses") => {
+            &["anthropic", "openai-chat", "openai-responses"]
+        }
         _ => &[],
     };
     order
@@ -531,9 +523,6 @@ fn agent_client_api_types(agent_id: &str) -> &'static [&'static str] {
     match agent_id {
         "claude" | "claude-desktop" => &["anthropic"],
         "codex" | "codex-desktop" => &["openai-responses"],
-        "gemini" => &["gemini"],
-        "opencode" => &["openai-responses", "openai-chat", "anthropic"],
-        "pi" => &["anthropic", "openai-responses", "openai-chat"],
         _ => &[],
     }
 }
@@ -552,9 +541,6 @@ fn launch_target_defs() -> &'static [(&'static str, &'static str)] {
         ("claude-desktop", "Claude Desktop"),
         ("codex", "Codex"),
         ("codex-desktop", "Codex Desktop"),
-        ("gemini", "Gemini CLI"),
-        ("pi", "Pi"),
-        ("opencode", "OpenCode"),
     ]
 }
 

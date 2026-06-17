@@ -19,7 +19,7 @@ pub(super) fn spawn(plan: LaunchPlan) -> anyhow::Result<()> {
 
 fn write_linux_launch_script(plan: &LaunchPlan) -> anyhow::Result<PathBuf> {
     let script_path =
-        std::env::temp_dir().join(format!("vibearound-launch-{}.sh", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("vibewbz-launch-{}.sh", uuid::Uuid::new_v4()));
     let body = build_bash_script(plan);
     std::fs::write(&script_path, body)
         .with_context(|| format!("write launch script {:?}", script_path))?;
@@ -141,18 +141,15 @@ mod tests {
 
     #[test]
     fn system_terminal_tries_system_defaults_then_common_fallbacks() {
-        let script = Path::new("/tmp/vibearound launch.sh");
+        let script = Path::new("/tmp/vibewbz launch.sh");
         let invocations = terminal_invocations(TerminalChoice::SystemTerminal, script).unwrap();
 
         assert_eq!(invocations[0].program, "xdg-terminal-exec");
-        assert_eq!(
-            arg_strings(&invocations[0]),
-            vec!["/tmp/vibearound launch.sh"]
-        );
+        assert_eq!(arg_strings(&invocations[0]), vec!["/tmp/vibewbz launch.sh"]);
         assert_eq!(invocations[1].program, "x-terminal-emulator");
         assert_eq!(
             arg_strings(&invocations[1]),
-            vec!["-e", "/tmp/vibearound launch.sh"]
+            vec!["-e", "/tmp/vibewbz launch.sh"]
         );
         assert_eq!(invocations[2].program, "gnome-terminal");
         assert_eq!(invocations.last().unwrap().program, "xterm");
@@ -160,42 +157,42 @@ mod tests {
 
     #[test]
     fn common_linux_terminals_execute_script_without_shell_joining() {
-        let script = Path::new("/tmp/vibearound launch.sh");
+        let script = Path::new("/tmp/vibewbz launch.sh");
         let cases = [
             (
                 TerminalChoice::GnomeTerminal,
                 "gnome-terminal",
-                vec!["--", "/tmp/vibearound launch.sh"],
+                vec!["--", "/tmp/vibewbz launch.sh"],
             ),
             (
                 TerminalChoice::Konsole,
                 "konsole",
-                vec!["-e", "/tmp/vibearound launch.sh"],
+                vec!["-e", "/tmp/vibewbz launch.sh"],
             ),
             (
                 TerminalChoice::XfceTerminal,
                 "xfce4-terminal",
-                vec!["--execute", "/tmp/vibearound launch.sh"],
+                vec!["--execute", "/tmp/vibewbz launch.sh"],
             ),
             (
                 TerminalChoice::Xterm,
                 "xterm",
-                vec!["-e", "/tmp/vibearound launch.sh"],
+                vec!["-e", "/tmp/vibewbz launch.sh"],
             ),
             (
                 TerminalChoice::Kitty,
                 "kitty",
-                vec!["/tmp/vibearound launch.sh"],
+                vec!["/tmp/vibewbz launch.sh"],
             ),
             (
                 TerminalChoice::Alacritty,
                 "alacritty",
-                vec!["-e", "/tmp/vibearound launch.sh"],
+                vec!["-e", "/tmp/vibewbz launch.sh"],
             ),
             (
                 TerminalChoice::WezTerm,
                 "wezterm",
-                vec!["start", "--", "/tmp/vibearound launch.sh"],
+                vec!["start", "--", "/tmp/vibewbz launch.sh"],
             ),
         ];
 

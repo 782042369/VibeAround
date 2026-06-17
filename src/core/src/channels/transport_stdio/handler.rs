@@ -70,8 +70,8 @@ impl PluginAgentHandler {
 
         Ok(acp::InitializeResponse::new(acp::ProtocolVersion::V1)
             .agent_info(
-                acp::Implementation::new("vibearound-host", env!("CARGO_PKG_VERSION"))
-                    .title("VibeAround"),
+                acp::Implementation::new("vibewbz-host", env!("CARGO_PKG_VERSION"))
+                    .title("VibeWbz"),
             )
             .meta(meta))
     }

@@ -18,7 +18,7 @@ import {
 const SERVER_PORT = 12358;
 const ROOT = path.resolve(import.meta.dirname, "..");
 const REAL_HOME = homedir();
-const MATRIX_TIMEOUT_MS = Number(process.env.VIBEAROUND_MATRIX_TIMEOUT_MS ?? 45_000);
+const MATRIX_TIMEOUT_MS = Number(process.env.VIBEWBZ_MATRIX_TIMEOUT_MS ?? 45_000);
 
 const IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
@@ -262,13 +262,13 @@ async function main() {
 
   if (await tcpAccepts("127.0.0.1", SERVER_PORT)) {
     throw new Error(
-      `Port ${SERVER_PORT} is already in use. Stop the running VibeAround server before running ws:matrix.`,
+      `Port ${SERVER_PORT} is already in use. Stop the running VibeWbz server before running ws:matrix.`,
     );
   }
 
-  const tempRoot = await makeTempDir("vibearound-ws-matrix-");
+  const tempRoot = await makeTempDir("vibewbz-ws-matrix-");
   const home = path.join(tempRoot, "home");
-  const workspace = path.join(home, ".vibearound", "workspaces", "matrix-project");
+  const workspace = path.join(home, ".vibewbz", "workspaces", "matrix-project");
   const upstream = await startFakeUpstream();
   let server = null;
 
@@ -276,7 +276,7 @@ async function main() {
     await writeMatrixHome(home, workspace, upstream.url);
     await writeFakeAgents(home);
 
-    server = startVibeAroundServer(home);
+    server = startVibeWbzServer(home);
     const token = await waitForAuthToken(home);
     const baseUrl = `http://127.0.0.1:${SERVER_PORT}`;
 
@@ -298,7 +298,7 @@ async function main() {
       await waitForExit(server, 3_000).catch(() => server.kill("SIGKILL"));
     }
     await upstream.close();
-    if (!process.env.VIBEAROUND_MATRIX_KEEP_HOME) {
+    if (!process.env.VIBEWBZ_MATRIX_KEEP_HOME) {
       await rm(tempRoot, { recursive: true, force: true });
     } else {
       console.log(`kept matrix HOME at ${home}`);
@@ -474,7 +474,7 @@ async function openChatSocket(token) {
 
   ws.addEventListener("message", (message) => {
     const event = JSON.parse(String(message.data));
-    if (process.env.VIBEAROUND_MATRIX_TRACE) {
+    if (process.env.VIBEWBZ_MATRIX_TRACE) {
       console.log("ws", JSON.stringify(event));
     }
     const waiter = waiters.shift();
@@ -827,7 +827,7 @@ function geminiUsage() {
 }
 
 async function writeMatrixHome(home, workspace, upstreamUrl) {
-  const dataDir = path.join(home, ".vibearound");
+  const dataDir = path.join(home, ".vibewbz");
   const profilesDir = path.join(dataDir, "profiles");
   await mkdir(profilesDir, { recursive: true });
   await mkdir(workspace, { recursive: true });
@@ -917,7 +917,7 @@ function profile(id, label, provider, apiTypes, baseUrl, models, endpointIds = {
 }
 
 async function writeFakeAgents(home) {
-  const plugins = path.join(home, ".vibearound", "plugins");
+  const plugins = path.join(home, ".vibewbz", "plugins");
   const nodeModules = path.join(plugins, "node_modules");
   const bin = path.join(nodeModules, ".bin");
   const fakeAgent = path.join(plugins, "fake-acp-agent.cjs");
@@ -948,8 +948,8 @@ async function writePackage(nodeModules, name, version) {
   await writeJson(path.join(dir, "package.json"), { name, version });
 }
 
-function startVibeAroundServer(home) {
-  const fakeBin = path.join(home, ".vibearound", "plugins", "node_modules", ".bin");
+function startVibeWbzServer(home) {
+  const fakeBin = path.join(home, ".vibewbz", "plugins", "node_modules", ".bin");
   const child = spawn("cargo", ["run", "-p", "server"], {
     cwd: ROOT,
     env: {
@@ -959,7 +959,7 @@ function startVibeAroundServer(home) {
       PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
       CARGO_HOME: process.env.CARGO_HOME ?? path.join(REAL_HOME, ".cargo"),
       RUSTUP_HOME: process.env.RUSTUP_HOME ?? path.join(REAL_HOME, ".rustup"),
-      VIBEAROUND_MATRIX_BASE_URL: `http://127.0.0.1:${SERVER_PORT}`,
+      VIBEWBZ_MATRIX_BASE_URL: `http://127.0.0.1:${SERVER_PORT}`,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -967,21 +967,21 @@ function startVibeAroundServer(home) {
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
   child.stdout.on("data", (chunk) => {
-    if (process.env.VIBEAROUND_MATRIX_VERBOSE) process.stdout.write(chunk);
+    if (process.env.VIBEWBZ_MATRIX_VERBOSE) process.stdout.write(chunk);
   });
   child.stderr.on("data", (chunk) => {
-    if (process.env.VIBEAROUND_MATRIX_VERBOSE) process.stderr.write(chunk);
+    if (process.env.VIBEWBZ_MATRIX_VERBOSE) process.stderr.write(chunk);
   });
   child.on("exit", (code, signal) => {
     if (code && code !== 0 && !child.killed) {
-      console.error(`vibearound-server exited with code ${code} signal ${signal ?? ""}`);
+      console.error(`vibewbz-server exited with code ${code} signal ${signal ?? ""}`);
     }
   });
   return child;
 }
 
 async function waitForAuthToken(home) {
-  const authPath = path.join(home, ".vibearound", "auth.json");
+  const authPath = path.join(home, ".vibewbz", "auth.json");
   const deadline = Date.now() + MATRIX_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
@@ -997,7 +997,7 @@ async function waitForAuthToken(home) {
       await sleep(500);
     }
   }
-  throw new Error("Timed out waiting for VibeAround auth token");
+  throw new Error("Timed out waiting for VibeWbz auth token");
 }
 
 async function makeTempDir(prefix) {
@@ -1044,7 +1044,7 @@ const FAKE_AGENT_SOURCE = String.raw`#!/usr/bin/env node
 const readline = require("node:readline");
 const { randomUUID } = require("node:crypto");
 
-const agent = process.env.VIBEAROUND_LAUNCH_TARGET || "matrix-agent";
+const agent = process.env.VIBEWBZ_LAUNCH_TARGET || "matrix-agent";
 const sessions = new Map();
 const IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";

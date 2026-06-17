@@ -90,7 +90,7 @@ function ToolchainChooser({
             )}
             onClick={() => onChange(mode)}
           >
-            {mode === "system" ? t("System") : t("VibeAround managed")}
+            {mode === "system" ? t("System") : t("VibeWbz managed")}
           </Button>
         ))}
       </div>

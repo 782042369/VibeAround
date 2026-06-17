@@ -188,7 +188,7 @@ pub(crate) struct LaunchSessionArchiveQuery {
 }
 
 /// POST /api/agents/:agent_id/launch-sessions/:session_id/archive -- hide a
-/// CLI-owned session in VibeAround without modifying the agent's session store.
+/// CLI-owned session in VibeWbz without modifying the agent's session store.
 pub async fn archive_launch_session_handler(
     Path((agent_id, session_id)): Path<(String, String)>,
     Json(body): Json<LaunchSessionArchiveBody>,
@@ -292,10 +292,10 @@ pub async fn create_session_handler(
                 common::profiles::runtime::append_settings_proxy_env(&profile, &mut env)
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
             }
-            env.push(("VIBEAROUND_LAUNCH_ID".to_string(), launch_id));
-            env.push(("VIBEAROUND_PROFILE_ID".to_string(), profile.id.clone()));
+            env.push(("VIBEWBZ_LAUNCH_ID".to_string(), launch_id));
+            env.push(("VIBEWBZ_PROFILE_ID".to_string(), profile.id.clone()));
             env.push((
-                "VIBEAROUND_LAUNCH_TARGET".to_string(),
+                "VIBEWBZ_LAUNCH_TARGET".to_string(),
                 launch_target.to_string(),
             ));
             let agent_id = common::profiles::runtime::agent_id_for(launch_target)

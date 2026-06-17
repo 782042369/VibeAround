@@ -33,7 +33,7 @@ pub fn init() {
     let file_layer = {
         let log_dir = crate::config::data_dir().join("logs").join("runtime");
         std::fs::create_dir_all(&log_dir).ok().map(|_| {
-            let file_appender = tracing_appender::rolling::daily(log_dir, "vibearound.log");
+            let file_appender = tracing_appender::rolling::daily(log_dir, "vibewbz.log");
             let (writer, guard) = tracing_appender::non_blocking(file_appender);
             let _ = LOG_GUARD.set(guard);
 

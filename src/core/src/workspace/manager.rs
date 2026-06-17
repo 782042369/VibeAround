@@ -901,7 +901,7 @@ mod tests {
     use super::*;
 
     fn temp_paths() -> (PathBuf, PathBuf, PathBuf) {
-        let root = std::env::temp_dir().join(format!("vibearound-wtm-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-wtm-{}", Uuid::new_v4()));
         (
             root.join("workspaces.jsonl"),
             root.join("threads.jsonl"),
@@ -1070,7 +1070,7 @@ mod tests {
     async fn switch_workspace_registers_existing_directory_path() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let route = RouteKey::new("slack", "chat-a");
 
@@ -1098,7 +1098,7 @@ mod tests {
     async fn attach_external_session_normalizes_workspace_cwd() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let route = RouteKey::new("web", "chat-a");
 
@@ -1129,7 +1129,7 @@ mod tests {
     async fn attach_external_session_defaults_missing_profile_to_direct() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let route = RouteKey::new("feishu", "chat-a");
 
@@ -1156,7 +1156,7 @@ mod tests {
     async fn attach_external_session_clears_existing_route_selection() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let route = RouteKey::new("feishu", "chat-a");
 
@@ -1201,7 +1201,7 @@ mod tests {
     async fn attach_external_session_creates_open_thread_when_matching_thread_is_closed() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let first_route = RouteKey::new("web", "chat-a");
         let second_route = RouteKey::new("web", "chat-b");
@@ -1269,7 +1269,7 @@ mod tests {
     async fn create_thread_for_cwd_starts_new_thread_even_when_workspace_has_threads() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let first_route = RouteKey::new("web", "chat-a");
         let second_route = RouteKey::new("web", "chat-b");
@@ -1307,7 +1307,7 @@ mod tests {
     async fn invalid_pending_thread_selection_is_consumed() {
         let (workspaces, threads, attachments) = temp_paths();
         let manager = WorkspaceThreadManager::with_paths(workspaces, threads, attachments);
-        let root = std::env::temp_dir().join(format!("vibearound-ws-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("vibewbz-ws-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let route = RouteKey::new("feishu", "chat-a");
 

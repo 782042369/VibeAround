@@ -1043,7 +1043,7 @@ mod tests {
         assert!(reasoning_done.data["item"]["encrypted_content"]
             .as_str()
             .unwrap()
-            .starts_with("vibearound.reasoning.hex.v1:"));
+            .starts_with("vibewbz.reasoning.hex.v1:"));
 
         let completed = events
             .iter()

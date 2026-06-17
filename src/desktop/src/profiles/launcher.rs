@@ -47,29 +47,9 @@ pub fn launch(profile: &ProfileDef, launch_target: &str) -> anyhow::Result<()> {
     platform::spawn(plan)
 }
 
-pub fn launch_resume(
-    profile: &ProfileDef,
-    launch_target: &str,
-    session_id: &str,
-) -> anyhow::Result<()> {
-    let plan = LaunchPlanBuilder::new()
-        .profile(profile, launch_target)
-        .resume(session_id)
-        .build()?;
-    platform::spawn(plan)
-}
-
 /// "Direct" launch opens the named coding CLI with no env injection. The CLI
 /// uses whatever global OAuth/login/config it already has on disk.
 pub fn launch_direct(agent_id: &str) -> anyhow::Result<()> {
     let plan = LaunchPlanBuilder::new().direct(agent_id).build()?;
-    platform::spawn(plan)
-}
-
-pub fn launch_direct_resume(agent_id: &str, session_id: &str) -> anyhow::Result<()> {
-    let plan = LaunchPlanBuilder::new()
-        .direct(agent_id)
-        .resume(session_id)
-        .build()?;
     platform::spawn(plan)
 }

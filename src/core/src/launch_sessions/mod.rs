@@ -278,7 +278,7 @@ fn observed_sessions_for_agent_workspace(agent_id: &str, workspace: &Path) -> Ve
             workspace: session.workspace,
             session_id: session.session_id,
             updated_at: session.updated_at,
-            source: format!("vibearound-{}", session.source),
+            source: format!("vibewbz-{}", session.source),
             archived: false,
         })
         .collect()
@@ -321,7 +321,7 @@ fn write_observed_store_unlocked(store: &ObservedLaunchSessionStore) -> Result<(
         .map_err(|error| format!("failed to write launch session store: {error}"))?;
     if let Err(error) = crate::auth::set_owner_only(&path) {
         tracing::warn!(
-            "[VibeAround] failed to restrict launch session store {:?}: {}",
+            "[VibeWbz] failed to restrict launch session store {:?}: {}",
             path,
             error
         );

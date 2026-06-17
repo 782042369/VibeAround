@@ -1,11 +1,11 @@
 ---
 name: agent-collaboration
-description: Initialize and wait for VibeAround subagents in a multi-agent coding turn. Use when the user's message starts with "subagent=", especially "subagent=parallel".
+description: Initialize and wait for VibeWbz subagents in a multi-agent coding turn. Use when the user's message starts with "subagent=", especially "subagent=parallel".
 ---
 
-# VibeAround Agent Collaboration
+# VibeWbz Agent Collaboration
 
-Initialize a VibeAround multi-agent turn from the current host agent, then wait for subagent reports before finalizing.
+Initialize a VibeWbz multi-agent turn from the current host agent, then wait for subagent reports before finalizing.
 
 ## When to Use
 
@@ -16,7 +16,7 @@ Initialize a VibeAround multi-agent turn from the current host agent, then wait 
 
 All host-to-subagent and subagent-to-host control messages must use `va-agent-protocol`.
 
-VibeAround intercepts protocol envelopes in the thread. The raw envelope is hidden from the web UI and forwarded internally to the target agent. The protocol envelope must be the final content in the assistant message; do not write prose after it.
+VibeWbz intercepts protocol envelopes in the thread. The raw envelope is hidden from the web UI and forwarded internally to the target agent. The protocol envelope must be the final content in the assistant message; do not write prose after it.
 
 Use this envelope for structured messages:
 
@@ -53,13 +53,13 @@ Subagents must report back with:
 
 ## Initialize Parallel Subagents
 
-Call the VibeAround MCP tool:
+Call the VibeWbz MCP tool:
 
 ```
 Tool: initialize_subagents
-Server: vibearound
+Server: vibewbz
 Arguments:
-  thread_id: "<value of $VIBEAROUND_THREAD_ID>"
+  thread_id: "<value of $VIBEWBZ_THREAD_ID>"
   cwd: "<current working directory>"
   mode: "parallel"
   agents:
@@ -75,9 +75,9 @@ Then wait for the turn to finish:
 
 ```
 Tool: wait_for_subagents
-Server: vibearound
+Server: vibewbz
 Arguments:
-  thread_id: "<value of $VIBEAROUND_THREAD_ID>"
+  thread_id: "<value of $VIBEWBZ_THREAD_ID>"
   turn_id: "<turn id returned by initialize_subagents>"
 ```
 
@@ -88,16 +88,16 @@ Rules:
 - Use `codex` for subagents by default, even when the host is Claude Code.
 - Only create more than 2 subagents or use another `agent_kind` when the user explicitly asks.
 - For `parallel`, split the user's request into independent tasks that can run in separate git worktrees.
-- VibeAround handles missing Git repositories by running `git init` and creating an empty initial commit when needed. If Git itself is missing, VibeAround attempts a platform install before reporting an error.
+- VibeWbz handles missing Git repositories by running `git init` and creating an empty initial commit when needed. If Git itself is missing, VibeWbz attempts a platform install before reporting an error.
 - Do not merge or clean up worktrees automatically. The host agent decides after reviewing results.
-- If VibeAround reports a dirty workspace or worktree creation error, tell the user and stop the multi-agent turn.
-- VibeAround injects subagent role/system guidance at session startup. Keep assignments focused on the task and relevant context.
+- If VibeWbz reports a dirty workspace or worktree creation error, tell the user and stop the multi-agent turn.
+- VibeWbz injects subagent role/system guidance at session startup. Keep assignments focused on the task and relevant context.
 
 After `initialize_subagents` returns, do not produce a final answer yet. Call `wait_for_subagents`, review the returned reports and any visible subagent messages, then synthesize the host answer.
 
 ## Continue Delegating
 
-After `initialize_subagents` returns, the host can continue delegating to an existing subagent by emitting an assignment envelope in the host response. VibeAround intercepts the envelope and sends it to the target subagent:
+After `initialize_subagents` returns, the host can continue delegating to an existing subagent by emitting an assignment envelope in the host response. VibeWbz intercepts the envelope and sends it to the target subagent:
 
 ```xml
 <va-agent-protocol>

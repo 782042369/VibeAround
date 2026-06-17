@@ -1,8 +1,6 @@
 //! Skill file install/uninstall.
 //!
-//! Each agent gets the common VibeAround skills (`vibearound`, `va-session`,
-//! `va-preview`, `va-md-preview`); selected agents can receive additional
-//! skills while their workflows are being validated.
+//! Claude Code and Codex CLI get only the project-local collaboration skill.
 //!
 //! The `include_str!` paths are relative to this source file: `src/core/
 //! src/agent/skills.rs` → `../../../skills/...` reaches the top-level
@@ -63,7 +61,7 @@ fn install_skill_at_root(
     let primary_skill_dir = root.join(skill_dir_rel);
 
     // Derive the parent directory for skill deployment.
-    // e.g. ".claude/skills/vibearound" → ".claude/skills"
+    // e.g. ".claude/skills/vibewbz" → ".claude/skills"
     // For agents with skill_filename (shared dirs like .cursor/rules/),
     // the skill_dir IS the parent.
     let has_skill_filename = global_config.skill_filename.is_some();
@@ -88,7 +86,7 @@ fn install_skill_at_root(
             let target = skill_base.join(&filename);
             write_managed_skill_file(agent, skill_name, &target, content)?;
         } else {
-            // Dedicated directory per skill (e.g. .claude/skills/vibearound/)
+            // Dedicated directory per skill (e.g. .claude/skills/vibewbz/)
             let skill_dir = skill_base.join(skill_name);
             let target = skill_dir.join("SKILL.md");
             write_managed_skill_file(agent, skill_name, &target, content)?;
@@ -213,7 +211,7 @@ fn write_managed_skill_file(
     if target.exists() {
         if !target.is_file() || !is_managed_skill_file(target)? {
             tracing::warn!(
-                "[integrations] Skipped {}/{} skill at {:?}: existing file is not VibeAround-managed",
+                "[integrations] Skipped {}/{} skill at {:?}: existing file is not VibeWbz-managed",
                 agent,
                 skill_name,
                 target
@@ -243,83 +241,27 @@ fn is_managed_skill_file(path: &Path) -> anyhow::Result<bool> {
         return Ok(false);
     }
     let content = std::fs::read_to_string(path).with_context(|| format!("Read {:?}", path))?;
-    Ok(content.contains("VibeAround")
-        || content.contains("vibearound")
-        || content.contains("_vibearound:")
-        || content.contains("metadata: vibearound"))
+    Ok(content.contains("VibeWbz")
+        || content.contains("vibewbz")
+        || content.contains("_vibewbz:")
+        || content.contains("metadata: vibewbz"))
 }
 
 /// All skills to deploy, per agent. Returns (skill_name, content) pairs.
 /// `skill_name` is used to derive both the target directory and filename.
 ///
-/// Each agent gets the same set of skills; only the directory (and thus the
-/// embedded content) differs. The macro eliminates 7× repetition of the
-/// skill-name list.
 fn agent_skills(agent: &str) -> Vec<(&'static str, &'static str)> {
-    macro_rules! skills_for {
-        ($dir:literal) => {
-            vec![
-                (
-                    "vibearound",
-                    include_str!(concat!("../../../skills/", $dir, "/vibearound/SKILL.md")),
-                ),
-                (
-                    "va-session",
-                    include_str!(concat!("../../../skills/", $dir, "/va-session/SKILL.md")),
-                ),
-                (
-                    "va-preview",
-                    include_str!(concat!("../../../skills/", $dir, "/va-preview/SKILL.md")),
-                ),
-                (
-                    "va-md-preview",
-                    include_str!(concat!("../../../skills/", $dir, "/va-md-preview/SKILL.md")),
-                ),
-            ]
-        };
-    }
-
-    let mut skills = match agent {
-        "claude" => skills_for!("claude"),
-        "gemini" => skills_for!("gemini"),
-        "codex" => skills_for!("codex"),
-        "cursor" => skills_for!("cursor"),
-        "kiro" => skills_for!("kiro"),
-        "qwen-code" => skills_for!("qwen-code"),
-        // Generic fallback — top-level skills dir (no agent subdirectory).
-        _ => vec![
-            (
-                "vibearound",
-                include_str!("../../../skills/vibearound/SKILL.md"),
-            ),
-            (
-                "va-session",
-                include_str!("../../../skills/va-session/SKILL.md"),
-            ),
-            (
-                "va-preview",
-                include_str!("../../../skills/va-preview/SKILL.md"),
-            ),
-            (
-                "va-md-preview",
-                include_str!("../../../skills/va-md-preview/SKILL.md"),
-            ),
-        ],
-    };
-
     match agent {
-        "claude" => skills.push((
+        "claude" => vec![(
             "agent-collaboration",
             include_str!("../../../skills/claude/agent-collaboration/SKILL.md"),
-        )),
-        "codex" => skills.push((
+        )],
+        "codex" => vec![(
             "agent-collaboration",
             include_str!("../../../skills/codex/agent-collaboration/SKILL.md"),
-        )),
-        _ => {}
+        )],
+        _ => Vec::new(),
     }
-
-    skills
 }
 
 #[cfg(test)]
@@ -335,7 +277,7 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         std::env::temp_dir().join(format!(
-            "vibearound-skills-{name}-{}-{nonce}",
+            "vibewbz-skills-{name}-{}-{nonce}",
             std::process::id()
         ))
     }
@@ -359,7 +301,7 @@ mod tests {
 
     #[test]
     fn skill_frontmatter_descriptions_quote_mapping_colons() {
-        for agent in ["claude", "codex", "gemini", "qwen-code", "cursor", "kiro"] {
+        for agent in ["claude", "codex"] {
             for (skill_name, content) in agent_skills(agent) {
                 let Some(description) = frontmatter_field(content, "description") else {
                     continue;
@@ -375,47 +317,13 @@ mod tests {
     }
 
     #[test]
-    fn shared_rule_uninstall_leaves_non_vibearound_file() {
-        let dir = unique_test_dir("shared-foreign");
-        let rules = dir.join(".cursor/rules");
-        fs::create_dir_all(&rules).unwrap();
-        let target = rules.join("vibearound.mdc");
-        fs::write(&target, "user owned rule").unwrap();
-
-        uninstall_project_skill("cursor", &dir).unwrap();
-
-        assert_eq!(fs::read_to_string(&target).unwrap(), "user owned rule");
-        fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn project_skill_install_and_uninstall_removes_managed_files() {
-        let dir = unique_test_dir("install-remove");
-        fs::create_dir_all(&dir).unwrap();
-
-        install_project_skill("cursor", &dir).unwrap();
-        assert!(dir.join(".cursor/rules/vibearound.mdc").exists());
-        assert!(dir.join(".cursor/rules/va-preview.mdc").exists());
-
-        uninstall_project_skill("cursor", &dir).unwrap();
-        assert!(!dir.join(".cursor/rules/vibearound.mdc").exists());
-        assert!(!dir.join(".cursor/rules/va-preview.mdc").exists());
-
-        fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
     fn project_skill_install_uses_agent_specific_locations() {
         let dir = unique_test_dir("matrix");
         fs::create_dir_all(&dir).unwrap();
 
         for (agent, expected) in [
-            ("claude", ".claude/skills/va-session/SKILL.md"),
-            ("codex", ".agents/skills/va-session/SKILL.md"),
-            ("gemini", ".gemini/skills/va-session/SKILL.md"),
-            ("qwen-code", ".qwen/skills/va-session/SKILL.md"),
-            ("cursor", ".cursor/rules/va-session.mdc"),
-            ("kiro", ".kiro/steering/va-session.md"),
+            ("claude", ".claude/skills/agent-collaboration/SKILL.md"),
+            ("codex", ".agents/skills/agent-collaboration/SKILL.md"),
         ] {
             install_project_skill(agent, &dir).unwrap();
             assert!(
@@ -423,13 +331,13 @@ mod tests {
                 "{agent} should install {expected}"
             );
         }
-        assert!(!dir.join(".codex/skills/va-session/SKILL.md").exists());
+        assert!(!dir
+            .join(".codex/skills/agent-collaboration/SKILL.md")
+            .exists());
         assert!(!dir.join(".codex/config.toml").exists());
-        let codex_session_skill =
-            fs::read_to_string(dir.join(".agents/skills/va-session/SKILL.md")).unwrap();
-        assert!(codex_session_skill.contains("Codex only"));
-        assert!(codex_session_skill.contains("agent_kind: \"codex\""));
-        assert!(codex_session_skill.contains("Do not inspect MCP resources"));
+        let codex_skill =
+            fs::read_to_string(dir.join(".agents/skills/agent-collaboration/SKILL.md")).unwrap();
+        assert!(codex_skill.contains("VibeWbz"));
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -437,14 +345,13 @@ mod tests {
     #[test]
     fn project_skill_install_does_not_overwrite_unmanaged_skill() {
         let dir = unique_test_dir("no-overwrite");
-        let target = dir.join(".agents/skills/va-session/SKILL.md");
+        let target = dir.join(".agents/skills/agent-collaboration/SKILL.md");
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, "user-owned skill").unwrap();
 
         install_project_skill("codex", &dir).unwrap();
 
         assert_eq!(fs::read_to_string(&target).unwrap(), "user-owned skill");
-        assert!(dir.join(".agents/skills/vibearound/SKILL.md").exists());
 
         fs::remove_dir_all(&dir).unwrap();
     }

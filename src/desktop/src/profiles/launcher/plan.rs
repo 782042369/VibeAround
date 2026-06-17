@@ -2,7 +2,7 @@
 //!
 //! This module decides what should be launched. Platform modules only execute
 //! the final plan, which keeps terminal-specific code away from profile,
-//! bridge, and resume routing decisions.
+//! bridge, and launch routing decisions.
 
 #[cfg(not(test))]
 use std::borrow::Cow;
@@ -25,8 +25,8 @@ const LOCAL_BRIDGE_PROXY_ENV_KEYS: &[&str] = &[
     "NO_PROXY",
     "no_proxy",
 ];
-const VIBEAROUND_LAUNCH_ID_ENV: &str = "VIBEAROUND_LAUNCH_ID";
-const VIBEAROUND_LAUNCH_TARGET_ENV: &str = "VIBEAROUND_LAUNCH_TARGET";
+const VIBEWBZ_LAUNCH_ID_ENV: &str = "VIBEWBZ_LAUNCH_ID";
+const VIBEWBZ_LAUNCH_TARGET_ENV: &str = "VIBEWBZ_LAUNCH_TARGET";
 
 enum LaunchTarget<'a> {
     Profile {
@@ -41,7 +41,6 @@ enum LaunchTarget<'a> {
 pub(super) struct LaunchPlanBuilder<'a> {
     launch_id: String,
     target: Option<LaunchTarget<'a>>,
-    session_id: Option<&'a str>,
 }
 
 impl<'a> LaunchPlanBuilder<'a> {
@@ -49,7 +48,6 @@ impl<'a> LaunchPlanBuilder<'a> {
         Self {
             launch_id: uuid::Uuid::new_v4().to_string(),
             target: None,
-            session_id: None,
         }
     }
 
@@ -63,11 +61,6 @@ impl<'a> LaunchPlanBuilder<'a> {
 
     pub(super) fn direct(mut self, agent_id: &'a str) -> Self {
         self.target = Some(LaunchTarget::Direct { agent_id });
-        self
-    }
-
-    pub(super) fn resume(mut self, session_id: &'a str) -> Self {
-        self.session_id = Some(session_id);
         self
     }
 
@@ -92,15 +85,7 @@ impl<'a> LaunchPlanBuilder<'a> {
     ) -> anyhow::Result<LaunchPlan> {
         let rendered = bridge::render_for_launch(profile, launch_target, &self.launch_id)?;
 
-        match self.session_id {
-            Some(session_id) => self.build_rendered_profile_resume_plan(
-                profile,
-                launch_target,
-                rendered,
-                session_id,
-            ),
-            None => self.build_rendered_profile_plan(profile, launch_target, rendered),
-        }
+        self.build_rendered_profile_plan(profile, launch_target, rendered)
     }
 
     fn build_direct_plan(&self, agent_id: &str) -> anyhow::Result<LaunchPlan> {
@@ -109,38 +94,22 @@ impl<'a> LaunchPlanBuilder<'a> {
         let workspace = crate::profiles::resolve_launch_workspace(agent_id)?;
         install_project_integrations_for_launch(agent_id, &workspace)?;
 
-        let Some(session_id) = self.session_id else {
-            if agent_id == "codex-desktop" {
-                codex_desktop::cleanup_profile_overlay()
-                    .context("restore Codex Desktop config before direct launch")?;
-            } else if agent_id == "claude-desktop" {
-                claude_desktop::cleanup_profile_config()
-                    .context("restore Claude Desktop config before direct launch")?;
-            }
-            return Ok(LaunchPlan {
-                env: Vec::new(),
-                command: direct_launch_command_for_agent(
-                    agent_id,
-                    &agent,
-                    agent.pty_command_for_current_platform(),
-                ),
-                args: terminal_launch_args_for_agent(agent_id),
-                window_label: format!("{} (direct)", agent.display_name),
-                workspace,
-                macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
-                windows_process_probe: windows_process_probe_for_direct_agent(&agent),
-                windows_executable_path: windows_executable_path_for_agent(agent_id),
-            });
-        };
-
-        let (command, resume_args) = resume_command_for_agent(agent_id, session_id)?;
-        let mut args = terminal_launch_args_for_agent(agent_id);
-        args.extend(resume_args);
+        if agent_id == "codex-desktop" {
+            codex_desktop::cleanup_profile_overlay()
+                .context("restore Codex Desktop config before direct launch")?;
+        } else if agent_id == "claude-desktop" {
+            claude_desktop::cleanup_profile_config()
+                .context("restore Claude Desktop config before direct launch")?;
+        }
         Ok(LaunchPlan {
             env: Vec::new(),
-            command: direct_launch_command_for_agent(agent_id, &agent, &command),
-            args,
-            window_label: format!("{} (resume)", agent.display_name),
+            command: direct_launch_command_for_agent(
+                agent_id,
+                &agent,
+                agent.pty_command_for_current_platform(),
+            ),
+            args: Vec::new(),
+            window_label: format!("{} (direct)", agent.display_name),
             workspace,
             macos_app_probe: macos_app_probe_for_direct_agent(agent_id, &agent),
             windows_process_probe: windows_process_probe_for_direct_agent(&agent),
@@ -162,7 +131,7 @@ impl<'a> LaunchPlanBuilder<'a> {
         if agent_id == "codex-desktop" {
             let mut env = Vec::new();
             let mut args = Vec::new();
-            append_vibearound_launch_context_env(&mut env, profile, launch_target, &self.launch_id);
+            append_vibewbz_launch_context_env(&mut env, profile, launch_target, &self.launch_id);
             if bridge::launch_uses_local_bridge(profile, launch_target)? {
                 append_local_bridge_proxy_bypass_env(&mut env);
                 args.extend(codex_desktop_local_bridge_args());
@@ -189,7 +158,7 @@ impl<'a> LaunchPlanBuilder<'a> {
             claude_desktop::apply_profile_config(profile)
                 .with_context(|| format!("prepare Claude Desktop profile '{}'", profile.id))?;
             let mut env = Vec::new();
-            append_vibearound_launch_context_env(&mut env, profile, launch_target, &self.launch_id);
+            append_vibewbz_launch_context_env(&mut env, profile, launch_target, &self.launch_id);
             return Ok(LaunchPlan {
                 env,
                 command: direct_launch_command_for_agent(
@@ -205,8 +174,7 @@ impl<'a> LaunchPlanBuilder<'a> {
                 windows_executable_path: windows_executable_path_for_agent(agent_id),
             });
         }
-        let mut command_args = rendered.command_args.clone();
-        command_args.extend(terminal_launch_args_for_agent(agent_id));
+        let command_args = rendered.command_args.clone();
         let env = materialized_profile_env(profile, launch_target, &self.launch_id, rendered)?;
 
         Ok(LaunchPlan {
@@ -214,36 +182,6 @@ impl<'a> LaunchPlanBuilder<'a> {
             command: launch_command_for_agent(agent_id, agent.pty_command_for_current_platform()),
             args: command_args,
             window_label: profile.label.clone(),
-            workspace,
-            macos_app_probe: None,
-            windows_process_probe: None,
-            windows_executable_path: None,
-        })
-    }
-
-    fn build_rendered_profile_resume_plan(
-        &self,
-        profile: &ProfileDef,
-        launch_target: &str,
-        rendered: profiles::render::RenderedProfile,
-        session_id: &str,
-    ) -> anyhow::Result<LaunchPlan> {
-        let env =
-            materialized_profile_env(profile, launch_target, &self.launch_id, rendered.clone())?;
-
-        let agent_id = profiles::runtime::agent_id_for(launch_target)?;
-        let workspace = crate::profiles::resolve_launch_workspace(agent_id)?;
-        install_project_integrations_for_launch(agent_id, &workspace)?;
-        let (command, resume_args) = resume_command_for_agent(agent_id, session_id)?;
-        let mut args = rendered.command_args.clone();
-        args.extend(terminal_launch_args_for_agent(agent_id));
-        args.extend(resume_args);
-
-        Ok(LaunchPlan {
-            env,
-            command: launch_command_for_agent(agent_id, &command),
-            args,
-            window_label: format!("{} (resume)", profile.label),
             workspace,
             macos_app_probe: None,
             windows_process_probe: None,
@@ -375,28 +313,28 @@ fn materialized_profile_env(
     } else {
         profiles::runtime::append_settings_proxy_env(profile, &mut env)?;
     }
-    append_vibearound_launch_context_env(&mut env, profile, launch_target, launch_id);
+    append_vibewbz_launch_context_env(&mut env, profile, launch_target, launch_id);
     Ok(env)
 }
 
-fn append_vibearound_launch_context_env(
+fn append_vibewbz_launch_context_env(
     env: &mut Vec<(String, String)>,
     profile: &ProfileDef,
     launch_target: &str,
     launch_id: &str,
 ) {
     env.retain(|(key, _)| {
-        key != VIBEAROUND_LAUNCH_ID_ENV
-            && key != agent_integrations::launch::VIBEAROUND_PROFILE_ID_ENV
-            && key != VIBEAROUND_LAUNCH_TARGET_ENV
+        key != VIBEWBZ_LAUNCH_ID_ENV
+            && key != agent_integrations::launch::VIBEWBZ_PROFILE_ID_ENV
+            && key != VIBEWBZ_LAUNCH_TARGET_ENV
     });
-    env.push((VIBEAROUND_LAUNCH_ID_ENV.to_string(), launch_id.to_string()));
+    env.push((VIBEWBZ_LAUNCH_ID_ENV.to_string(), launch_id.to_string()));
     env.push((
-        agent_integrations::launch::VIBEAROUND_PROFILE_ID_ENV.to_string(),
+        agent_integrations::launch::VIBEWBZ_PROFILE_ID_ENV.to_string(),
         profile.id.clone(),
     ));
     env.push((
-        VIBEAROUND_LAUNCH_TARGET_ENV.to_string(),
+        VIBEWBZ_LAUNCH_TARGET_ENV.to_string(),
         launch_target.to_string(),
     ));
 }
@@ -440,88 +378,6 @@ fn codex_desktop_local_bridge_args() -> Vec<String> {
     }
 }
 
-#[cfg(not(test))]
-fn terminal_launch_args_for_agent(agent_id: &str) -> Vec<String> {
-    let prefs = ::common::agent_state::read_prefs();
-    ::common::agent_state::resolve_agent_terminal_args(&prefs, agent_id)
-}
-
-#[cfg(test)]
-fn terminal_launch_args_for_agent(agent_id: &str) -> Vec<String> {
-    test_terminal_launch_args()
-        .lock()
-        .expect("test launch args")
-        .get(agent_id)
-        .cloned()
-        .unwrap_or_default()
-}
-
-#[cfg(test)]
-type TestLaunchArgs = std::sync::Mutex<std::collections::BTreeMap<String, Vec<String>>>;
-
-#[cfg(test)]
-type TestLaunchArgsIsolation = std::sync::Mutex<()>;
-
-#[cfg(test)]
-fn test_terminal_launch_args() -> &'static TestLaunchArgs {
-    static ARGS: std::sync::OnceLock<TestLaunchArgs> = std::sync::OnceLock::new();
-    ARGS.get_or_init(|| std::sync::Mutex::new(std::collections::BTreeMap::new()))
-}
-
-#[cfg(test)]
-fn test_terminal_launch_args_isolation() -> &'static TestLaunchArgsIsolation {
-    static LOCK: std::sync::OnceLock<TestLaunchArgsIsolation> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| std::sync::Mutex::new(()))
-}
-
-fn resume_command_for_agent(
-    agent_id: &str,
-    session_id: &str,
-) -> anyhow::Result<(String, Vec<String>)> {
-    let command = match agent_id {
-        "claude" => (
-            "claude".to_string(),
-            vec![
-                "--resume".to_string(),
-                session_id.to_string(),
-                "--permission-mode".to_string(),
-                "acceptEdits".to_string(),
-            ],
-        ),
-        "codex" => (
-            "codex".to_string(),
-            vec!["resume".to_string(), session_id.to_string()],
-        ),
-        "pi" => (
-            "pi".to_string(),
-            vec!["--session".to_string(), session_id.to_string()],
-        ),
-        "gemini" => (
-            "gemini".to_string(),
-            vec!["--resume".to_string(), session_id.to_string()],
-        ),
-        "opencode" => (
-            "opencode".to_string(),
-            vec!["--session".to_string(), session_id.to_string()],
-        ),
-        "cursor" => (
-            "cursor-agent".to_string(),
-            vec!["--resume".to_string(), session_id.to_string()],
-        ),
-        "qwen-code" => (
-            "qwen".to_string(),
-            vec!["--resume".to_string(), session_id.to_string()],
-        ),
-        other => {
-            return Err(anyhow!(
-                "resume launch is not supported for agent '{}'",
-                other
-            ))
-        }
-    };
-    Ok(command)
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -535,47 +391,15 @@ mod tests {
             Self {
                 launch_id: launch_id.to_string(),
                 target: None,
-                session_id: None,
             }
         }
     }
 
-    struct TestLaunchArgsGuard {
-        agent_id: String,
-        _lock: std::sync::MutexGuard<'static, ()>,
-    }
-
-    impl Drop for TestLaunchArgsGuard {
-        fn drop(&mut self) {
-            test_terminal_launch_args()
-                .lock()
-                .expect("test launch args")
-                .remove(&self.agent_id);
-        }
-    }
-
-    fn set_terminal_launch_args(agent_id: &str, args: &[&str]) -> TestLaunchArgsGuard {
-        let lock = test_terminal_launch_args_isolation()
-            .lock()
-            .expect("test launch args isolation");
-        test_terminal_launch_args()
-            .lock()
-            .expect("test launch args")
-            .insert(
-                agent_id.to_string(),
-                args.iter().map(|arg| (*arg).to_string()).collect(),
-            );
-        TestLaunchArgsGuard {
-            agent_id: agent_id.to_string(),
-            _lock: lock,
-        }
-    }
-
-    fn minimax_anthropic_profile() -> ProfileDef {
+    fn gateway_anthropic_profile() -> ProfileDef {
         ProfileDef {
-            id: "minimax-test".to_string(),
-            label: "MiniMax Test".to_string(),
-            provider: "minimax".to_string(),
+            id: "gateway-test".to_string(),
+            label: "VibeWbz Gateway Test".to_string(),
+            provider: "custom".to_string(),
             auth_mode: AuthMode::ApiKey,
             api_types: vec!["anthropic".to_string()],
             credentials: [("api_key".to_string(), "test-key".to_string())]
@@ -584,7 +408,8 @@ mod tests {
             overrides: [(
                 "anthropic".to_string(),
                 ApiTypeOverrides {
-                    model: Some("MiniMax-M2.7".to_string()),
+                    base_url: Some("http://ai.939593.xyz".to_string()),
+                    model: Some("claude-sonnet-4-5".to_string()),
                     ..Default::default()
                 },
             )]
@@ -646,7 +471,6 @@ mod tests {
     fn desktop_launches_install_companion_cli_integrations() {
         assert_eq!(project_integration_agent_id("codex-desktop"), "codex");
         assert_eq!(project_integration_agent_id("claude-desktop"), "claude");
-        assert_eq!(project_integration_agent_id("gemini"), "gemini");
     }
 
     #[test]
@@ -663,101 +487,31 @@ mod tests {
     }
 
     #[test]
-    fn direct_launch_plan_includes_agent_terminal_args() {
-        let _guard = set_terminal_launch_args("codex", &["--sandbox", "danger-full-access"]);
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .direct("codex")
-            .build()
-            .expect("direct plan");
-
-        assert_eq!(plan.command, "codex");
-        assert_eq!(
-            plan.args,
-            vec!["--sandbox".to_string(), "danger-full-access".to_string()]
-        );
-        assert!(plan.env.is_empty());
-    }
-
-    #[test]
-    fn direct_resume_plan_uses_agent_resume_command() {
-        let (command, args) =
-            resume_command_for_agent("claude", "session-456").expect("claude resume command");
-
-        assert_eq!(command, "claude");
-        assert_eq!(
-            args,
-            vec![
-                "--resume".to_string(),
-                "session-456".to_string(),
-                "--permission-mode".to_string(),
-                "acceptEdits".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn direct_resume_plan_places_agent_args_before_resume_args() {
-        let _guard = set_terminal_launch_args("codex", &["--sandbox", "read-only"]);
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .direct("codex")
-            .resume("session-456")
-            .build()
-            .expect("direct resume plan");
-
-        assert_eq!(
-            plan.args,
-            vec![
-                "--sandbox".to_string(),
-                "read-only".to_string(),
-                "resume".to_string(),
-                "session-456".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn direct_resume_plan_supports_pi_sessions() {
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .direct("pi")
-            .resume("019e57e0")
-            .build()
-            .expect("pi direct resume plan");
-
-        assert_eq!(plan.command, "pi");
-        assert_eq!(
-            plan.args,
-            vec!["--session".to_string(), "019e57e0".to_string()]
-        );
-        assert_eq!(plan.window_label, "Pi (resume)");
-    }
-
-    #[test]
-    fn profile_launch_plan_adds_vibearound_identity_env() {
-        let profile = minimax_anthropic_profile();
+    fn profile_launch_plan_adds_vibewbz_identity_env() {
+        let profile = gateway_anthropic_profile();
         let plan = LaunchPlanBuilder::with_launch_id("launch-123")
             .profile(&profile, "claude")
             .build()
             .expect("profile plan");
 
         assert_eq!(plan.command, "claude code --permission-mode acceptEdits");
-        assert_eq!(plan.window_label, "MiniMax Test");
+        assert_eq!(plan.window_label, "VibeWbz Gateway Test");
         assert!(plan
             .env
-            .contains(&("VIBEAROUND_LAUNCH_ID".to_string(), "launch-123".to_string())));
-        assert!(plan.env.contains(&(
-            "VIBEAROUND_PROFILE_ID".to_string(),
-            "minimax-test".to_string()
-        )));
+            .contains(&("VIBEWBZ_LAUNCH_ID".to_string(), "launch-123".to_string())));
         assert!(plan
             .env
-            .contains(&("VIBEAROUND_LAUNCH_TARGET".to_string(), "claude".to_string())));
+            .contains(&("VIBEWBZ_PROFILE_ID".to_string(), "gateway-test".to_string())));
+        assert!(plan
+            .env
+            .contains(&("VIBEWBZ_LAUNCH_TARGET".to_string(), "claude".to_string())));
     }
 
     #[test]
     fn claude_desktop_profile_plan_uses_3p_config_without_terminal_args() {
-        let profile = minimax_anthropic_profile();
+        let profile = gateway_anthropic_profile();
         let root = std::env::temp_dir().join(format!(
-            "vibearound-claude-desktop-plan-{}",
+            "vibewbz-claude-desktop-plan-{}",
             uuid::Uuid::new_v4()
         ));
         let _guard = claude_desktop::set_test_user_data_dir(root.clone());
@@ -772,16 +526,15 @@ mod tests {
             assert_eq!(plan.command, "open -a Claude");
         }
         assert!(plan.args.is_empty());
-        assert_eq!(plan.window_label, "MiniMax Test");
+        assert_eq!(plan.window_label, "VibeWbz Gateway Test");
         assert!(plan
             .env
-            .contains(&("VIBEAROUND_LAUNCH_ID".to_string(), "launch-123".to_string())));
+            .contains(&("VIBEWBZ_LAUNCH_ID".to_string(), "launch-123".to_string())));
+        assert!(plan
+            .env
+            .contains(&("VIBEWBZ_PROFILE_ID".to_string(), "gateway-test".to_string())));
         assert!(plan.env.contains(&(
-            "VIBEAROUND_PROFILE_ID".to_string(),
-            "minimax-test".to_string()
-        )));
-        assert!(plan.env.contains(&(
-            "VIBEAROUND_LAUNCH_TARGET".to_string(),
+            "VIBEWBZ_LAUNCH_TARGET".to_string(),
             "claude-desktop".to_string()
         )));
         let meta_path = root.join("configLibrary").join("_meta.json");
@@ -811,7 +564,7 @@ mod tests {
             applied
                 .get("inferenceGatewayBaseUrl")
                 .and_then(serde_json::Value::as_str),
-            Some("http://127.0.0.1:12358/va/local-api/minimax-test/claude-anthropic/anthropic")
+            Some("http://127.0.0.1:12358/va/local-api/gateway-test/claude-anthropic/anthropic")
         );
         if cfg!(target_os = "macos") {
             assert_eq!(plan.macos_app_probe.as_deref(), Some("Claude"));
@@ -824,9 +577,9 @@ mod tests {
 
     #[test]
     fn claude_desktop_direct_plan_restores_3p_config() {
-        let profile = minimax_anthropic_profile();
+        let profile = gateway_anthropic_profile();
         let root = std::env::temp_dir().join(format!(
-            "vibearound-claude-desktop-direct-{}",
+            "vibewbz-claude-desktop-direct-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(root.join("configLibrary")).expect("create Claude config library");
@@ -878,68 +631,7 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("1p")
         );
-        assert!(!root.join(".vibearound-claude-desktop-state.json").exists());
+        assert!(!root.join(".vibewbz-claude-desktop-state.json").exists());
         let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn profile_launch_plan_appends_agent_terminal_args() {
-        let _guard = set_terminal_launch_args("opencode", &["--trace"]);
-        let profile = minimax_anthropic_profile();
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .profile(&profile, "opencode")
-            .build()
-            .expect("profile plan");
-
-        assert_eq!(plan.command, "opencode");
-        assert_eq!(plan.args.last().map(String::as_str), Some("--trace"));
-    }
-
-    #[test]
-    fn pi_profile_launch_plan_includes_extension_args() {
-        let profile = minimax_anthropic_profile();
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .profile(&profile, "pi")
-            .build()
-            .expect("pi profile plan");
-
-        assert_eq!(plan.command, "pi");
-        assert!(plan
-            .args
-            .windows(2)
-            .any(|args| args[0] == "--provider" && args[1] == "vibearound-minimax-test-anthropic"));
-        assert!(plan
-            .args
-            .windows(2)
-            .any(|args| args[0] == "--model" && args[1] == "MiniMax-M2.7"));
-        assert!(plan
-            .env
-            .contains(&("VIBEAROUND_PI_API_KEY".to_string(), "test-key".to_string())));
-        assert!(plan
-            .env
-            .contains(&("VIBEAROUND_LAUNCH_TARGET".to_string(), "pi".to_string())));
-    }
-
-    #[test]
-    fn pi_profile_resume_keeps_profile_extension_args() {
-        let mut profile = minimax_anthropic_profile();
-        profile.id = "minimax-resume-test".to_string();
-        let plan = LaunchPlanBuilder::with_launch_id("launch-123")
-            .profile(&profile, "pi")
-            .resume("019e57e0")
-            .build()
-            .expect("pi profile resume plan");
-
-        assert_eq!(plan.command, "pi");
-        assert!(plan
-            .args
-            .windows(2)
-            .any(|args| args[0] == "--provider"
-                && args[1] == "vibearound-minimax-resume-test-anthropic"));
-        assert!(plan.args.windows(2).any(|args| args[0] == "--session"));
-        assert_eq!(plan.args.last().map(String::as_str), Some("019e57e0"));
-        assert!(plan
-            .env
-            .contains(&("VIBEAROUND_PI_API_KEY".to_string(), "test-key".to_string())));
     }
 }

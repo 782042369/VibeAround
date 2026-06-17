@@ -1,7 +1,7 @@
 [package]
 name = "common"
 version = "0.7.4"
-description = "VibeAround shared logic: PTY, session registry, tunnel, headless CLI, IM (Telegram)"
+description = "VibeWbz shared logic: PTY, session registry, tunnel, headless CLI, IM (Telegram)"
 edition = "2021"
 rust-version = "1.82"
 

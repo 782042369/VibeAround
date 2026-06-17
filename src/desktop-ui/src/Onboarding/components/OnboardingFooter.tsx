@@ -23,7 +23,6 @@ export function OnboardingFooter({
   primaryAction,
   secondaryAction,
   onBack,
-  onSkip,
   onCancel,
 }: {
   activeStep: WizardStepId;
@@ -33,13 +32,9 @@ export function OnboardingFooter({
   primaryAction: PrimaryAction;
   secondaryAction?: FooterAction | null;
   onBack: () => void;
-  onSkip: () => void;
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const canSkip =
-    activeStep === "im" ||
-    activeStep === "remote";
   const footerHint = t(
     "Keep the defaults if you are not sure; everything can be changed later.",
   );
@@ -66,16 +61,6 @@ export function OnboardingFooter({
         {running && activeStep === "install" && (
           <Button type="button" variant="outline" onClick={onCancel}>
             {t("Cancel")}
-          </Button>
-        )}
-        {canSkip && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onSkip}
-            disabled={running || finishing}
-          >
-            {t("Skip")}
           </Button>
         )}
         {secondaryAction && (

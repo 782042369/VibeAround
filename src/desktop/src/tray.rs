@@ -12,17 +12,14 @@ use tauri::{
     App, AppHandle, Listener, Manager, Runtime,
 };
 
-use crate::{AppTunnels, OnboardingActive};
+use crate::OnboardingActive;
 
 pub(crate) const LAUNCH_CONFIG_CHANGED_EVENT: &str = "launch-config-changed";
 
 const TRAY_ID: &str = "main";
 const MAIN_WINDOW_LABEL: &str = "main";
-const LOCAL_DASHBOARD_URL: &str = "http://127.0.0.1:12358/va";
 const MENU_LAUNCH_DEFAULT: &str = "launch_default";
 const MENU_SHOW_WINDOW: &str = "show_window";
-const MENU_OPEN_LOCAL: &str = "open_local";
-const MENU_OPEN_TUNNEL: &str = "open_tunnel";
 const MENU_QUIT: &str = "quit";
 const MENU_LAUNCH_DIRECT_PREFIX: &str = "launch_direct:";
 const MENU_LAUNCH_PROFILE_PREFIX: &str = "launch_profile:";
@@ -59,8 +56,6 @@ impl UiLocale {
                 TrayText::ShowWindow => "显示窗口",
                 TrayText::QuickLaunch => "快速启动",
                 TrayText::LaunchWithoutProfile => "不使用 Profile 启动",
-                TrayText::OpenDashboard => "打开 Dashboard",
-                TrayText::OpenTunnel => "打开隧道",
                 TrayText::Bridge => "代理",
                 TrayText::Quit => "退出",
             },
@@ -73,8 +68,6 @@ enum TrayText {
     ShowWindow,
     QuickLaunch,
     LaunchWithoutProfile,
-    OpenDashboard,
-    OpenTunnel,
     Bridge,
     Quit,
 }
@@ -85,34 +78,10 @@ impl TrayText {
             Self::ShowWindow => "Show Window",
             Self::QuickLaunch => "Quick Launch",
             Self::LaunchWithoutProfile => "Launch Without Profile",
-            Self::OpenDashboard => "Open Dashboard",
-            Self::OpenTunnel => "Open Tunnel",
             Self::Bridge => "bridge",
             Self::Quit => "Quit",
         }
     }
-}
-
-/// Build the dashboard URL with the session auth token.
-///
-/// The SPA reads `?token=` on load, stores it in `sessionStorage`, and
-/// strips the query from the address bar so it never ends up in history
-/// or referer headers. Without the token, the dashboard's API requests
-/// all return 401.
-fn dashboard_url_with_token(base: &str) -> String {
-    match common::auth::read_token_file() {
-        Some(f) => format!("{base}/?token={}", f.token),
-        None => base.to_string(),
-    }
-}
-
-/// Build a tunnel URL with the session auth token appended.
-fn tunnel_url_with_token(tunnel_url: &str) -> String {
-    let Some(file) = common::auth::read_token_file() else {
-        return tunnel_url.to_string();
-    };
-    let sep = if tunnel_url.contains('?') { '&' } else { '?' };
-    format!("{tunnel_url}{sep}token={}", file.token)
 }
 
 pub fn setup<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Error>> {
@@ -134,7 +103,7 @@ pub fn setup<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Error>>
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
-        .tooltip("VibeAround")
+        .tooltip("VibeWbz")
         .on_menu_event(move |app, event| match event.id().as_ref() {
             MENU_LAUNCH_DEFAULT => {
                 if let Err(e) = crate::profiles::profiles_launch_default() {
@@ -146,17 +115,6 @@ pub fn setup<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Error>>
                     let _ = w.unminimize();
                     let _ = w.show();
                     let _ = w.set_focus();
-                }
-            }
-            MENU_OPEN_LOCAL => {
-                let _ = open::that(dashboard_url_with_token(LOCAL_DASHBOARD_URL));
-            }
-            MENU_OPEN_TUNNEL => {
-                if let Some(state) = app.try_state::<AppTunnels>() {
-                    if let Some(url) = state.0.first_url() {
-                        let dashboard_url = format!("{}/va", url.trim_end_matches('/'));
-                        let _ = open::that(tunnel_url_with_token(&dashboard_url));
-                    }
                 }
             }
             MENU_QUIT => {
@@ -192,26 +150,6 @@ pub fn setup<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Error>>
         }
     });
 
-    // Watch for tunnel state changes -> rebuild the "Open Tunnel" enabled state.
-    tauri::async_runtime::spawn(async move {
-        use common::state::StateSource;
-        let Some(state) = app_handle.try_state::<AppTunnels>() else {
-            return;
-        };
-        let tunnels = &state.0;
-        let mut rx = tunnels.subscribe_changes();
-        loop {
-            if let Err(e) = rebuild_menu(&app_handle) {
-                tracing::warn!("[tray] failed to rebuild after tunnel change: {}", e);
-            }
-
-            // Wait for next change notification
-            if rx.recv().await.is_err() {
-                break;
-            }
-        }
-    });
-
     Ok(())
 }
 
@@ -219,10 +157,6 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let locale = current_locale();
     let is_onboarding = is_onboarding(app);
     let launch_enabled = !is_onboarding;
-    let has_tunnel_url = app
-        .try_state::<AppTunnels>()
-        .map(|state| state.0.has_url())
-        .unwrap_or(false);
 
     let show_item =
         MenuItemBuilder::with_id(MENU_SHOW_WINDOW, locale.text(TrayText::ShowWindow)).build(app)?;
@@ -232,14 +166,6 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             .build(app)?;
     let direct_launch_menu = build_direct_launch_submenu(app, launch_enabled, locale)?;
     let profile_menus = build_agent_profile_submenus(app, launch_enabled, locale)?;
-    let open_local_item =
-        MenuItemBuilder::with_id(MENU_OPEN_LOCAL, locale.text(TrayText::OpenDashboard))
-            .enabled(launch_enabled)
-            .build(app)?;
-    let open_tunnel_item =
-        MenuItemBuilder::with_id(MENU_OPEN_TUNNEL, locale.text(TrayText::OpenTunnel))
-            .enabled(launch_enabled && has_tunnel_url)
-            .build(app)?;
     let quit_item = MenuItemBuilder::with_id(MENU_QUIT, locale.text(TrayText::Quit)).build(app)?;
 
     let mut builder = MenuBuilder::new(app)
@@ -251,13 +177,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         builder = builder.item(profile_menu);
     }
 
-    builder
-        .separator()
-        .item(&open_local_item)
-        .item(&open_tunnel_item)
-        .separator()
-        .item(&quit_item)
-        .build()
+    builder.separator().item(&quit_item).build()
 }
 
 fn build_direct_launch_submenu<R: Runtime>(
@@ -540,9 +460,9 @@ mod tests {
     #[test]
     fn native_launch_targets_do_not_use_bridge_label() {
         let target = ProfileLaunchTarget {
-            id: "gemini",
-            label: "Gemini CLI",
-            api_type: "gemini".to_string(),
+            id: "claude",
+            label: "Claude Code",
+            api_type: "anthropic".to_string(),
             bridge_target_api_type: None,
         };
 
@@ -564,14 +484,6 @@ mod tests {
         assert_eq!(
             profile_entry_menu_label(&entry, UiLocale::ZhCn),
             "DeepSeek (代理)"
-        );
-    }
-
-    #[test]
-    fn zh_dashboard_tray_label_uses_dashboard_name() {
-        assert_eq!(
-            UiLocale::ZhCn.text(TrayText::OpenDashboard),
-            "打开 Dashboard"
         );
     }
 

@@ -151,7 +151,7 @@ pub(super) async fn forward_output_to_plugin(
             request_id,
             payload,
         } => {
-            // Forward as a VibeAround ext method so the transport envelope can
+            // Forward as a VibeWbz ext method so the transport envelope can
             // carry the IM chat target while the ACP request keeps its real
             // agent sessionId.
             let request: schema::RequestPermissionRequest =

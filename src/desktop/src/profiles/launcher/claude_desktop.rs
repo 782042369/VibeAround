@@ -1,8 +1,8 @@
 //! Claude Desktop third-party profile config.
 //!
 //! Claude Desktop stores third-party inference profiles under the `Claude-3p`
-//! user data directory. Profile launches point Claude at VibeAround's local
-//! bridge; direct launches remove VibeAround's managed profile and restore the
+//! user data directory. Profile launches point Claude at VibeWbz's local
+//! bridge; direct launches remove VibeWbz's managed profile and restore the
 //! user's previous selection.
 
 use std::collections::BTreeMap;
@@ -16,8 +16,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-const MANAGED_ENTRY_PREFIX: &str = "VibeAround: ";
-const STATE_FILE_NAME: &str = ".vibearound-claude-desktop-state.json";
+const MANAGED_ENTRY_PREFIX: &str = "VibeWbz: ";
+const STATE_FILE_NAME: &str = ".vibewbz-claude-desktop-state.json";
 const CLAUDE_DESKTOP_BRIDGE_MODEL_IDS: &[&str] = &[
     "claude-opus-4-8[1m]",
     "claude-opus-4-7[1m]",
@@ -54,7 +54,7 @@ struct ConfigLibraryEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct VibeAroundClaudeDesktopState {
+struct VibeWbzClaudeDesktopState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     previous_applied_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -303,8 +303,7 @@ fn apply_profile_config_at(
 
     let mut meta = read_json_or_default::<ConfigLibraryMeta>(&meta_path(root))
         .with_context(|| format!("read Claude Desktop config library {:?}", meta_path(root)))?;
-    let previous_state =
-        read_json_or_default::<VibeAroundClaudeDesktopState>(&state_path(root)).ok();
+    let previous_state = read_json_or_default::<VibeWbzClaudeDesktopState>(&state_path(root)).ok();
     let previous_applied_id = previous_state
         .as_ref()
         .and_then(|state| state.previous_applied_id.clone())
@@ -323,7 +322,7 @@ fn apply_profile_config_at(
         &serde_json::json!({
             "inferenceProvider": "gateway",
             "inferenceGatewayBaseUrl": base_url,
-            "inferenceGatewayApiKey": "vibearound-local-bridge",
+            "inferenceGatewayApiKey": "vibewbz-local-bridge",
             "inferenceGatewayAuthScheme": "bearer",
             "modelDiscoveryEnabled": true,
         }),
@@ -339,12 +338,12 @@ fn apply_profile_config_at(
     write_json(&meta_path(root), &meta).context("write Claude Desktop config library metadata")?;
     write_json(
         &state_path(root),
-        &VibeAroundClaudeDesktopState {
+        &VibeWbzClaudeDesktopState {
             previous_applied_id,
             previous_deployment_mode,
         },
     )
-    .context("write Claude Desktop VibeAround state")?;
+    .context("write Claude Desktop VibeWbz state")?;
     set_deployment_mode(root, Some("3p")).context("switch Claude Desktop to third-party mode")?;
     Ok(())
 }
@@ -353,8 +352,7 @@ fn cleanup_profile_config_at(root: &Path) -> anyhow::Result<()> {
     let library_dir = config_library_dir(root);
     let state_path = state_path(root);
     let has_state = state_path.exists();
-    let state =
-        read_json_or_default::<VibeAroundClaudeDesktopState>(&state_path).unwrap_or_default();
+    let state = read_json_or_default::<VibeWbzClaudeDesktopState>(&state_path).unwrap_or_default();
     let meta_file = meta_path(root);
     if !meta_file.exists() {
         if has_state {
@@ -440,7 +438,7 @@ fn is_managed_entry(entry: &ConfigLibraryEntry) -> bool {
 
 fn managed_entry_id(profile_id: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"vibearound:claude-desktop:");
+    hasher.update(b"vibewbz:claude-desktop:");
     hasher.update(profile_id.as_bytes());
     let digest = hasher.finalize();
     let mut bytes = [0_u8; 16];
@@ -642,9 +640,9 @@ mod tests {
 
     fn profile() -> ProfileDef {
         ProfileDef {
-            id: "minimax-test".to_string(),
-            label: "MiniMax Test".to_string(),
-            provider: "minimax".to_string(),
+            id: "gateway-test".to_string(),
+            label: "VibeWbz Gateway Test".to_string(),
+            provider: "custom".to_string(),
             auth_mode: AuthMode::ApiKey,
             api_types: vec!["anthropic".to_string()],
             credentials: BTreeMap::new(),
@@ -656,7 +654,7 @@ mod tests {
 
     fn temp_root(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
-            "vibearound-claude-desktop-{name}-{}",
+            "vibewbz-claude-desktop-{name}-{}",
             uuid::Uuid::new_v4()
         ))
     }
@@ -687,7 +685,7 @@ mod tests {
         apply_profile_config_at(
             &root,
             &profile(),
-            "http://127.0.0.1:12358/va/local-api/minimax-test/claude-anthropic/anthropic",
+            "http://127.0.0.1:12358/va/local-api/gateway-test/claude-anthropic/anthropic",
         )
         .expect("apply Claude Desktop profile");
 
@@ -696,7 +694,7 @@ mod tests {
         assert!(meta
             .entries
             .iter()
-            .any(|entry| entry.name == "VibeAround: MiniMax Test"));
+            .any(|entry| entry.name == "VibeWbz: VibeWbz Gateway Test"));
         let managed_path = config_library_dir(&root).join(format!("{}.json", meta.applied_id));
         let managed: Value = read_json_or_default(&managed_path).expect("read managed config");
         assert_eq!(
@@ -707,7 +705,7 @@ mod tests {
             managed
                 .get("inferenceGatewayBaseUrl")
                 .and_then(Value::as_str),
-            Some("http://127.0.0.1:12358/va/local-api/minimax-test/claude-anthropic/anthropic")
+            Some("http://127.0.0.1:12358/va/local-api/gateway-test/claude-anthropic/anthropic")
         );
         assert_eq!(
             managed
@@ -749,7 +747,7 @@ mod tests {
         apply_profile_config_at(
             &root,
             &profile(),
-            "http://127.0.0.1:12358/va/local-api/minimax-test/claude-anthropic/anthropic",
+            "http://127.0.0.1:12358/va/local-api/gateway-test/claude-anthropic/anthropic",
         )
         .expect("apply Claude Desktop profile");
 

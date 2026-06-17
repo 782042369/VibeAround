@@ -209,10 +209,8 @@ mod tests {
 
     #[test]
     fn title_reads_past_claude_project_context() {
-        let path = std::env::temp_dir().join(format!(
-            "vibearound-claude-title-{}.jsonl",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("vibewbz-claude-title-{}.jsonl", std::process::id()));
         let context = json!({
             "type": "user",
             "message": { "role": "user", "content": "CLAUDE.md\nProject instructions" }

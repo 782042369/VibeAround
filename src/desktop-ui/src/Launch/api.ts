@@ -2,8 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   CatalogEntry,
-  CompatibilityBridgeMode,
-  AgentLaunchArgs,
   AgentLaunchPreference,
   ConnectionAgentId,
   ProfileDef,
@@ -42,18 +40,6 @@ export function launchProfile(id: string, launchTarget: string): Promise<void> {
   return invoke<void>("profiles_launch", { id, launchTarget });
 }
 
-export function launchProfileResume(
-  id: string,
-  launchTarget: string,
-  sessionId: string,
-): Promise<void> {
-  return invoke<void>("profiles_launch_resume", {
-    id,
-    launchTarget,
-    sessionId,
-  });
-}
-
 export function launchDefault(): Promise<void> {
   return invoke<void>("profiles_launch_default");
 }
@@ -61,13 +47,6 @@ export function launchDefault(): Promise<void> {
 /** Direct launch — no env, CLI uses whatever global OAuth the user has. */
 export function launchDirect(agentId: string): Promise<void> {
   return invoke<void>("profiles_launch_direct", { agentId });
-}
-
-export function launchDirectResume(
-  agentId: string,
-  sessionId: string,
-): Promise<void> {
-  return invoke<void>("profiles_launch_direct_resume", { agentId, sessionId });
 }
 
 export interface GoogleOAuthStatus {
@@ -91,10 +70,7 @@ export interface AgentSummary {
   install_type: string | null;
   pty_command: string;
   direct_only: boolean;
-  acp_program: string;
-  acp_args: string[];
-  acp_npm_package?: string | null;
-  acp_bin_name?: string | null;
+  download_url?: string | null;
 }
 
 /** Reuses the onboarding command that returns all CLIs in agents.json. */
@@ -183,15 +159,7 @@ export function getDesktopAppEntries(): Promise<DesktopAppDetectionFile | null> 
   return invoke<DesktopAppDetectionFile | null>("get_desktop_app_entries");
 }
 
-export interface TerminalOption {
-  id: string;
-  label: string;
-  installed: boolean;
-}
-
 export interface LauncherPreferences {
-  terminal: string;
-  options: TerminalOption[];
   workspace: string;
   workspaceOptions: WorkspaceOption[];
   selectedAgent: string;
@@ -200,18 +168,7 @@ export interface LauncherPreferences {
   defaultProfileId?: string | null;
   enabledAgents: string[];
   defaultProfiles: Record<string, string>;
-  compatibilityBridge: CompatibilityBridgeMode;
   profileConnections: ProfileConnections;
-}
-
-export interface LaunchSessionSummary {
-  agentId: string;
-  sessionId: string;
-  title: string;
-  workspace: string;
-  updatedAt: number;
-  shortId: string;
-  archived: boolean;
 }
 
 export interface WorkspaceOption {
@@ -236,22 +193,6 @@ export function listLauncherWorkspaces(agentId?: string): Promise<WorkspaceOptio
   });
 }
 
-export function listLaunchSessions(
-  agentId: string,
-  workspacePath: string,
-  includeArchived = false,
-): Promise<LaunchSessionSummary[]> {
-  return invoke<LaunchSessionSummary[]>("launcher_list_sessions", {
-    agentId,
-    workspacePath,
-    includeArchived,
-  });
-}
-
-export function setLauncherTerminal(terminalId: string): Promise<void> {
-  return invoke<void>("launcher_set_terminal", { terminalId });
-}
-
 export function setLauncherWorkspace(
   workspacePath: string,
   agentId?: string,
@@ -270,12 +211,6 @@ export function reorderLauncherWorkspaces(
   workspacePaths: string[],
 ): Promise<void> {
   return invoke<void>("launcher_reorder_workspaces", { workspacePaths });
-}
-
-export function setLauncherCompatibilityBridge(
-  mode: CompatibilityBridgeMode,
-): Promise<void> {
-  return invoke<void>("launcher_set_compatibility_bridge", { mode });
 }
 
 export function setProfileConnection(
@@ -302,16 +237,6 @@ export function setLauncherAgentProfile(
   profileId: string | null,
 ): Promise<void> {
   return invoke<void>("launcher_set_agent_profile", { agentId, profileId });
-}
-
-export function setLauncherAgentLaunchArgs(
-  agentId: string,
-  launchArgs: AgentLaunchArgs,
-): Promise<void> {
-  return invoke<void>("launcher_set_agent_launch_args", {
-    agentId,
-    launchArgs,
-  });
 }
 
 export function setLauncherAgentExecutablePath(

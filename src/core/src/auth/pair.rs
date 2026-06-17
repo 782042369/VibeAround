@@ -5,7 +5,7 @@
 //! 1. Browser opens `/va/` → frontend calls `POST /va/api/pair/start`
 //! 2. Backend generates a `session_id` (UUID) + 6-digit code, returns both
 //! 3. Frontend displays: "Your pairing code: **847291**"
-//! 4. User sends `/pair 847291` in any IM channel connected to VibeAround
+//! 4. User sends `/pair 847291` in any IM channel connected to VibeWbz
 //! 5. IM handler calls [`validate`] — on match, marks session as verified
 //! 6. Frontend polls `GET /va/api/pair/status?sid=...` → detects verified
 //! 7. Status endpoint returns auth token → frontend stores it in cookie

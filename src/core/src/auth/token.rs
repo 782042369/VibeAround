@@ -2,7 +2,7 @@
 //!
 //! ## Threat model
 //!
-//! VibeAround is a single-user desktop app. The web dashboard, MCP endpoint,
+//! VibeWbz is a single-user desktop app. The web dashboard, MCP endpoint,
 //! and WebSocket routes are reachable on `http://127.0.0.1:{port}` and —
 //! when the tunnel is enabled — via a public URL. Without auth, any browser
 //! tab the user visits can fetch from the loopback port (via DNS rebinding
@@ -12,7 +12,7 @@
 //! ## Design
 //!
 //! - On every daemon start we generate a fresh 32-byte token from `OsRng`.
-//! - The token is hex-encoded (64 chars) and written to `~/.vibearound/auth.json`
+//! - The token is hex-encoded (64 chars) and written to `~/.vibewbz/auth.json`
 //!   with mode `0600` on Unix.
 //! - The file stores `{ "port": <u16>, "token": "<hex>" }` so the Tauri tray
 //!   and desktop-ui can discover both values without a side channel.
@@ -61,14 +61,14 @@ impl AuthToken {
     }
 }
 
-/// File record written to `~/.vibearound/auth.json`.
+/// File record written to `~/.vibewbz/auth.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthFile {
     pub port: u16,
     pub token: String,
 }
 
-/// Path of the auth token file: `~/.vibearound/auth.json`.
+/// Path of the auth token file: `~/.vibewbz/auth.json`.
 pub fn token_file_path() -> PathBuf {
     config::data_dir().join("auth.json")
 }

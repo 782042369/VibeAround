@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, Notify};
 
-use onboarding::{OnboardingGate, OnboardingSessions};
+use onboarding::OnboardingGate;
 use startkit::StartkitRunState;
 
 #[derive(serde::Serialize)]
@@ -25,9 +25,7 @@ struct AppInfo {
     arch: &'static str,
 }
 
-/// Shared `TunnelManager` handle, injected into Tauri state for the
-/// tray (live tunnel menu item) and any IPC command that needs the
-/// current tunnel URL.
+/// Shared `TunnelManager` handle kept for the local daemon state.
 pub struct AppTunnels(pub Arc<common::tunnels::TunnelManager>);
 
 /// Whether the app is currently in onboarding mode (tray reads this).
@@ -98,10 +96,10 @@ pub async fn restart_daemon<R: Runtime>(app: &AppHandle<R>) -> Result<(), String
     controller.restart().await
 }
 
-/// Return the current web-server auth token + port so the desktop-ui (a
+/// Return the current local API auth token + port so the desktop-ui (a
 /// cross-origin Tauri webview) can authenticate against the daemon.
 ///
-/// Reads directly from `~/.vibearound/auth.json`, which `ServerDaemon` writes
+/// Reads directly from `~/.vibewbz/auth.json`, which `ServerDaemon` writes
 /// on every start. Returns `None` before the daemon has started for the
 /// first time.
 #[tauri::command]
@@ -138,15 +136,7 @@ fn get_desktop_app_entries() -> Option<desktop_detection::DesktopAppDetectionFil
     desktop_detection::read_detected_desktop_apps()
 }
 
-/// Open an HTTP URL in the user's default external browser.
-///
-/// We can't use `window.open` from the desktop-ui because it creates a
-/// Tauri child webview instead of hitting the OS-level handler. This
-/// command shells out via the `open` crate, which is what the tray also
-/// uses for "Open Local Dashboard".
-///
-/// Used for dashboard/tunnel links and trusted app-owned external links such
-/// as GitHub release downloads.
+/// Open a trusted HTTP URL in the user's default external browser.
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     // Minimal guard: only allow http/https schemes. Prevents a rogue
@@ -178,9 +168,9 @@ fn main() {
 
     // Persist the auth token immediately so the desktop-ui (which runs in
     // a Tauri webview that starts rendering before the daemon has fully
-    // booted) can read `~/.vibearound/auth.json` from its first render.
+    // booted) can read `~/.vibewbz/auth.json` from its first render.
     if let Err(e) = daemon.persist_auth_token() {
-        tracing::info!("[VibeAround] Failed to persist auth token: {}", e);
+        tracing::info!("[VibeWbz] Failed to persist auth token: {}", e);
     }
 
     let onboarding_needed = onboarding::needs_onboarding();
@@ -192,7 +182,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tracing::info!(
-                "[VibeAround] ⚠️  Another instance tried to start, focusing existing window"
+                "[VibeWbz] ⚠️  Another instance tried to start, focusing existing window"
             );
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
@@ -203,9 +193,6 @@ fn main() {
         .manage(AppTunnels(tunnels))
         .manage(OnboardingGate {
             notify: Arc::clone(&gate),
-        })
-        .manage(OnboardingSessions {
-            plugin_sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
         })
         .manage(OnboardingActive(std::sync::atomic::AtomicBool::new(
             onboarding_needed,
@@ -221,23 +208,11 @@ fn main() {
             restart_services,
             set_ui_locale,
             onboarding::get_settings,
-            onboarding::list_channel_plugins,
             onboarding::save_settings,
-            onboarding::uninstall_agent_integrations,
-            onboarding::install_plugin,
-            onboarding::check_plugin_status,
-            onboarding::plugin_auth_start,
-            onboarding::plugin_auth_wait,
-            onboarding::plugin_auth_cancel,
             onboarding::finish_onboarding,
             onboarding::list_agents,
             onboarding::scan_agent_install_status,
             onboarding::check_agent_updates,
-            onboarding::check_plugin_updates,
-            onboarding::scan_agent_sdk_status,
-            onboarding::scan_tunnel_status,
-            onboarding::list_tunnels,
-            onboarding::list_plugin_registry,
             startkit::startkit_manifest,
             startkit::startkit_plan,
             startkit::startkit_scan,
@@ -250,14 +225,11 @@ fn main() {
             profiles::profiles_delete,
             profiles::profiles_reorder,
             profiles::profiles_launch,
-            profiles::profiles_launch_resume,
             profiles::profiles_launch_default,
             profiles::profiles_launch_direct,
-            profiles::profiles_launch_direct_resume,
             profiles::profiles_catalog,
             profiles::profiles_google_oauth_status,
             profiles::profiles_google_oauth_login,
-            profiles::launcher_list_sessions,
             profiles::launcher_list_workspaces,
             profiles::launcher_get_preferences,
             profiles::launcher_agent_executable_resolution,
@@ -265,36 +237,22 @@ fn main() {
             profiles::launcher_update_agent,
             profiles::launcher_set_default,
             profiles::launcher_set_agent_profile,
-            profiles::launcher_set_agent_launch_args,
             profiles::launcher_set_agent_executable_path,
             profiles::launcher_set_selected_agent,
-            profiles::launcher_set_terminal,
             profiles::launcher_set_workspace,
             profiles::launcher_remove_workspace,
             profiles::launcher_reorder_workspaces,
-            profiles::launcher_set_compatibility_bridge,
             profiles::launcher_set_profile_connection,
         ])
         .setup({
             let daemon = Arc::clone(&daemon);
             move |app| {
-                // Resolve the web dashboard `dist/` directory.
-                //
-                // - **Dev** (`cargo tauri dev`): read from the source tree so hot
-                //   edits to `src/web/dist` are picked up without rebundling.
-                // - **Release**: read from the Tauri bundle's resource dir. The
-                //   resources glob `../web/dist/**/*` in `tauri.conf.json` copies
-                //   files under `<resource_dir>/_up_/web/dist/`.
-                //
-                // Using `env!("CARGO_MANIFEST_DIR")` unconditionally would bake
-                // the *build machine's* absolute source path into the release
-                // binary — on every other machine that path doesn't exist, the
-                // daemon fails to locate the dashboard, and users hit a broken
-                // install.
+                // Desktop-only builds use the Tauri webview. The local daemon
+                // keeps this optional dist path only for dev-time static assets.
                 let dist_path: PathBuf = {
                     #[cfg(debug_assertions)]
                     {
-                        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web/dist")
+                        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../desktop-ui/dist")
                     }
                     #[cfg(not(debug_assertions))]
                     {
@@ -302,7 +260,7 @@ fn main() {
                             .resource_dir()
                             .map_err(|e| format!("failed to resolve resource_dir: {e}"))?
                             .join("_up_")
-                            .join("web")
+                            .join("desktop-ui")
                             .join("dist")
                     }
                 };
@@ -325,9 +283,9 @@ fn main() {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if onboarding_needed {
-                        tracing::info!("[VibeAround] Waiting for onboarding to complete…");
+                        tracing::info!("[VibeWbz] Waiting for onboarding to complete…");
                         gate.notified().await;
-                        tracing::info!("[VibeAround] Onboarding complete, starting daemon…");
+                        tracing::info!("[VibeWbz] Onboarding complete, starting daemon…");
 
                         // Mark onboarding as done for tray
                         if let Some(state) = app_handle.try_state::<OnboardingActive>() {
@@ -336,7 +294,7 @@ fn main() {
                     }
 
                     if let Err(e) = start_daemon(&app_handle).await {
-                        tracing::info!("[VibeAround] Daemon error: {}", e);
+                        tracing::info!("[VibeWbz] Daemon error: {}", e);
                     }
                 });
 
@@ -350,7 +308,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building VibeAround")
+        .expect("error while building VibeWbz")
         .run(|_app, event| {
             // On app exit — whether via Cmd-Q, dock quit, window close, or
             // tray Quit — synchronously SIGKILL every registered child

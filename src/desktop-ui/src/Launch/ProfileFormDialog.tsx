@@ -1,15 +1,9 @@
-/**
- * Two-step modal: pick a provider, then fill its credentials.
- *
- * Step 1 lets the user click any catalog tile. Step 2 builds a form by
- * intersecting the catalog API kinds' `fields[]`. We default to the
- * api_key auth mode and let custom providers multi-select API kinds when
- * one key supports more than one.
- */
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useI18n } from "@va/i18n";
+import { ExternalLink, Eye, EyeOff, KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { openExternalUrl } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -18,36 +12,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CUSTOM_PROVIDER } from "./ProfileFormDialog.constants";
-import { FormBody } from "./ProfileFormBody";
-import { ProviderGrid } from "./ProfileProviderGrid";
+import { Input } from "@/components/ui/input";
 import {
-  arraysEqual,
-  collectFields,
-  defaultAuthMode,
-  defaultApiKindEndpoints,
-  overridesForEndpoints,
-  pruneOverrides,
-  pruneProviderSettings,
-  providerApiKindEndpoints,
-  providerApiKindsEditable,
-  providerUsesEndpointGroups,
-  requiresProfileModel,
-  selectedEndpointGroup,
-  selectedEndpoint,
-  stripEmpty,
-} from "./profileFormHelpers";
+  GATEWAY_BASE_URL,
+  GATEWAY_PROFILE_LABEL,
+  gatewayProfileDraft,
+} from "./gatewayProfile";
 import type {
-  ApiTypeOverrides,
-  AuthMode,
   CatalogEntry,
   ProfileDef,
   ProfileDraft,
-  ProviderSettings,
 } from "./types";
-import { isProviderApiKind } from "./types";
 
-type Step = "pick-provider" | "fill-form";
+const GATEWAY_HOME_URL = "https://ai.939593.xyz";
+const GATEWAY_TOPUP_URL = "https://ai.939593.xyz/console/topup";
+const GATEWAY_TOKEN_URL = "https://ai.939593.xyz/console/token";
 
 export type ProfileFormSubmit =
   | { type: "create"; draft: ProfileDraft }
@@ -62,158 +41,39 @@ interface Props {
 }
 
 export function ProfileFormDialog({
-  catalog,
   initial,
   onClose,
   onSave,
 }: Props) {
   const { t } = useI18n();
   const editing = !!initial;
-
-  const { initialProvider, providerMissing } = useMemo(() => {
-    if (!initial) return { initialProvider: null, providerMissing: false };
-    if (initial.provider === "custom") {
-      return { initialProvider: CUSTOM_PROVIDER, providerMissing: false };
-    }
-    const found = catalog.find((c) => c.id === initial.provider);
-    if (!found) {
-      return { initialProvider: CUSTOM_PROVIDER, providerMissing: true };
-    }
-    return { initialProvider: found, providerMissing: false };
-  }, [catalog, initial]);
-
-  const [step, setStep] = useState<Step>(
-    editing ? "fill-form" : "pick-provider",
-  );
-  const [provider, setProvider] = useState<CatalogEntry | null>(
-    initialProvider,
-  );
-  const [label, setLabel] = useState(initial?.label ?? "");
-  const [selectedApiTypes, setSelectedApiTypes] = useState<string[]>(
-    Array.from(new Set((initial?.api_types ?? []).filter(isProviderApiKind))),
-  );
-  const [authMode, setAuthMode] = useState<AuthMode>(
-    initial?.auth_mode ?? "api_key",
-  );
-  const [credentials, setCredentials] = useState<Record<string, string>>(
-    initial?.credentials ?? {},
-  );
-  const [overrides, setOverrides] = useState<Record<string, ApiTypeOverrides>>(
-    initial?.overrides ?? {},
-  );
-  const [useSettingsProxy, setUseSettingsProxy] = useState(
-    !!initial?.use_settings_proxy,
-  );
-  const [providerSettings, setProviderSettings] = useState<ProviderSettings>(
-    initial?.provider_settings ?? {},
-  );
-  const [revealKeys, setRevealKeys] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [gatewayLabel, setGatewayLabel] = useState(
+    initial?.label ?? GATEWAY_PROFILE_LABEL,
+  );
+  const [gatewayBaseUrl, setGatewayBaseUrl] = useState(
+    initial?.overrides.anthropic?.base_url ??
+      initial?.overrides["openai-responses"]?.base_url ??
+      GATEWAY_BASE_URL,
+  );
+  const [gatewayKey, setGatewayKey] = useState(initial?.credentials.api_key ?? "");
+  const [gatewayKeyVisible, setGatewayKeyVisible] = useState(false);
 
-  useEffect(() => {
-    if (!provider || editing) return;
-    const apiKindEndpoints = defaultApiKindEndpoints(provider);
-    const apiTypes = apiKindEndpoints.map((e) => e.api_type);
-    const nextOverrides = overridesForEndpoints(apiKindEndpoints);
-    setSelectedApiTypes(apiTypes);
-    setOverrides(nextOverrides);
-    setAuthMode(defaultAuthMode(provider, apiTypes, nextOverrides));
-    setProviderSettings(
-      provider.id === "deepseek"
-        ? {
-            deepseek: {
-              thinking: true,
-              replay_reasoning_content: true,
-            },
-          }
-        : {},
-    );
-  }, [provider, editing]);
-
-  useEffect(() => {
-    if (!provider || providerApiKindsEditable(provider)) return;
-    const endpoints = providerUsesEndpointGroups(provider)
-      ? (selectedEndpointGroup(provider, selectedApiTypes, overrides)?.endpoints ??
-        defaultApiKindEndpoints(provider))
-      : providerApiKindEndpoints(provider);
-    const apiKinds = endpoints.map((e) => e.api_type);
-    setSelectedApiTypes((current) =>
-      arraysEqual(current, apiKinds) ? current : apiKinds,
-    );
-    setAuthMode((current) =>
-      defaultAuthMode(provider, apiKinds, overrides, current),
-    );
-  }, [provider, overrides, selectedApiTypes]);
-
-  useEffect(() => {
-    if (!provider || selectedApiTypes.length === 0) return;
-    setAuthMode((current) =>
-      defaultAuthMode(provider, selectedApiTypes, overrides, current),
-    );
-  }, [provider, overrides, selectedApiTypes]);
-
-  function handlePickProvider(c: CatalogEntry) {
-    setProvider(c);
-    if (!label) setLabel(c.label);
-    setStep("fill-form");
-  }
-
-  async function handleSave() {
+  async function handleSaveGateway() {
     setError(null);
-    if (!provider) return;
-    if (!label.trim()) {
-      setError(t("Label is required"));
+    if (!gatewayLabel.trim()) {
+      setError(t("Profile name is required"));
       return;
     }
-    if (selectedApiTypes.length === 0) {
-      setError(t("Pick at least one API type"));
+    if (!gatewayKey.trim()) {
+      setError(t("Gateway key is required"));
       return;
     }
-
-    const fieldDefs = collectFields(provider, selectedApiTypes, authMode, overrides);
-    for (const f of fieldDefs) {
-      if (f.required && !credentials[f.name]?.trim()) {
-        setError(t("{{field}} is required", { field: t(f.label) }));
-        return;
-      }
-    }
-
-    for (const apiType of selectedApiTypes) {
-      const ep = selectedEndpoint(provider, apiType, overrides);
-      if (!ep) continue;
-      const ov = overrides[apiType];
-      if (requiresProfileModel(provider, ep) && !ov?.model?.trim()) {
-        setError(t("Model is required for {{apiType}}", { apiType }));
-        return;
-      }
-      if (ep.default_base_url) continue;
-      if (!ov?.base_url?.trim()) {
-        setError(t("Base URL is required for {{apiType}}", { apiType }));
-        return;
-      }
-    }
-
-    const credentialFieldNames = new Set(fieldDefs.map((field) => field.name));
-    const selectedCredentials = Object.fromEntries(
-      Object.entries(credentials).filter(([name]) =>
-        credentialFieldNames.has(name),
-      ),
-    );
-
-    const draft: ProfileDraft = {
-      label: label.trim(),
-      provider: provider.id,
-      auth_mode: authMode,
-      api_types: selectedApiTypes,
-      credentials: stripEmpty(selectedCredentials),
-      overrides: pruneOverrides(overrides, selectedApiTypes, provider),
-      use_settings_proxy: useSettingsProxy,
-      provider_settings: pruneProviderSettings(provider.id, providerSettings),
-    };
 
     setSaving(true);
     try {
+      const draft = gatewayProfileDraft(gatewayKey, gatewayBaseUrl, gatewayLabel);
       await onSave(
         initial
           ? { type: "update", profile: { id: initial.id, ...draft } }
@@ -226,6 +86,10 @@ export function ProfileFormDialog({
     }
   }
 
+  const dialogTitle = editing
+    ? t("Edit profile · {{label}}", { label: initial!.label })
+    : t("Configure VibeWbz Gateway");
+
   return (
     <Dialog
       open
@@ -235,51 +99,25 @@ export function ProfileFormDialog({
     >
       <DialogContent className="!flex max-h-[calc(100vh-64px)] w-[min(960px,calc(100vw-32px))] max-w-[calc(100vw-32px)] flex-col overflow-hidden p-0 sm:max-w-[min(960px,calc(100vw-32px))]">
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-12">
-          <DialogTitle>
-            {editing
-              ? t("Edit profile · {{label}}", { label: initial!.label })
-              : step === "pick-provider"
-                ? t("Pick a provider")
-                : t("New profile · {{provider}}", { provider: provider?.label ?? "" })}
-          </DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription className="sr-only">
-            {t("Configure a Quick Launch provider profile.")}
+            {t("Configure the default gateway profile.")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 [scrollbar-gutter:stable]">
-          {step === "pick-provider" ? (
-            <ProviderGrid catalog={catalog} onPick={handlePickProvider} />
-          ) : provider ? (
-            <FormBody
-              provider={provider}
-              label={label}
-              setLabel={setLabel}
-              selectedApiTypes={selectedApiTypes}
-              setSelectedApiTypes={setSelectedApiTypes}
-              authMode={authMode}
-              setAuthMode={setAuthMode}
-              credentials={credentials}
-              setCredentials={setCredentials}
-              overrides={overrides}
-              setOverrides={setOverrides}
-              useSettingsProxy={useSettingsProxy}
-              setUseSettingsProxy={setUseSettingsProxy}
-              providerSettings={providerSettings}
-              setProviderSettings={setProviderSettings}
-              revealKeys={revealKeys}
-              setRevealKeys={setRevealKeys}
-            />
-          ) : null}
+          <GatewayKeyForm
+            label={gatewayLabel}
+            baseUrl={gatewayBaseUrl}
+            apiKey={gatewayKey}
+            reveal={gatewayKeyVisible}
+            onLabel={setGatewayLabel}
+            onBaseUrl={setGatewayBaseUrl}
+            onApiKey={setGatewayKey}
+            onReveal={setGatewayKeyVisible}
+          />
         </div>
 
-        {providerMissing && (
-          <div className="shrink-0 border-t border-amber-500/20 bg-amber-500/10 px-6 py-2 text-xs text-amber-700">
-            ⚠ {t("The provider {{provider}} is no longer in the catalog. Form fell back to a custom endpoint — re-pick a provider via Back, or edit the URL/key and save.", {
-              provider: initial?.provider ?? "",
-            })}
-          </div>
-        )}
         {error && (
           <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-6 py-2 text-xs text-destructive">
             {error}
@@ -287,39 +125,138 @@ export function ProfileFormDialog({
         )}
 
         <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:justify-between">
-          <div>
-            {step === "fill-form" && !editing && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setStep("pick-provider")}
-              >
-                {t("Change provider")}
-              </Button>
-            )}
-          </div>
+          <div />
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={onClose}>
               {t("Cancel")}
             </Button>
-            {step === "fill-form" && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving
-                  ? t("Saving…")
-                  : editing
-                    ? t("Save changes")
-                    : t("Create profile")}
-              </Button>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveGateway}
+              disabled={saving}
+            >
+              {saving
+                ? t("Saving…")
+                : editing
+                  ? t("Save changes")
+                  : t("Save gateway")}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function GatewayKeyForm({
+  label,
+  baseUrl,
+  apiKey,
+  reveal,
+  onLabel,
+  onBaseUrl,
+  onApiKey,
+  onReveal,
+}: {
+  label: string;
+  baseUrl: string;
+  apiKey: string;
+  reveal: boolean;
+  onLabel: (value: string) => void;
+  onBaseUrl: (value: string) => void;
+  onApiKey: (value: string) => void;
+  onReveal: (value: boolean) => void;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="mx-auto flex min-h-[260px] max-w-xl flex-col justify-center gap-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
+          <KeyRound className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">{t("Default gateway")}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {t("You can keep the default address or change it.")}
+          </div>
+        </div>
+      </div>
+
+      <label className="space-y-1.5">
+        <span className="text-xs font-medium">{t("Profile name")}</span>
+        <Input
+          value={label}
+          onChange={(event) => onLabel(event.target.value)}
+          placeholder={GATEWAY_PROFILE_LABEL}
+          className="h-9 text-[13px]"
+          autoFocus
+        />
+      </label>
+
+      <label className="space-y-1.5">
+        <span className="text-xs font-medium">{t("Gateway address")}</span>
+        <Input
+          type="url"
+          value={baseUrl}
+          onChange={(event) => onBaseUrl(event.target.value)}
+          placeholder={GATEWAY_BASE_URL}
+          className="h-9 font-mono text-[13px]"
+        />
+      </label>
+
+      <label className="space-y-1.5">
+        <span className="text-xs font-medium">{t("Gateway key")}</span>
+        <div className="relative">
+          <Input
+            type={reveal ? "text" : "password"}
+            value={apiKey}
+            onChange={(event) => onApiKey(event.target.value)}
+            placeholder="sk-..."
+            className="h-9 pr-9 font-mono text-[13px]"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="absolute right-1 top-1 h-7 w-7"
+            onClick={() => onReveal(!reveal)}
+            title={reveal ? t("Hide") : t("Reveal")}
+          >
+            {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+      </label>
+
+      <div className="rounded-md border border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground">
+        <div className="font-medium text-foreground">{t("How to get a gateway key")}</div>
+        <p className="mt-1">
+          {t("Open the official site to register, then top up after registration. Refresh the page after top-up and it can be used normally. If you have questions, ask in the group.")}
+        </p>
+        <p className="mt-1">
+          {t("Open the token page, click add token, choose the features you need, then create the token.")}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <GatewayHelpLink href={GATEWAY_HOME_URL} label={t("Official site")} />
+          <GatewayHelpLink href={GATEWAY_TOPUP_URL} label={t("Top up")} />
+          <GatewayHelpLink href={GATEWAY_TOKEN_URL} label={t("Create token")} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GatewayHelpLink({ href, label }: { href: string; label: string }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground hover:bg-muted"
+      onClick={() => void openExternalUrl(href)}
+      title={href}
+    >
+      <ExternalLink className="h-3 w-3" />
+      {label}
+    </button>
   );
 }

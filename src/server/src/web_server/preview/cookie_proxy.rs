@@ -32,7 +32,7 @@ pub(super) const OWNER_COOKIE: &str = "va_owner";
 /// Fallback handler for root `/` — the cookie-based dev-server proxy.
 ///
 /// Security rules:
-/// - `/va/*` paths → serve dashboard SPA (never proxy)
+/// - `/va/*` paths → return 404 unless a dev-only dashboard dist exists
 /// - Has cookie + `Sec-Fetch-Dest: document` (direct navigation) → redirect to /va/
 /// - Has cookie + iframe/sub-resource context → proxy to dev server
 /// - No cookie → redirect to `/va/`
@@ -40,7 +40,27 @@ pub async fn cookie_proxy_fallback(State(state): State<AppState>, req: Request) 
     // Never proxy /va/ paths — they belong to the dashboard.
     let path = req.uri().path();
     if path == "/va" || path.starts_with("/va/") {
-        return crate::web_server::spa_fallback(state.dist_for_fallback.clone()).await;
+        if let Some(dist_path) = &state.dist_for_fallback {
+            let index_path = dist_path.join("index.html");
+            if let Ok(content) = tokio::fs::read_to_string(&index_path).await {
+                return Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "text/html; charset=utf-8")
+                    .body(Body::from(content))
+                    .unwrap_or_else(|_| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "failed to build response",
+                        )
+                            .into_response()
+                    });
+            }
+        }
+        return (
+            StatusCode::NOT_FOUND,
+            "desktop-only build has no web dashboard",
+        )
+            .into_response();
     }
 
     // Check Sec-Fetch-Dest: only allow iframe and sub-resource contexts.
@@ -252,14 +272,14 @@ fn preview_error_html() -> String {
     </div>
     <div>
       <h1>Preview not available</h1>
-      <p>This page can only be viewed inside a VibeAround preview frame.</p>
+      <p>This page can only be viewed inside a VibeWbz preview frame.</p>
     </div>
   </div>
   <div class="info">
     <p>
       You've navigated directly to a preview proxy URL.
       For security, preview content is only accessible through the
-      VibeAround preview iframe wrapper.
+      VibeWbz preview iframe wrapper.
     </p>
     <p>
       If you had a preview link, it may have expired (links are valid for {TTL_MIN} minutes).
@@ -270,7 +290,7 @@ fn preview_error_html() -> String {
     <li>Ask your coding agent to run <code>preview</code> with the dev server port.</li>
     <li>Open the link the agent provides.</li>
   </ol>
-  <p class="footer">VibeAround · preview links expire after {TTL_MIN} minutes</p>
+  <p class="footer">VibeWbz · preview links expire after {TTL_MIN} minutes</p>
 </div>
 </body>
 </html>"#;

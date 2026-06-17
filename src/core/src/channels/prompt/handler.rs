@@ -261,7 +261,7 @@ async fn handle_command(
             send_system_text(
                 plugin_host,
                 route,
-                "Commands: /switch <agent> [profile], /switch workspace <id|path>, /switch host <agent> [profile], /pair <code>, /pickup <code>, /new, /close. You can also prefix commands with /va or /vibearound. Reply with a listed number or thread id after switching workspace.",
+                "Commands: /switch <agent> [profile], /switch workspace <id|path>, /switch host <agent> [profile], /pair <code>, /pickup <code>, /new, /close. You can also prefix commands with /va or /vibewbz. Reply with a listed number or thread id after switching workspace.",
             )
             .await;
         }
@@ -536,7 +536,7 @@ fn parse_switch_host(rest: &str) -> Option<ThreadCommand> {
 }
 
 fn canonical_thread_command(normalized: &str) -> String {
-    for prefix in ["/va", "/vibearound"] {
+    for prefix in ["/va", "/vibewbz"] {
         if normalized == prefix {
             return "/help".to_string();
         }
@@ -612,7 +612,7 @@ mod tests {
             Some(ThreadCommand::Pair("049778".to_string()))
         );
         assert_eq!(
-            parse_thread_command("/vibearound pair 049778"),
+            parse_thread_command("/vibewbz pair 049778"),
             Some(ThreadCommand::Pair("049778".to_string()))
         );
         assert_eq!(
@@ -620,7 +620,7 @@ mod tests {
             Some(ThreadCommand::Pickup("B8LX".to_string()))
         );
         assert_eq!(
-            parse_thread_command("/vibearound switch workspace general"),
+            parse_thread_command("/vibewbz switch workspace general"),
             Some(ThreadCommand::SwitchWorkspace("general".to_string()))
         );
         assert_eq!(

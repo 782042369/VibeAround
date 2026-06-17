@@ -111,20 +111,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bridge_mapping_canonicalizes_gemini_alias_for_upstream() {
+    fn bridge_mapping_uses_custom_gateway_configured_route() {
         let profile = ProfileDef {
-            id: "gemini-test".to_string(),
-            label: "Gemini Test".to_string(),
-            provider: "gemini".to_string(),
+            id: "custom-test".to_string(),
+            label: "Custom Test".to_string(),
+            provider: "custom".to_string(),
             auth_mode: AuthMode::ApiKey,
             api_types: vec!["openai-chat".to_string()],
             credentials: BTreeMap::new(),
             overrides: [(
                 "openai-chat".to_string(),
                 ApiTypeOverrides {
-                    endpoint_id: Some("gemini-api".to_string()),
+                    endpoint_id: None,
                     base_url: None,
-                    model: Some("gemini-3.1-pro".to_string()),
+                    model: Some("upstream-model".to_string()),
                     reasoning_effort: None,
                     capabilities: None,
                 },
@@ -137,8 +137,8 @@ mod tests {
         let bridge = agent_state::ProfileBridgePreference {
             enabled: true,
             target_api_type: Some("openai-chat".to_string()),
-            upstream_model: Some("gemini-3.1-pro".to_string()),
-            fake_model_id: None,
+            upstream_model: Some("upstream-model".to_string()),
+            fake_model_id: Some("agent-model".to_string()),
             models: Vec::new(),
             headers: BTreeMap::new(),
         };
@@ -146,8 +146,8 @@ mod tests {
         let mapping = bridge_model_mapping(&profile, Some(&bridge), "openai-chat", None)
             .expect("mapping should resolve");
 
-        assert_eq!(mapping.upstream_model, "gemini-3.1-pro-preview");
-        assert_eq!(mapping.agent_model, "gemini-3.1-pro");
+        assert_eq!(mapping.upstream_model, "upstream-model");
+        assert_eq!(mapping.agent_model, "agent-model");
     }
 
     #[test]
@@ -187,9 +187,9 @@ mod tests {
     #[test]
     fn bridge_mapping_matches_claude_context_suffix_alias() {
         let profile = ProfileDef {
-            id: "deepseek-test".to_string(),
-            label: "DeepSeek Test".to_string(),
-            provider: "deepseek".to_string(),
+            id: "custom-test".to_string(),
+            label: "Custom Test".to_string(),
+            provider: "custom".to_string(),
             auth_mode: AuthMode::ApiKey,
             api_types: vec!["openai-chat".to_string()],
             credentials: BTreeMap::new(),

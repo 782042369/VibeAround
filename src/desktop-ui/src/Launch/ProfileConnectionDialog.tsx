@@ -659,8 +659,6 @@ function agentAuthNotice(agentId: ConnectionAgentId): string | null {
       return "If Claude login overrides this profile, run claude auth logout first.";
     case "codex":
       return "If Codex login overrides this profile, run codex logout first.";
-    case "gemini":
-      return "If Gemini uses OAuth, run /auth and choose Gemini API key first.";
     default:
       return null;
   }

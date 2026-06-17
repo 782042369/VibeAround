@@ -28,7 +28,7 @@ fn spawn_powershell(plan: LaunchPlan) -> anyhow::Result<()> {
 
     // Use ShellExecuteW through the `open` crate instead of Rust `Command`.
     // `Command` inherits all inheritable handles by default on Windows; if a
-    // launched CLI keeps the daemon's TCP listener handle alive, VibeAround's
+    // launched CLI keeps the daemon's TCP listener handle alive, VibeWbz's
     // next start sees 127.0.0.1:12358 as occupied by a stale PID.
     open::with(params, "powershell.exe").context("open PowerShell")?;
     Ok(())
@@ -41,7 +41,7 @@ fn write_powershell_launch_script(plan: &LaunchPlan) -> anyhow::Result<PathBuf> 
         plan.windows_executable_path.as_deref(),
     );
     let script_path =
-        std::env::temp_dir().join(format!("vibearound-launch-{}.ps1", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("vibewbz-launch-{}.ps1", uuid::Uuid::new_v4()));
     let body = build_powershell_script(plan, &command, &args);
     std::fs::write(&script_path, body)
         .with_context(|| format!("write launch script {:?}", script_path))?;
@@ -54,10 +54,10 @@ fn build_powershell_script(plan: &LaunchPlan, command: &str, args: &[String]) ->
     let (env, args) = normalize_windows_claude_profile_launch(plan, command, args);
     out.push_str(&format!(
         "$Host.UI.RawUI.WindowTitle = {}\n",
-        powershell_single_quoted(&format!("VibeAround - {}", plan.window_label))
+        powershell_single_quoted(&format!("VibeWbz - {}", plan.window_label))
     ));
     out.push_str(&format!(
-        "Write-Host '# VibeAround profile: {}'\n",
+        "Write-Host '# VibeWbz profile: {}'\n",
         plan.window_label.replace('\'', "''")
     ));
     for (k, v) in &env {
@@ -589,15 +589,15 @@ mod tests {
     #[test]
     fn powershell_script_keeps_codex_config_with_spaces_as_one_argument() {
         let config_arg =
-            r#"model_catalog_json="C:\Program Files\VibeAround\codex-model-catalog.json""#;
+            r#"model_catalog_json="C:\Program Files\VibeWbz\codex-model-catalog.json""#;
         let plan = plan("codex", vec!["-c".to_string(), config_arg.to_string()]);
         let script = build_powershell_script(&plan, &plan.command, &plan.args);
 
         assert!(script.contains("$vaArgs = @(\n"));
         assert!(script.contains("  '-c'\n"));
-        assert!(script.contains("C:\\Program Files\\VibeAround\\codex-model-catalog.json"));
+        assert!(script.contains("C:\\Program Files\\VibeWbz\\codex-model-catalog.json"));
         assert!(script.contains("& $vaCommand @vaArgs"));
-        assert!(!script.contains("Files\\VibeAround\\codex-model-catalog.json'\n"));
+        assert!(!script.contains("Files\\VibeWbz\\codex-model-catalog.json'\n"));
     }
 
     #[test]
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn rewrites_quoted_codex_npm_shim_under_space_path_to_node() {
-        let root = std::env::temp_dir().join(format!("VibeAround Test {}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("VibeWbz Test {}", uuid::Uuid::new_v4()));
         let bin_dir = root.join("bin");
         let codex_js = bin_dir
             .join("node_modules")
@@ -651,7 +651,7 @@ node "%~dp0\node_modules\@openai\codex\bin\codex.js" %*
 
     #[test]
     fn rewrites_claude_npm_shim_to_node_and_preserves_subcommand() {
-        let root = std::env::temp_dir().join(format!("VibeAround Test {}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("VibeWbz Test {}", uuid::Uuid::new_v4()));
         let bin_dir = root.join("bin");
         let claude_js = bin_dir
             .join("node_modules")
@@ -692,7 +692,7 @@ node "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
 
     #[test]
     fn desktop_launch_uses_manual_executable_path() {
-        let root = std::env::temp_dir().join(format!("VibeAround Test {}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("VibeWbz Test {}", uuid::Uuid::new_v4()));
         let exe = root.join("Codex.exe");
         std::fs::create_dir_all(&root).expect("create fixture");
         std::fs::write(&exe, "").expect("write exe fixture");

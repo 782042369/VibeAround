@@ -4,9 +4,7 @@ import {
   Circle,
   Copy,
   ExternalLink,
-  Globe,
   Loader2,
-  MessageSquare,
   Settings2,
   TerminalSquare,
 } from "lucide-react";
@@ -16,7 +14,7 @@ import { openExternalUrl } from "@/lib/api";
 
 import type { StartkitItemReport, StartkitStatus } from "../types";
 
-const GROUP_ORDER = ["computer", "agents", "messaging", "remote"];
+const GROUP_ORDER = ["computer", "agents"];
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export function StartkitReportRow({
@@ -77,7 +75,7 @@ export function StartkitReportRow({
                   title={report.manualUrl}
                 >
                   <ExternalLink className="h-3 w-3" />
-                  {t("Open link")}
+                  {t("Download / open install page")}
                 </button>
               )}
             </div>
@@ -133,10 +131,6 @@ export function groupTitle(id: string): string {
       return "Computer basics";
     case "agents":
       return "Coding agents";
-    case "remote":
-      return "Remote access";
-    case "messaging":
-      return "Messaging";
     default:
       return id;
   }
@@ -151,10 +145,6 @@ export function groupIcon(id: string) {
   switch (id) {
     case "agents":
       return <TerminalSquare className={className} />;
-    case "remote":
-      return <Globe className={className} />;
-    case "messaging":
-      return <MessageSquare className={className} />;
     default:
       return <Settings2 className={className} />;
   }
@@ -240,36 +230,6 @@ export function installProgressLabel(
     return t("Checking {{current}}/{{total}}", { current, total });
   }
   return t("Installing {{current}}/{{total}}", { current, total });
-}
-
-export function tunnelRank(id: string): number {
-  switch (id) {
-    case "cloudflare":
-      return 0;
-    case "none":
-      return 1;
-    case "ngrok":
-      return 2;
-    case "localtunnel":
-      return 3;
-    default:
-      return 10;
-  }
-}
-
-export function tunnelDescription(id: string, t: Translate): string {
-  switch (id) {
-    case "cloudflare":
-      return t("Stable named tunnel with a public hostname.");
-    case "ngrok":
-      return t("Useful when you already have an ngrok account and domain.");
-    case "localtunnel":
-      return t("Quick temporary public URL for lightweight testing.");
-    case "none":
-      return t("Keep everything local on this computer.");
-    default:
-      return t("Remote access provider.");
-  }
 }
 
 function StatusPill({ report, t }: { report: StartkitItemReport; t: Translate }) {

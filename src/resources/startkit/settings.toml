@@ -1,6 +1,6 @@
 [startkit]
-id = "vibearound.startkit"
-name = "VibeAround Startkit"
+id = "vibewbz.startkit"
+name = "VibeWbz Startkit"
 schema = 1
 version = "0.1.0"
 
@@ -25,31 +25,15 @@ id = "essentials.node"
 label = "Node.js"
 group = "computer"
 category = "essentials"
-description = "System Node.js runtime for npm-based agents, tunnels, adapters, and channel plugins."
+description = "System Node.js runtime for Claude Code and Codex CLI."
 platforms = ["macos", "windows"]
-include_if = ["channels:any", "tunnel:localtunnel"]
+include_if = ["agent:claude", "agent:codex"]
 severity = "blocker"
 min_version = "22.0.0"
 
 [items.detect]
 macos = "scripts/macos/detect-node.sh"
 windows = "scripts/windows/detect-node.ps1"
-
-[[items]]
-id = "essentials.git"
-label = "Git"
-group = "computer"
-category = "essentials"
-description = "Git required to install and update channel plugins."
-platforms = ["macos", "windows"]
-include_if = ["channels:any"]
-severity = "blocker"
-program = "git"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
 
 [[items]]
 id = "agents.codex.cli"
@@ -76,189 +60,3 @@ depends_on = ["essentials.node"]
 severity = "blocker"
 program = "claude"
 version_arg = "--version"
-
-[[items]]
-id = "agents.pi.cli"
-label = "Pi"
-group = "agents"
-category = "agents"
-description = "Pi Coding Agent from PATH or Startkit npm install."
-platforms = ["macos", "windows"]
-include_if = ["agent:pi"]
-depends_on = ["essentials.node"]
-severity = "warning"
-program = "pi"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[[items]]
-id = "agents.gemini.cli"
-label = "Gemini CLI"
-group = "agents"
-category = "agents"
-description = "Google Gemini CLI available on PATH."
-platforms = ["macos", "windows"]
-include_if = ["agent:gemini"]
-severity = "warning"
-program = "gemini"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[[items]]
-id = "agents.opencode.cli"
-label = "Opencode"
-group = "agents"
-category = "agents"
-description = "OpenCode AI agent available on PATH."
-platforms = ["macos", "windows"]
-include_if = ["agent:opencode"]
-severity = "warning"
-program = "opencode"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[[items]]
-id = "agents.cursor.cli"
-label = "Cursor CLI"
-group = "agents"
-category = "agents"
-description = "Cursor agent CLI available on PATH."
-platforms = ["macos", "windows"]
-include_if = ["agent:cursor"]
-severity = "warning"
-program = "cursor-agent"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[[items]]
-id = "agents.kiro.cli"
-label = "Kiro CLI"
-group = "agents"
-category = "agents"
-description = "Amazon Kiro CLI available on PATH."
-platforms = ["macos", "windows"]
-include_if = ["agent:kiro"]
-severity = "warning"
-program = "kiro-cli"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[[items]]
-id = "agents.qwen-code.cli"
-label = "Qwen Code"
-group = "agents"
-category = "agents"
-description = "Qwen Code CLI available on PATH."
-platforms = ["macos", "windows"]
-include_if = ["agent:qwen-code"]
-severity = "warning"
-program = "qwen"
-version_arg = "--version"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[[items]]
-id = "agents.adapters"
-label = "Agent ACP adapters"
-group = "agents"
-category = "agent_sdk"
-description = "ACP adapters for selected coding agents."
-platforms = ["macos", "windows"]
-include_if = ["agent:npm_adapter"]
-depends_on = ["essentials.node"]
-severity = "blocker"
-kind = "builtin_agent_adapters"
-
-[[items]]
-id = "tunnels.localtunnel.package"
-label = "localtunnel"
-group = "remote"
-category = "tunnels"
-description = "Localtunnel npm package in VibeAround's managed dependency cache."
-platforms = ["macos", "windows"]
-include_if = ["managed-tunnel:localtunnel"]
-depends_on = ["essentials.node"]
-severity = "blocker"
-managed = true
-kind = "managed_npm_package"
-plugin_dependency = "tunnel-localtunnel"
-npm_package = "localtunnel"
-program = "lt"
-
-[[items]]
-id = "tunnels.cloudflare.binary"
-label = "cloudflared"
-group = "remote"
-category = "tunnels"
-description = "Cloudflare tunnel binary from PATH or VibeAround's managed dependency cache."
-platforms = ["macos", "windows"]
-include_if = ["tunnel:cloudflare"]
-severity = "blocker"
-program = "cloudflared"
-version_arg = "--version"
-managed = true
-plugin_dependency = "tunnel-cloudflare"
-
-[items.detect]
-macos = "scripts/macos/detect-program.sh"
-windows = "scripts/windows/detect-program.ps1"
-
-[items.install]
-macos = "scripts/macos/install-cloudflared.sh"
-windows = "scripts/windows/install-cloudflared.ps1"
-
-[[items]]
-id = "tunnels.cloudflare.token"
-label = "Cloudflare Tunnel Token"
-group = "remote"
-category = "config"
-description = "Token copied from a Cloudflare named tunnel."
-platforms = ["macos", "windows"]
-include_if = ["tunnel:cloudflare"]
-depends_on = ["tunnels.cloudflare.binary"]
-severity = "needs_input"
-kind = "config"
-settings_key = "tunnel.cloudflare.tunnel_token"
-secret = true
-
-[[items]]
-id = "tunnels.cloudflare.hostname"
-label = "Cloudflare Hostname"
-group = "remote"
-category = "config"
-description = "Public hostname routed to the Cloudflare tunnel."
-platforms = ["macos", "windows"]
-include_if = ["tunnel:cloudflare"]
-depends_on = ["tunnels.cloudflare.token"]
-severity = "needs_input"
-kind = "config"
-settings_key = "tunnel.cloudflare.hostname"
-
-[[items]]
-id = "channels.plugins"
-label = "Channel plugins"
-group = "messaging"
-category = "channels"
-description = "Selected messaging channel plugins."
-platforms = ["macos", "windows"]
-include_if = ["channels:any"]
-depends_on = ["essentials.node", "essentials.git"]
-severity = "blocker"
-kind = "builtin_channel_plugins"

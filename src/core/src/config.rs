@@ -1,5 +1,5 @@
 //! Config loading helpers.
-//! All config comes from ~/.vibearound/settings.json.
+//! All config comes from ~/.vibewbz/settings.json.
 //! Callers load a fresh Config when they need one.
 
 use std::collections::BTreeMap;
@@ -33,9 +33,9 @@ pub fn home_dir() -> PathBuf {
     )
 }
 
-/// Data directory: ~/.vibearound
+/// Data directory: ~/.vibewbz
 pub fn data_dir() -> PathBuf {
-    home_dir().join(".vibearound")
+    home_dir().join(".vibewbz")
 }
 
 /// Runtime state directory for append-only stores and other non-config data.
@@ -95,32 +95,32 @@ pub fn archive_state_file(path: &Path, reason: &str) -> std::io::Result<PathBuf>
     Ok(archive)
 }
 
-/// Ensure ~/.vibearound/ exists with settings.json and workspaces/.
+/// Ensure ~/.vibewbz/ exists with settings.json and workspaces/.
 fn init_data_dir() {
     let dir = data_dir();
     if let Err(e) = std::fs::create_dir_all(&dir) {
-        tracing::info!("[VibeAround] Failed to create data dir {:?}: {}", dir, e);
+        tracing::info!("[VibeWbz] Failed to create data dir {:?}: {}", dir, e);
         return;
     }
     let settings_path = dir.join("settings.json");
     if !settings_path.exists() {
         tracing::info!(
-            "[VibeAround] Creating default settings.json at {:?}",
+            "[VibeWbz] Creating default settings.json at {:?}",
             settings_path
         );
         if let Err(e) = std::fs::write(&settings_path, DEFAULT_SETTINGS_JSON) {
-            tracing::info!("[VibeAround] Failed to write settings.json: {}", e);
+            tracing::info!("[VibeWbz] Failed to write settings.json: {}", e);
         } else if let Err(e) = crate::auth::set_owner_only(&settings_path) {
-            tracing::info!("[VibeAround] Failed to chmod settings.json: {}", e);
+            tracing::info!("[VibeWbz] Failed to chmod settings.json: {}", e);
         }
     }
     let ws_dir = dir.join("workspaces");
     if let Err(e) = std::fs::create_dir_all(&ws_dir) {
-        tracing::info!("[VibeAround] Failed to create workspaces dir: {}", e);
+        tracing::info!("[VibeWbz] Failed to create workspaces dir: {}", e);
     }
     let state_dir = state_dir();
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
-        tracing::info!("[VibeAround] Failed to create state dir: {}", e);
+        tracing::info!("[VibeWbz] Failed to create state dir: {}", e);
     }
 }
 
@@ -145,7 +145,7 @@ pub struct Config {
     pub cloudflare_hostname: Option<String>,
     pub toolchain_mode: ToolchainMode,
     // --- Workspaces ---
-    /// User-added project folders (not including the built-in ~/.vibearound/workspaces/).
+    /// User-added project folders (not including the built-in ~/.vibewbz/workspaces/).
     pub workspaces: Vec<PathBuf>,
     pub preview_base_url: Option<String>,
     pub tmux_detach_others: bool,
@@ -180,7 +180,7 @@ pub enum ToolchainMode {
 impl ToolchainMode {
     pub fn from_config(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
-            "managed" | "vibearound" | "vibearound_managed" => Self::Managed,
+            "managed" | "vibewbz" | "vibewbz_managed" => Self::Managed,
             _ => Self::System,
         }
     }
@@ -284,7 +284,7 @@ impl Config {
     }
 
     /// Resolve the workspace directory for an agent session.
-    /// The default workspace is fixed to ~/.vibearound/workspaces.
+    /// The default workspace is fixed to ~/.vibewbz/workspaces.
     pub fn resolve_workspace(&self, _agent_kind: &str) -> PathBuf {
         builtin_workspaces_dir()
     }
@@ -644,7 +644,7 @@ fn expand_home(s: &str) -> PathBuf {
     }
 }
 
-/// The built-in workspaces root: ~/.vibearound/workspaces/
+/// The built-in workspaces root: ~/.vibewbz/workspaces/
 pub fn builtin_workspaces_dir() -> PathBuf {
     data_dir().join("workspaces")
 }
@@ -783,7 +783,7 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         std::env::temp_dir().join(format!(
-            "vibearound-config-{name}-{}-{nonce}",
+            "vibewbz-config-{name}-{}-{nonce}",
             std::process::id()
         ))
     }

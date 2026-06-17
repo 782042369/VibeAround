@@ -15,7 +15,7 @@ pub(super) async fn bearer_token(client: &reqwest::Client) -> Result<String, Res
         }
     }
 
-    match google_oauth::vibearound_access_token(client).await {
+    match google_oauth::vibewbz_access_token(client).await {
         Ok(token) => return Ok(token),
         Err(primary_error) => {
             let mut fallback_errors = vec![format!("{primary_error:#}")];
@@ -34,7 +34,7 @@ pub(super) async fn bearer_token(client: &reqwest::Client) -> Result<String, Res
             Err(json_error(
                 StatusCode::UNAUTHORIZED,
                 &format!(
-                    "Google account OAuth is not connected. Choose Gemini → Google accounts in VibeAround, click Sign in with Google, then try again. Details: {}",
+                    "Google account OAuth is not connected. Choose Gemini → Google accounts in VibeWbz, click Sign in with Google, then try again. Details: {}",
                     fallback_errors.join("; ")
                 ),
             ))

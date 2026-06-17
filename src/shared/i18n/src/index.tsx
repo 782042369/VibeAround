@@ -18,7 +18,7 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   "zh-CN": "简体中文",
 };
 
-const STORAGE_KEY = "vibearound.locale";
+const STORAGE_KEY = "vibewbz.locale";
 
 type Params = Record<string, string | number | null | undefined>;
 

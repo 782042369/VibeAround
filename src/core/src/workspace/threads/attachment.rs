@@ -232,7 +232,7 @@ mod tests {
     #[tokio::test]
     async fn compact_removes_detached_attachment_history() {
         let path = std::env::temp_dir()
-            .join(format!("vibearound-attachments-{}", uuid::Uuid::new_v4()))
+            .join(format!("vibewbz-attachments-{}", uuid::Uuid::new_v4()))
             .join("attachments.jsonl");
         let store = RouteAttachmentEventStore::new(path.clone());
         let route = RouteKey::new("web", "chat-a");
@@ -260,7 +260,7 @@ mod tests {
     #[tokio::test]
     async fn append_updates_cached_projection() {
         let path = std::env::temp_dir()
-            .join(format!("vibearound-attachments-{}", uuid::Uuid::new_v4()))
+            .join(format!("vibewbz-attachments-{}", uuid::Uuid::new_v4()))
             .join("attachments.jsonl");
         let store = RouteAttachmentEventStore::new(path.clone());
         let route = RouteKey::new("web", "chat-a");

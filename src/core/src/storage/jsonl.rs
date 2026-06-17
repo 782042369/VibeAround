@@ -182,7 +182,7 @@ mod tests {
 
     fn temp_jsonl_path(name: &str) -> PathBuf {
         std::env::temp_dir()
-            .join(format!("vibearound-jsonl-{}-{}", name, Uuid::new_v4()))
+            .join(format!("vibewbz-jsonl-{}-{}", name, Uuid::new_v4()))
             .join("events.jsonl")
     }
 

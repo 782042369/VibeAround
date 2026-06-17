@@ -2,9 +2,7 @@ import {
   Bot,
   CheckCircle2,
   ChevronDown,
-  Globe,
   Loader2,
-  MessageSquare,
   TerminalSquare,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
@@ -20,14 +18,11 @@ import {
   translatedGroupTitle,
 } from "./startkitPresentation";
 import type {
-  DiscoveredChannelPlugin,
-  PluginRegistryEntry,
   StartkitChoices,
   StartkitItemReport,
-  StartkitStatus,
 } from "../types";
 
-const GROUP_ORDER = ["computer", "agents", "messaging", "remote"];
+const GROUP_ORDER = ["computer", "agents"];
 
 export function InstallPanel({
   groupedReports,
@@ -38,9 +33,7 @@ export function InstallPanel({
   finalStatus,
   error,
   choices,
-  tunnelProvider,
-  pluginRegistry,
-  discoveredPlugins,
+  hasInstallChoices,
 }: {
   groupedReports: Array<{ id: string; reports: StartkitItemReport[] }>;
   reports: StartkitItemReport[];
@@ -50,9 +43,7 @@ export function InstallPanel({
   finalStatus: string | null;
   error: string | null;
   choices: StartkitChoices;
-  tunnelProvider: string;
-  pluginRegistry: PluginRegistryEntry[];
-  discoveredPlugins: DiscoveredChannelPlugin[];
+  hasInstallChoices: boolean;
 }) {
   const { t } = useI18n();
   const [showDetails, setShowDetails] = useState(false);
@@ -71,22 +62,14 @@ export function InstallPanel({
       })).filter((group) => group.reports.length > 0),
     [groupedReports],
   );
-  const detailGroups = useMemo(
-    () =>
-      groups.map((group) => ({
-        id: group.id,
-        reports:
-          group.id === "messaging"
-            ? messagingDetailReports(
-                group.reports,
-                choices,
-                pluginRegistry,
-                discoveredPlugins,
-              )
-            : group.reports,
-      })),
-    [choices, discoveredPlugins, groups, pluginRegistry],
-  );
+  const detailGroups = groups;
+  const detailsOpen =
+    showDetails ||
+    reports.some((report) =>
+      Boolean(report.manualCommand || report.manualUrl) ||
+      report.status === "blocked" ||
+      report.status === "error"
+    );
   const headline = running
     ? installProgressLabel(installReports, t)
     : installHeadline({ scanning, running, complete, finalStatus, t });
@@ -117,7 +100,17 @@ export function InstallPanel({
           </div>
         )}
 
-        {groups.length === 0 ? (
+        {!hasInstallChoices ? (
+          <div className="flex min-h-[220px] items-center justify-center">
+            <div className="max-w-sm text-center">
+              <CheckCircle2 className="mx-auto mb-3 h-7 w-7 text-emerald-600" />
+              <div className="text-sm font-medium">{t("No command line tools needed")}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("Desktop apps can be opened directly.")}
+              </p>
+            </div>
+          </div>
+        ) : groups.length === 0 ? (
           <div className="flex min-h-[220px] items-center justify-center">
             <div className="max-w-sm text-center">
               <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-primary" />
@@ -135,7 +128,6 @@ export function InstallPanel({
                 id={group.id}
                 reports={group.reports}
                 choices={choices}
-                tunnelProvider={tunnelProvider}
                 t={t}
               />
             ))}
@@ -155,13 +147,13 @@ export function InstallPanel({
                 <ChevronDown
                   className={cn(
                     "h-3.5 w-3.5 transition-transform",
-                    showDetails && "rotate-180",
+                    detailsOpen && "rotate-180",
                   )}
                 />
               </span>
               <span className="h-px flex-1 bg-border" aria-hidden="true" />
             </button>
-            {showDetails && (
+            {detailsOpen && (
               <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
                 {detailGroups.map((group) => (
                   <div
@@ -191,13 +183,11 @@ function SetupGroupCard({
   id,
   reports,
   choices,
-  tunnelProvider,
   t,
 }: {
   id: string;
   reports: StartkitItemReport[];
   choices: StartkitChoices;
-  tunnelProvider: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const status = groupStatus(reports, t);
@@ -209,7 +199,7 @@ function SetupGroupCard({
           <div className="min-w-0">
             <div className="text-sm font-medium">{translatedGroupTitle(id, t)}</div>
             <div className="mt-1 truncate text-xs text-muted-foreground">
-              {groupDetail(id, choices, tunnelProvider, t)}
+              {groupDetail(id, choices, t, reports)}
             </div>
           </div>
         </div>
@@ -236,7 +226,7 @@ function groupStatus(
   }
   if (reports.some((report) => report.status === "error" || report.status === "blocked")) {
     return {
-      label: t("Needs attention"),
+      label: t("Install manually"),
       className: "border-destructive/30 bg-destructive/10 text-destructive",
     };
   }
@@ -271,60 +261,8 @@ function groupStatus(
   };
 }
 
-function messagingDetailReports(
-  reports: StartkitItemReport[],
-  choices: StartkitChoices,
-  pluginRegistry: PluginRegistryEntry[],
-  discoveredPlugins: DiscoveredChannelPlugin[],
-): StartkitItemReport[] {
-  if (choices.channels.length === 0) return reports;
-
-  const rollup = reports.find((report) => report.id === "channels.plugins");
-  const registryById = new Map(pluginRegistry.map((plugin) => [plugin.id, plugin]));
-  const discoveredById = new Map(discoveredPlugins.map((plugin) => [plugin.id, plugin]));
-
-  return choices.channels.map((channelId) => {
-    const registryEntry = registryById.get(channelId);
-    const discovered = discoveredById.get(channelId);
-    const status = messagingPluginStatus(rollup, Boolean(discovered));
-    return {
-      id: `channels.plugins.${channelId}`,
-      label: registryEntry?.name ?? discovered?.name ?? channelId,
-      group: "messaging",
-      category: "channels",
-      status,
-      severity: rollup?.severity,
-      version: discovered?.version,
-      path: discovered?.entry,
-      message:
-        registryEntry?.description ??
-        rollup?.message ??
-        "Selected messaging app",
-      actions:
-        status === "missing" || status === "outdated" || status === "broken"
-          ? ["install"]
-          : [],
-      secret: false,
-      settingsKey: undefined,
-    };
-  });
-}
-
-function messagingPluginStatus(
-  rollup: StartkitItemReport | undefined,
-  installed: boolean,
-): StartkitStatus {
-  if (rollup?.status === "running") return "running";
-  if (rollup?.status === "ok") return "ok";
-  if (rollup?.status === "error" || rollup?.status === "blocked") {
-    return rollup.status;
-  }
-  return installed ? "ok" : "missing";
-}
-
 function isInstallStepReport(report: StartkitItemReport): boolean {
   return (
-    report.id !== "channels.plugins" &&
     report.category !== "config" &&
     report.status !== "needs_config"
   );
@@ -335,10 +273,6 @@ function groupIcon(id: string) {
   switch (id) {
     case "agents":
       return <Bot className={className} />;
-    case "messaging":
-      return <MessageSquare className={className} />;
-    case "remote":
-      return <Globe className={className} />;
     default:
       return <TerminalSquare className={className} />;
   }
@@ -347,20 +281,14 @@ function groupIcon(id: string) {
 function groupDetail(
   id: string,
   choices: StartkitChoices,
-  tunnelProvider: string,
   t: (key: string, params?: Record<string, string | number>) => string,
+  reports?: StartkitItemReport[],
 ): string {
   switch (id) {
     case "agents":
-      return choices.agents.length > 0
-        ? t("{{count}} selected", { count: choices.agents.length })
+      return (reports?.length ?? choices.agents.length) > 0
+        ? t("{{count}} selected", { count: reports?.length ?? choices.agents.length })
         : t("Skipped");
-    case "messaging":
-      return choices.channels.length > 0
-        ? t("{{count}} selected", { count: choices.channels.length })
-        : t("Skipped");
-    case "remote":
-      return tunnelProvider === "none" ? t("Skipped") : tunnelProvider;
     default:
       return choices.source === "cn" ? t("China mirror") : t("Global source");
   }

@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   FolderOpen,
-  MessageCircle,
   Monitor,
   Pencil,
   Rocket,
-  Settings2,
   Terminal,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
@@ -15,8 +13,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentRailButton, TooltipButton } from "./LaunchBuilderPrimitives";
 import {
   ProfilePanel,
-  SessionPanel,
-  TerminalPanel,
   WorkspacePanel,
 } from "./LaunchBuilderPanels";
 import {
@@ -31,12 +27,8 @@ import {
   deleteProfile,
   getLauncherPreferences,
   getProfile,
-  launchDirect,
-  launchDirectResume,
   launchProfile,
-  launchProfileResume,
   listAgents,
-  listLaunchSessions,
   listLauncherWorkspaces,
   listProfiles,
   removeLauncherWorkspace,
@@ -49,30 +41,22 @@ import {
   setProfileConnection,
   setLauncherAgentExecutablePath,
   setLauncherAgentProfile,
-  setLauncherAgentLaunchArgs,
   setLauncherDefault,
   setLauncherSelectedAgent,
-  setLauncherTerminal,
   setLauncherWorkspace,
   type AgentSummary,
   type AgentExecutableLatest,
   type AgentExecutableResolution,
   type DesktopAppDetectionFile,
-  type LaunchSessionSummary,
   type LauncherPreferences,
   type WorkspaceOption,
 } from "./api";
-import { AgentLaunchSettingsDialog } from "./AgentLaunchSettingsDialog";
-import { agentLaunchArgCount } from "./agentLaunchArgs";
 import { buildProfileCopyDraft } from "./profileClone";
 import {
-  agentLabel,
   connectionAgentId,
   agentProfileId,
-  agentSupportsSessionResume,
-  agentWorkspace,
-  currentTerminal,
   currentWorkspace,
+  agentWorkspace,
   isSelectionLaunchable,
   isSortableWorkspace,
   mergeOrderedSubset,
@@ -80,13 +64,10 @@ import {
   profileById,
   profileSupportsAgent,
   profileSummary,
-  resolveSelectedSession,
   selectionUnavailableReason,
   type ProfileChoice,
-  type SessionChoice,
 } from "./launchModel";
 import type {
-  AgentLaunchArgs,
   ConnectionAgentId,
   ProfileConnectionPreference,
   ProfileSummary,
@@ -98,12 +79,6 @@ const AGENT_ORDER = [
   "codex-desktop",
   "claude",
   "claude-desktop",
-  "pi",
-  "gemini",
-  "cursor",
-  "kiro",
-  "qwen-code",
-  "opencode",
 ];
 
 function errorMessage(error: unknown): string {
@@ -140,9 +115,7 @@ export function AgentLaunchBuilder({
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agentId, setAgentId] = useState<string>("");
   const [profileChoiceAgentId, setProfileChoiceAgentId] = useState<string>("");
-  const [profileChoice, setProfileChoice] = useState<ProfileChoice>({
-    kind: "direct",
-  });
+  const [profileChoice, setProfileChoice] = useState<ProfileChoice | null>(null);
   const [openSelector, setOpenSelector] = useState<SelectorPopupId | null>(
     null,
   );
@@ -150,14 +123,6 @@ export function AgentLaunchBuilder({
     WorkspaceOption[] | null
   >(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(false);
-  const [sessions, setSessions] = useState<LaunchSessionSummary[]>([]);
-  const [workspaceSessionCounts, setWorkspaceSessionCounts] = useState<
-    Record<string, number>
-  >({});
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [showArchivedSessions, setShowArchivedSessions] = useState(false);
-  const [sessionChoice, setSessionChoice] = useState<SessionChoice>(null);
-  const [settingsAgent, setSettingsAgent] = useState<AgentSummary | null>(null);
   const [pathAgent, setPathAgent] = useState<AgentSummary | null>(null);
   const [agentExecutable, setAgentExecutable] =
     useState<AgentExecutableResolution | null>(null);
@@ -165,9 +130,6 @@ export function AgentLaunchBuilder({
   const [desktopAppEntries, setDesktopAppEntries] =
     useState<DesktopAppDetectionFile | null>(null);
   const [busy, setBusy] = useState(false);
-  const postLaunchSessionRefreshTimers = useRef<ReturnType<
-    typeof setTimeout
-  >[]>([]);
 
   const enabledAgentKey = prefs?.enabledAgents.join("|") ?? "";
   const enabledAgents = useMemo(
@@ -191,15 +153,9 @@ export function AgentLaunchBuilder({
       .then(([items, desktopApps]) => {
         setDesktopAppEntries(desktopApps);
         const rank = new Map(AGENT_ORDER.map((id, index) => [id, index]));
-        const installedDesktopAgents = new Set(
-          Object.entries(desktopApps?.apps ?? {})
-            .filter(([, app]) => app.installed)
-            .map(([agentId]) => agentId),
-        );
         const visible = items.filter((agent) => {
-          if (agent.direct_only) {
-            return installedDesktopAgents.has(agent.id);
-          }
+          if (!rank.has(agent.id)) return false;
+          if (agent.direct_only) return true;
           return enabledAgents ? enabledAgents.has(agent.id) : true;
         });
         const ordered = [...visible].sort(
@@ -228,8 +184,7 @@ export function AgentLaunchBuilder({
   useEffect(() => {
     if (!prefs || !agentId) return;
     setProfileChoice((current) => {
-      if (profileChoiceAgentId === agentId) {
-        if (current.kind === "direct") return current;
+      if (profileChoiceAgentId === agentId && current) {
         if (
           profileSupportsAgent(
             profileById(profiles, current.profileId),
@@ -252,12 +207,14 @@ export function AgentLaunchBuilder({
       ) {
         return { kind: "profile", profileId: defaultProfileId };
       }
-      return { kind: "direct" };
+      const firstSupportedProfile = profiles.find((profile) =>
+        profileSupportsAgent(profile, agentId, prefs),
+      );
+      return firstSupportedProfile
+        ? { kind: "profile", profileId: firstSupportedProfile.id }
+        : null;
     });
     setProfileChoiceAgentId(agentId);
-    if (profileChoiceAgentId !== agentId) {
-      setSessionChoice(null);
-    }
   }, [agentId, prefs, profileChoiceAgentId, profiles]);
 
   const refreshAgentExecutable = useCallback(
@@ -322,183 +279,30 @@ export function AgentLaunchBuilder({
     };
   }, [prefs, agentId, onError]);
 
-  const currentAgentWorkspace = prefs ? agentWorkspace(prefs, agentId) : "";
-  const latestSessionScope = useRef({ agentId: "", workspace: "" });
-
-  useEffect(() => {
-    latestSessionScope.current = {
-      agentId,
-      workspace: currentAgentWorkspace,
-    };
-  }, [agentId, currentAgentWorkspace]);
-
-  const clearPostLaunchSessionRefreshTimers = useCallback(() => {
-    for (const timer of postLaunchSessionRefreshTimers.current) {
-      clearTimeout(timer);
-    }
-    postLaunchSessionRefreshTimers.current = [];
-  }, []);
-
-  useEffect(
-    () => () => clearPostLaunchSessionRefreshTimers(),
-    [clearPostLaunchSessionRefreshTimers],
-  );
-
-  const refreshPostLaunchSessions = useCallback(
-    async (launchedAgentId: string, launchedWorkspace: string) => {
-      if (
-        !launchedAgentId ||
-        !launchedWorkspace ||
-        !agentSupportsSessionResume(launchedAgentId)
-      ) {
-        return;
-      }
-
-      try {
-        const items = await listLaunchSessions(
-          launchedAgentId,
-          launchedWorkspace,
-          showArchivedSessions,
-        );
-        const latest = latestSessionScope.current;
-        if (latest.agentId !== launchedAgentId) return;
-
-        setWorkspaceSessionCounts((current) => ({
-          ...current,
-          [launchedWorkspace]: items.filter((item) => !item.archived).length,
-        }));
-
-        if (latest.workspace !== launchedWorkspace) return;
-
-        setSessions(items);
-        setSessionChoice((current) =>
-          current?.kind === "session" &&
-          items.some((item) => item.sessionId === current.sessionId)
-            ? current
-            : null,
-        );
-      } catch {
-        // A launched CLI may not have written its session yet. Ignore and let
-        // the next scheduled refresh or a normal remount pick it up.
-      }
-    },
-    [showArchivedSessions],
-  );
-
-  const schedulePostLaunchSessionRefresh = useCallback(
-    (launchedAgentId: string, launchedWorkspace: string) => {
-      clearPostLaunchSessionRefreshTimers();
-      for (const delayMs of [5000, 10000, 15000]) {
-        const timer = setTimeout(() => {
-          void refreshPostLaunchSessions(launchedAgentId, launchedWorkspace);
-        }, delayMs);
-        postLaunchSessionRefreshTimers.current.push(timer);
-      }
-    },
-    [clearPostLaunchSessionRefreshTimers, refreshPostLaunchSessions],
-  );
-
-  useEffect(() => {
-    if (!agentId || !currentAgentWorkspace) {
-      setSessions([]);
-      setSessionsLoading(false);
-      return;
-    }
-    if (!agentSupportsSessionResume(agentId)) {
-      setSessions([]);
-      setSessionChoice(null);
-      setSessionsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setSessionsLoading(true);
-    void listLaunchSessions(agentId, currentAgentWorkspace, showArchivedSessions)
-      .then((items) => {
-        if (cancelled) return;
-        setSessions(items);
-        setSessionChoice((current) =>
-          current?.kind === "session" &&
-          items.some((item) => item.sessionId === current.sessionId)
-            ? current
-            : null,
-        );
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          onError(error instanceof Error ? error.message : String(error));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSessionsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId, currentAgentWorkspace, showArchivedSessions, onError]);
-
-  useEffect(() => {
-    if (!agentId || !agentSupportsSessionResume(agentId) || !viewPrefs) {
-      setWorkspaceSessionCounts({});
-      return;
-    }
-    let cancelled = false;
-    const workspaces = viewPrefs.workspaceOptions;
-    void Promise.all(
-      workspaces.map((workspace) =>
-        listLaunchSessions(agentId, workspace.path, false)
-          .then((items) => [workspace.path, items.length] as const)
-          .catch(() => [workspace.path, 0] as const),
-      ),
-    ).then((entries) => {
-      if (!cancelled) {
-        setWorkspaceSessionCounts(Object.fromEntries(entries));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId, viewPrefs?.workspaceOptions]);
-
   const selectedAgent = agents.find((agent) => agent.id === agentId);
   const selectedAgentIsDirectOnly = Boolean(selectedAgent?.direct_only);
   const selectedProfile =
-    profileChoice.kind === "profile"
+    profileChoice?.kind === "profile"
       ? profileById(profiles, profileChoice.profileId)
       : null;
   const profileOptions = profiles;
-  const visibleSessions = useMemo(
-    () =>
-      showArchivedSessions
-        ? sessions
-        : sessions.filter((session) => !session.archived),
-    [sessions, showArchivedSessions],
-  );
   const selectedWorkspace = currentWorkspace(viewPrefs);
-  const selectedTerminal = currentTerminal(viewPrefs);
-  const resolvedSelectedSession = resolveSelectedSession(
-    sessionChoice,
-    visibleSessions,
-  );
-  const selectedSession = selectedAgentIsDirectOnly ? null : resolvedSelectedSession;
   const selectionLaunchable = viewPrefs
-    ? isSelectionLaunchable(profileChoice, selectedProfile, agentId, viewPrefs)
+    ? profileChoice
+      ? isSelectionLaunchable(profileChoice, selectedProfile, agentId, viewPrefs)
+      : false
     : false;
   const selectionDisabledReason = viewPrefs
-    ? selectionUnavailableReason(
+    ? profileChoice
+      ? selectionUnavailableReason(
         profileChoice,
         selectedProfile,
         agentId,
         viewPrefs,
         t,
       )
+      : t("Configure gateway first")
     : t("Loading…");
-  const sessionResumeSupported =
-    !selectedAgentIsDirectOnly && agentSupportsSessionResume(agentId);
-  const sessionResumeUnsupportedReason = t(
-    "{{agent}} does not support selecting a session to resume",
-    { agent: agentLabel(agentId) },
-  );
   const launchDisabledReason = busy
     ? t("Launch is already in progress")
     : selectionDisabledReason;
@@ -513,7 +317,6 @@ export function AgentLaunchBuilder({
 
   async function chooseAgent(nextAgentId: string) {
     setAgentId(nextAgentId);
-    setSessionChoice(null);
     onError(null);
     try {
       await setLauncherSelectedAgent(nextAgentId);
@@ -530,7 +333,7 @@ export function AgentLaunchBuilder({
     try {
       await setLauncherAgentProfile(
         agentId,
-        choice.kind === "profile" ? choice.profileId : null,
+        choice.profileId,
       );
       await refreshPrefs();
     } catch (error) {
@@ -563,21 +366,6 @@ export function AgentLaunchBuilder({
     try {
       await setLauncherWorkspace(path, agentId);
       await refreshPrefs();
-      setSessionChoice(null);
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function chooseTerminal(terminalId: string) {
-    if (!viewPrefs || terminalId === viewPrefs.terminal) return;
-    setBusy(true);
-    onError(null);
-    try {
-      await setLauncherTerminal(terminalId);
-      await refreshPrefs();
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -599,7 +387,6 @@ export function AgentLaunchBuilder({
       if (!path) return;
       await setLauncherWorkspace(path, agentId);
       await refreshPrefs();
-      setSessionChoice(null);
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -611,12 +398,9 @@ export function AgentLaunchBuilder({
     setBusy(true);
     onError(null);
     try {
-      await setLauncherDefault(
-        agentId,
-        choice.kind === "profile" ? choice.profileId : null,
-      );
+      await setLauncherDefault(agentId, choice.profileId);
       await refreshPrefs();
-      onToast(t("VibeAround default updated"));
+      onToast(t("VibeWbz default updated"));
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -631,7 +415,6 @@ export function AgentLaunchBuilder({
     try {
       await removeLauncherWorkspace(path);
       await refreshPrefs();
-      setSessionChoice(null);
       onToast(t("Workspace removed"));
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
@@ -758,49 +541,18 @@ export function AgentLaunchBuilder({
 
   async function launchSelected() {
     if (!agentId) return;
-    const launchedAgentId = agentId;
-    const launchedWorkspace = currentAgentWorkspace;
-    setBusy(true);
-    onError(null);
-    try {
-      if (selectedSession) {
-        if (profileChoice.kind === "profile") {
-          await launchProfileResume(
-            profileChoice.profileId,
-            launchedAgentId,
-            selectedSession.sessionId,
-          );
-        } else {
-          await launchDirectResume(launchedAgentId, selectedSession.sessionId);
-        }
-        onToast(t("Resume launch opened"));
-      } else {
-        if (profileChoice.kind === "profile") {
-          await launchProfile(profileChoice.profileId, launchedAgentId);
-        } else {
-          await launchDirect(launchedAgentId);
-        }
-        schedulePostLaunchSessionRefresh(launchedAgentId, launchedWorkspace);
-        onToast(t("Quick launch opened"));
-      }
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
+    if (profileChoice?.kind !== "profile") {
+      onError(t("Configure gateway first"));
+      return;
     }
-  }
-
-  async function saveAgentLaunchArgs(launchArgs: AgentLaunchArgs) {
-    if (!settingsAgent) return;
+    const launchedAgentId = agentId;
     setBusy(true);
     onError(null);
     try {
-      await setLauncherAgentLaunchArgs(settingsAgent.id, launchArgs);
-      await refreshPrefs();
-      onToast(t("Agent launch settings updated"));
+      await launchProfile(profileChoice.profileId, launchedAgentId);
+      onToast(t("Launch opened"));
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
-      throw error;
     } finally {
       setBusy(false);
     }
@@ -868,18 +620,16 @@ export function AgentLaunchBuilder({
   const selectedProfileSummary = selectedProfile
     ? profileSummary(selectedProfile, agentId, viewPrefs, t)
     : {
-        title: t("Direct"),
+        title: t("Default gateway"),
         detail: selectedAgentIsDirectOnly
           ? t("Open desktop app")
-          : t("Use existing CLI login"),
+          : t("Use gateway key"),
         bridge: false,
         route: selectedAgentIsDirectOnly
           ? t("Desktop app")
-          : t("Native CLI login"),
+          : t("Gateway"),
       };
-  const sessionTitle = selectedSession?.title ?? t("New session");
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
-  const terminalArgCount = agentLaunchArgCount(selectedAgentPreference);
   const showLaunchControls = !selectedAgentIsDirectOnly;
   const desktopAppEntryForAgent = (targetAgentId: string) =>
     desktopAppEntries?.apps[targetAgentId]?.entry;
@@ -908,7 +658,7 @@ export function AgentLaunchBuilder({
     ? desktopAppLaunchTargetLabel(agentId, selectedExecutablePath)
     : selectedExecutablePath;
   const showClaudeDesktopDeveloperModeHint =
-    agentId === "claude-desktop" && profileChoice.kind === "profile";
+    agentId === "claude-desktop" && profileChoice?.kind === "profile";
 
   return (
     <TooltipProvider>
@@ -935,28 +685,7 @@ export function AgentLaunchBuilder({
                   <AgentSummaryHeader
                     agentId={agentId}
                     agentLabelText={selectedAgent.display_name}
-                    action={
-                      showLaunchControls ? (
-                        <div className="flex items-center gap-1.5 pt-1">
-                          {terminalArgCount > 0 && (
-                            <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                              {t("{{count}} args", { count: terminalArgCount })}
-                            </span>
-                          )}
-                          <TooltipButton
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            disabled={busy}
-                            aria-label={t("Agent settings")}
-                            title={t("Agent settings")}
-                            onClick={() => setSettingsAgent(selectedAgent)}
-                          >
-                            <Settings2 className="h-4 w-4" />
-                          </TooltipButton>
-                        </div>
-                      ) : undefined
-                    }
+                    action={undefined}
                   >
                     <>
                       <SelectorPopup
@@ -1042,39 +771,6 @@ export function AgentLaunchBuilder({
                   {showLaunchControls && (
                     <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
                       <SelectorPopup
-                        id="terminal"
-                        openSelector={openSelector}
-                        onOpenChange={setOpenSelector}
-                        widthClassName="w-[min(300px,calc(100vw-1rem))]"
-                        widthPx={300}
-                        trigger={
-                          <LaunchSummaryPill
-                            active={openSelector === "terminal"}
-                            chevron
-                            disabled={busy}
-                            className="w-[160px]"
-                            icon={<Terminal className="h-4 w-4" />}
-                            onClick={() =>
-                              setOpenSelector(
-                                openSelector === "terminal" ? null : "terminal",
-                              )
-                            }
-                            label={t("Terminal")}
-                            title={selectedTerminal?.label ?? t("Terminal")}
-                          />
-                        }
-                      >
-                        <TerminalPanel
-                          options={viewPrefs.options}
-                          selected={viewPrefs.terminal}
-                          busy={busy}
-                          onSelect={(terminalId) => {
-                            setOpenSelector(null);
-                            void chooseTerminal(terminalId);
-                          }}
-                        />
-                      </SelectorPopup>
-                      <SelectorPopup
                         id="workspace"
                         openSelector={openSelector}
                         onOpenChange={setOpenSelector}
@@ -1118,52 +814,7 @@ export function AgentLaunchBuilder({
                             setOpenSelector(null);
                             void chooseFolder();
                           }}
-                          sessionCounts={workspaceSessionCounts}
                           busy={busy}
-                        />
-                      </SelectorPopup>
-                      <SelectorPopup
-                        id="session"
-                        openSelector={openSelector}
-                        onOpenChange={setOpenSelector}
-                        widthClassName="w-[min(420px,calc(100vw-1rem))]"
-                        widthPx={420}
-                        trigger={
-                          <LaunchSummaryPill
-                            active={openSelector === "session"}
-                            chevron
-                            disabled={!sessionResumeSupported}
-                            className="w-[210px]"
-                            icon={<MessageCircle className="h-4 w-4" />}
-                            onClick={() =>
-                              setOpenSelector(
-                                openSelector === "session" ? null : "session",
-                              )
-                            }
-                            label={t("Session")}
-                            title={
-                              !sessionResumeSupported
-                                ? t("Session resume unavailable")
-                                : sessionsLoading
-                                  ? t("Loading…")
-                                  : sessionTitle
-                            }
-                            detail={selectedSession ? t("resume") : undefined}
-                          />
-                        }
-                      >
-                        <SessionPanel
-                          sessions={visibleSessions}
-                          selected={sessionChoice}
-                          archiveFilterAvailable={agentId === "codex"}
-                          resumeSupported={sessionResumeSupported}
-                          unsupportedReason={sessionResumeUnsupportedReason}
-                          showArchived={showArchivedSessions}
-                          onShowArchivedChange={setShowArchivedSessions}
-                          onSelect={(choice) => {
-                            setOpenSelector(null);
-                            setSessionChoice(choice);
-                          }}
                         />
                       </SelectorPopup>
                     </div>
@@ -1210,29 +861,6 @@ export function AgentLaunchBuilder({
           </div>
         </main>
       </div>
-      <AgentLaunchSettingsDialog
-        agent={settingsAgent}
-        preference={
-          settingsAgent
-            ? viewPrefs.agentPreferences[settingsAgent.id]
-            : undefined
-        }
-        workspacePath={selectedWorkspace.path}
-        windowLabel={
-          selectedProfile
-            ? selectedSession
-              ? `${selectedProfile.label} (resume)`
-              : selectedProfile.label
-            : selectedSession && selectedAgent
-              ? `${selectedAgent.display_name} (resume)`
-              : selectedAgent
-                ? `${selectedAgent.display_name} (direct)`
-                : null
-        }
-        busy={busy}
-        onClose={() => setSettingsAgent(null)}
-        onSave={saveAgentLaunchArgs}
-      />
       <AgentExecutablePathDialog
         agent={pathAgent}
         preference={

@@ -42,7 +42,7 @@ export function manualBridgeConfig(
     encodeURIComponent(`${agentId}-${clientApiType}`),
     encodeURIComponent(targetApiType),
   ].join("/");
-  const versionSuffix = ["anthropic", "gemini"].includes(clientApiType) ? "" : "/v1";
+  const versionSuffix = clientApiType === "anthropic" ? "" : "/v1";
   return {
     baseUrl: `${API_BASE}/${path}${versionSuffix}`,
     model: model ?? "",
@@ -54,123 +54,38 @@ export function buildManualSetting(
   profile: ProfileSummary,
   agentId: ConnectionAgentId,
   agentLabel: string,
-  clientApiType: string,
-  targetApiType: string,
+  _clientApiType: string,
+  _targetApiType: string,
   manualConfig: ManualBridgeConfig,
 ): ManualSetting {
   const model = manualConfig.model || "<model-id>";
   if (agentId === "codex") {
-    const profileName = codexProfileName(profile.id, targetApiType);
-    const providerName = profileName;
+    const providerName = codexProviderName(profile.label);
     return {
       agentId,
       agentLabel,
       copyKey: `${manualConfig.copyKey}:codex-config`,
-      filePath: "~/.codex/config.toml",
-      profileName,
+      filePath: "~/.codex/config.toml 和 ~/.codex/auth.json",
+      profileName: providerName,
       snippet: [
-        `# Codex >= 0.134.0 no longer supports the legacy profile selector below.`,
-        `# Keep this commented migration hint for now; remove it after old configs are migrated.`,
-        `# profile = ${tomlString(profileName)}`,
+        `# ~/.codex/config.toml`,
         "",
         `model = ${tomlString(model)}`,
         `model_provider = ${tomlString(providerName)}`,
         `model_reasoning_effort = "medium"`,
         "",
-        `[model_providers.${providerName}]`,
-        `name = ${tomlString(`VibeAround ${profile.providerLabel}`)}`,
+        `[model_providers.${tomlKey(providerName)}]`,
+        `name = ${tomlString(providerName)}`,
         `base_url = ${tomlString(manualConfig.baseUrl)}`,
         `wire_api = "responses"`,
-        `requires_openai_auth = false`,
-      ].join("\n"),
-    };
-  }
-
-  if (agentId === "opencode") {
-    const npm =
-      clientApiType === "anthropic"
-        ? "@ai-sdk/anthropic"
-        : clientApiType === "openai-chat"
-          ? "@ai-sdk/openai-compatible"
-          : "@ai-sdk/openai";
-    return {
-      agentId,
-      agentLabel,
-      copyKey: `${manualConfig.copyKey}:opencode-config`,
-      filePath: "~/.config/opencode/opencode.json",
-      snippet: JSON.stringify(
-        {
-          $schema: "https://opencode.ai/config.json",
-          model: `${profile.provider}/${model}`,
-          provider: {
-            [profile.provider]: {
-              npm,
-              name: `VibeAround ${profile.providerLabel}`,
-              options: {
-                baseURL: manualConfig.baseUrl,
-                apiKey: PLACEHOLDER_API_KEY,
-                setCacheKey: true,
-              },
-              models: {
-                [model]: { name: model },
-              },
-            },
-          },
-        },
-        null,
-        2,
-      ),
-    };
-  }
-
-  if (agentId === "gemini") {
-    return {
-      agentId,
-      agentLabel,
-      copyKey: `${manualConfig.copyKey}:gemini-env`,
-      filePath: "~/.gemini/settings.json + ~/.gemini/.env",
-      snippet: [
-        `// ~/.gemini/settings.json`,
+        `requires_openai_auth = true`,
+        "",
+        `# ~/.codex/auth.json`,
+        "",
         `{`,
-        `  "security": {`,
-        `    "auth": {`,
-        `      "selectedType": "gemini-api-key"`,
-        `    }`,
-        `  }`,
+        `  "OPENAI_API_KEY": "<你的中转站 key>"`,
         `}`,
-        ``,
-        `# ~/.gemini/.env`,
-        `GEMINI_API_KEY=${PLACEHOLDER_API_KEY}`,
-        `GOOGLE_API_KEY=${PLACEHOLDER_API_KEY}`,
-        `GEMINI_DEFAULT_AUTH_TYPE=gemini-api-key`,
-        `GOOGLE_GEMINI_BASE_URL=${manualConfig.baseUrl}`,
-        `GEMINI_MODEL=${model}`,
-      ].join("\n"),
-    };
-  }
-
-  if (agentId === "pi") {
-    const providerName = piProviderName(profile.id, clientApiType);
-    const providerConfig = JSON.stringify(
-      {
-        name: `VibeAround ${profile.providerLabel}`,
-        baseUrl: manualConfig.baseUrl,
-        apiKey: PLACEHOLDER_API_KEY,
-        api: piApiName(clientApiType),
-        models: [{ id: model, name: model }],
-      },
-      null,
-      2,
-    ).replace(/\n/g, "\n  ");
-    return {
-      agentId,
-      agentLabel,
-      copyKey: `${manualConfig.copyKey}:pi-extension`,
-      filePath: "Pi extension file used with pi --extension <path>",
-      snippet: [
-        "export default function (pi) {",
-        `  pi.registerProvider(${JSON.stringify(providerName)}, ${providerConfig});`,
-        "}",
+        "",
       ].join("\n"),
     };
   }
@@ -204,9 +119,6 @@ export function ManualSettingDialog({
 }) {
   const { t } = useI18n();
   const isCodex = setting.agentId === "codex";
-  const isOpenCode = setting.agentId === "opencode";
-  const isGemini = setting.agentId === "gemini";
-  const isPi = setting.agentId === "pi";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -216,11 +128,7 @@ export function ManualSettingDialog({
             {t("{{agent}} manual setting", { agent: setting.agentLabel })}
           </DialogTitle>
           <DialogDescription>
-            {isGemini
-              ? t("Copy the matching parts into the Gemini CLI settings and env files yourself. VibeAround does not edit them automatically.")
-              : isPi
-                ? t("Copy this extension into a local file and pass it to pi with --extension yourself. VibeAround does not edit Pi global config automatically.")
-              : t("Copy this snippet into the CLI config file yourself. VibeAround does not edit the file automatically.")}
+            {t("Copy this snippet into the CLI config file yourself. VibeWbz does not edit the file automatically.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -234,28 +142,9 @@ export function ManualSettingDialog({
             <ol className="mt-2 space-y-1.5 pl-4 text-[12px] leading-relaxed text-muted-foreground">
               {isCodex ? (
                 <>
-                  <li>{t("Open the Codex config file, then add this snippet or update the existing VibeAround top-level model settings.")}</li>
-                  <li>{t("Codex 0.134.0 and newer reject the old top-level profile selector, so this snippet leaves that line commented as a migration hint.")}</li>
-                  <li>{t("The top-level model and provider lines make plain codex use this VibeAround bridge by default.")}</li>
-                  <li>{t("If Codex keeps using account login instead of this bridge config, run codex logout first.")}</li>
-                </>
-              ) : isOpenCode ? (
-                <>
-                  <li>{t("Open the OpenCode config file, then add or merge this provider block.")}</li>
-                  <li>{t("Use any non-empty API key value when the local API bridge is already running with a saved profile key.")}</li>
-                </>
-              ) : isGemini ? (
-                <>
-                  <li>{t("Open the Gemini CLI settings file and make sure selectedType is gemini-api-key.")}</li>
-                  <li>{t("Open the Gemini CLI env file, then add or update these variables.")}</li>
-                  <li>{t("If Gemini keeps using OAuth, run /auth in Gemini CLI and choose Gemini API key.")}</li>
-                  <li>{t("Use any non-empty API key value when the local API bridge is already running with a saved profile key.")}</li>
-                </>
-              ) : isPi ? (
-                <>
-                  <li>{t("Save this snippet as a local Pi extension file.")}</li>
-                  <li>{t("Start Pi with --extension pointing at that file, plus the provider and model shown in the snippet.")}</li>
-                  <li>{t("Use any non-empty API key value when the local API bridge is already running with a saved profile key.")}</li>
+                  <li>{t("Put the config.toml part into ~/.codex/config.toml.")}</li>
+                  <li>{t("Put the auth.json part into ~/.codex/auth.json, in the same folder as config.toml.")}</li>
+                  <li>{t("The top-level model and provider lines make Codex use this gateway by default.")}</li>
                 </>
               ) : (
                 <>
@@ -271,13 +160,7 @@ export function ManualSettingDialog({
             title={
               isCodex
                 ? t("Codex config snippet")
-                : isOpenCode
-                  ? t("OpenCode config snippet")
-                  : isGemini
-                    ? t("Gemini config snippet")
-                    : isPi
-                      ? t("Pi extension snippet")
-                  : t("Config snippet")
+                : t("Config snippet")
             }
             snippet={setting.snippet}
             copied={copiedKey === setting.copyKey}
@@ -377,42 +260,14 @@ export function ManualValueRow({
   );
 }
 
-function codexProfileName(profileId: string, targetApiType: string): string {
-  return `vibearound_${safeConfigKey(profileId)}_${safeConfigKey(targetApiType)}`;
+function codexProviderName(label: string): string {
+  return label.trim() || "VibeWbz Gateway";
 }
 
-function safeConfigKey(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "profile";
+function tomlKey(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : tomlString(value);
 }
 
 function tomlString(value: string): string {
   return JSON.stringify(value);
-}
-
-function piProviderName(profileId: string, clientApiType: string): string {
-  return `vibearound-${safePiId(profileId)}-${safePiId(clientApiType)}`;
-}
-
-function safePiId(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "profile"
-  );
-}
-
-function piApiName(apiType: string): string {
-  switch (apiType) {
-    case "anthropic":
-      return "anthropic-messages";
-    case "openai-responses":
-      return "openai-responses";
-    default:
-      return "openai-completions";
-  }
 }

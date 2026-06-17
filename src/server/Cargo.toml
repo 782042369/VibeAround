@@ -1,12 +1,12 @@
 [package]
 name = "server"
 version = "0.7.4"
-description = "VibeAround HTTP/WebSocket server: SPA, /ws, /ws/chat, /mcp"
+description = "VibeWbz HTTP/WebSocket server: SPA, /ws, /ws/chat, /mcp"
 edition = "2021"
 rust-version = "1.82"
 
 [[bin]]
-name = "vibearound-server"
+name = "vibewbz-server"
 path = "src/main.rs"
 
 [dependencies]

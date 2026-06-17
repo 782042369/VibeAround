@@ -3,20 +3,6 @@
 //! commands so the desktop-ui frontend can read/write settings and signal completion.
 
 mod agent_integrations;
-pub(crate) mod plugin_install;
-mod plugin_session;
-
-pub use plugin_install::{
-    __cmd__check_plugin_status,
-    // Re-export Tauri macro-generated handler identifiers so generate_handler! works
-    // when commands are referenced as `onboarding::install_plugin`.
-    __cmd__install_plugin,
-    __tauri_command_name_check_plugin_status,
-    __tauri_command_name_install_plugin,
-    check_plugin_status,
-    install_plugin,
-};
-pub use plugin_session::PluginSession;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -27,14 +13,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::io::AsyncReadExt;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 
 use crate::{agent_detection, restart_daemon, OnboardingActive};
-use common::{config, plugins};
+use common::config;
 
 use crate::startkit::{StartkitChoices, StartkitItemReport, StartkitItemStatus};
 
@@ -48,21 +34,11 @@ pub struct OnboardingGate {
     pub notify: Arc<Notify>,
 }
 
-pub struct OnboardingSessions {
-    pub plugin_sessions: Arc<Mutex<HashMap<String, PluginSession>>>,
-}
-
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUpdateCheckRequest {
     pub agent_ids: Vec<String>,
     pub choices: StartkitChoices,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginUpdateCheckRequest {
-    pub plugin_ids: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +82,7 @@ pub fn needs_onboarding() -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Resource summary types — expose agent/tunnel/plugin definitions to frontend
+// Resource summary types exposed to the desktop onboarding UI.
 // ---------------------------------------------------------------------------
 
 #[derive(serde::Serialize)]
@@ -117,26 +93,7 @@ pub struct AgentSummary {
     pub install_type: Option<String>,
     pub pty_command: String,
     pub direct_only: bool,
-    pub acp_program: String,
-    pub acp_args: Vec<String>,
-    pub acp_npm_package: Option<String>,
-    pub acp_bin_name: Option<String>,
-}
-
-#[derive(serde::Serialize)]
-pub struct TunnelSummary {
-    pub id: String,
-    pub display_name: String,
-}
-
-#[derive(serde::Serialize)]
-pub struct PluginSummary {
-    pub id: String,
-    pub kind: String,
-    pub slug: String,
-    pub name: String,
-    pub description: String,
-    pub github: String,
+    pub download_url: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -149,28 +106,10 @@ pub fn get_settings() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn list_channel_plugins() -> Result<Vec<plugins::DiscoveredPluginSummary>, String> {
-    Ok(plugins::channel::list_summaries())
-}
-
-#[tauri::command]
 pub fn save_settings<R: Runtime>(app: AppHandle<R>, settings: Value) -> Result<(), String> {
     write_settings_value(&settings)?;
     let _ = app.emit(crate::tray::LAUNCH_CONFIG_CHANGED_EVENT, ());
     Ok(())
-}
-
-#[tauri::command]
-pub async fn uninstall_agent_integrations(
-    remove_mcp: bool,
-    remove_skills: bool,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        common::agent::uninstall_legacy_integrations(remove_mcp, remove_skills)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -189,12 +128,33 @@ pub fn list_agents() -> Vec<AgentSummary> {
             install_type: a.install.as_ref().map(|i| i.install_type.clone()),
             pty_command: a.pty_command_for_current_platform().to_string(),
             direct_only: a.direct_only,
-            acp_program: a.acp.program.clone(),
-            acp_args: a.acp.args.clone(),
-            acp_npm_package: a.acp.npm_package.clone(),
-            acp_bin_name: a.acp.bin_name.clone(),
+            download_url: download_url_for_current_platform(a),
         })
         .collect()
+}
+
+fn download_url_for_current_platform(agent: &common::resources::AgentDef) -> Option<String> {
+    if cfg!(target_os = "windows") {
+        if cfg!(target_arch = "aarch64") {
+            return agent
+                .download_urls
+                .windows_arm64
+                .clone()
+                .or_else(|| agent.download_urls.windows_x64.clone());
+        }
+        return agent.download_urls.windows_x64.clone();
+    }
+    if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            return agent
+                .download_urls
+                .macos_aarch64
+                .clone()
+                .or_else(|| agent.download_urls.macos_x64.clone());
+        }
+        return agent.download_urls.macos_x64.clone();
+    }
+    None
 }
 
 #[tauri::command]
@@ -253,101 +213,6 @@ pub async fn check_agent_updates(
     Ok(reports)
 }
 
-#[tauri::command]
-pub async fn check_plugin_updates(
-    request: PluginUpdateCheckRequest,
-) -> Result<Vec<StartkitItemReport>, String> {
-    let mut tasks = JoinSet::new();
-
-    for plugin_id in request.plugin_ids {
-        tasks.spawn(async move { plugin_update_report(plugin_id).await });
-    }
-
-    let mut reports = Vec::new();
-    while let Some(result) = tasks.join_next().await {
-        if let Some(report) = result.map_err(|error| error.to_string())? {
-            reports.push(report);
-        }
-    }
-    Ok(reports)
-}
-
-#[tauri::command]
-pub async fn scan_agent_sdk_status(
-    choices: StartkitChoices,
-) -> Result<Vec<StartkitItemReport>, String> {
-    Ok(choices
-        .agents
-        .iter()
-        .filter_map(|agent_id| {
-            let agent = common::resources::agent_by_id(agent_id)?;
-            let Some(npm_pkg) = agent.acp.npm_package.as_deref() else {
-                return Some(StartkitItemReport {
-                    id: format!("agents.{agent_id}.sdk"),
-                    label: format!("{} ACP mode", agent.display_name),
-                    group: "agents".to_string(),
-                    category: "agent_sdk".to_string(),
-                    status: StartkitItemStatus::Skipped,
-                    severity: None,
-                    version: None,
-                    latest_version: None,
-                    path: None,
-                    message: Some("Uses the agent CLI's built-in ACP mode".to_string()),
-                    actions: Vec::new(),
-                    manual_command: None,
-                    manual_url: None,
-                    secret: false,
-                    settings_key: None,
-                });
-            };
-            let default_bin_name = common::agent::npm_package_bin_name(npm_pkg);
-            let bin_name = agent.acp.bin_name.as_deref().unwrap_or(&default_bin_name);
-            let installed = common::agent::npm_package_installed(npm_pkg, bin_name);
-            Some(StartkitItemReport {
-                id: format!("agents.{agent_id}.sdk"),
-                label: format!("{} ACP adapter", agent.display_name),
-                group: "agents".to_string(),
-                category: "agent_sdk".to_string(),
-                status: if installed {
-                    StartkitItemStatus::Ok
-                } else {
-                    StartkitItemStatus::Missing
-                },
-                severity: Some("blocker".to_string()),
-                version: None,
-                latest_version: None,
-                path: common::process::env::resolve_acp_agent_bin(bin_name)
-                    .ok()
-                    .map(|path| path.to_string_lossy().to_string()),
-                message: Some(if installed {
-                    "ACP adapter is installed".to_string()
-                } else {
-                    "ACP adapter is not installed".to_string()
-                }),
-                actions: if installed {
-                    Vec::new()
-                } else {
-                    vec!["install".to_string()]
-                },
-                manual_command: None,
-                manual_url: None,
-                secret: false,
-                settings_key: None,
-            })
-        })
-        .collect())
-}
-
-#[tauri::command]
-pub async fn scan_tunnel_status(
-    settings: Value,
-    choices: StartkitChoices,
-) -> Result<Vec<StartkitItemReport>, String> {
-    crate::startkit::scan_tunnel_reports(&settings, &choices)
-        .await
-        .map_err(|error| error.to_string())
-}
-
 async fn agent_install_report(agent: common::resources::AgentDef) -> StartkitItemReport {
     let agent_id = agent.id.clone();
     let report_id = format!("agents.{}.cli", agent.id);
@@ -374,10 +239,7 @@ async fn agent_install_report(agent: common::resources::AgentDef) -> StartkitIte
             version: candidate.version,
             latest_version: None,
             path: Some(candidate.path),
-            message: Some(format!(
-                "{} selected from {}",
-                agent.id, candidate.source_label
-            )),
+            message: Some(format!("已找到 {}", candidate.source_label)),
             actions: Vec::new(),
             manual_command: None,
             manual_url: None,
@@ -398,9 +260,7 @@ async fn agent_install_report(agent: common::resources::AgentDef) -> StartkitIte
         version: None,
         latest_version: None,
         path: None,
-        message: Some(format!(
-            "Install {program} on this computer, then scan again."
-        )),
+        message: Some(format!("没有找到 {program}。请先安装它，然后重新检查。")),
         actions: Vec::new(),
         manual_command: None,
         manual_url: None,
@@ -453,7 +313,7 @@ async fn agent_update_report(
         settings_key: None,
     };
     let Some(local_version) = local_version else {
-        report.message = Some("Unable to check updates".to_string());
+        report.message = Some("暂时查不到新版本".to_string());
         return Some(report);
     };
 
@@ -465,11 +325,11 @@ async fn agent_update_report(
     {
         Ok(Ok(Some(version))) => version,
         Ok(_) => {
-            report.message = Some("Unable to check updates".to_string());
+            report.message = Some("暂时查不到新版本".to_string());
             return Some(report);
         }
         Err(_) => {
-            report.message = Some("Update check timed out".to_string());
+            report.message = Some("查新版本超时了".to_string());
             return Some(report);
         }
     };
@@ -479,9 +339,9 @@ async fn agent_update_report(
     report.latest_version = Some(latest.clone());
 
     if local_version != latest {
-        report.message = Some(format!("Manual update required {latest}"));
+        report.message = Some(format!("可以手动更新到 {latest}"));
     } else {
-        report.message = Some("Already up to date".to_string());
+        report.message = Some("已是最新版本".to_string());
     }
     Some(report)
 }
@@ -541,62 +401,6 @@ async fn homebrew_latest_version(agent_id: &str, source: &str) -> anyhow::Result
             .and_then(serde_json::Value::as_str)
             .map(str::to_string))
     }
-}
-
-async fn plugin_update_report(plugin_id: String) -> Option<StartkitItemReport> {
-    let plugin_def = common::resources::plugin_by_id(&plugin_id)?;
-    let discovered = common::plugins::find_user(&plugin_id);
-    let local_version = discovered.as_ref().map(|plugin| plugin.installed_version());
-
-    let mut report = StartkitItemReport {
-        id: format!("channels.plugins.{plugin_id}"),
-        label: plugin_def.name.clone(),
-        group: "messaging".to_string(),
-        category: "channels".to_string(),
-        status: if discovered.is_some() {
-            StartkitItemStatus::Ok
-        } else {
-            StartkitItemStatus::Missing
-        },
-        severity: None,
-        version: local_version.clone(),
-        latest_version: None,
-        path: discovered
-            .as_ref()
-            .map(|plugin| plugin.entry_path().to_string_lossy().to_string()),
-        message: Some(if discovered.is_some() {
-            "Plugin is installed".to_string()
-        } else {
-            "Plugin is not installed".to_string()
-        }),
-        actions: if discovered.is_some() {
-            Vec::new()
-        } else {
-            vec!["install".to_string()]
-        },
-        manual_command: None,
-        manual_url: None,
-        secret: false,
-        settings_key: None,
-    };
-
-    let latest = match github_plugin_version(&plugin_def.github).await {
-        Ok(Some(version)) => version,
-        _ => return Some(report),
-    };
-    report.latest_version = Some(latest.clone());
-    if local_version.as_deref() != Some(latest.as_str()) {
-        report.status = if discovered.is_some() {
-            StartkitItemStatus::Outdated
-        } else {
-            StartkitItemStatus::Missing
-        };
-        report.message = Some(format!("{} {} is available", plugin_def.name, latest));
-        report.actions = vec!["install".to_string()];
-    } else {
-        report.message = Some(format!("{} is up to date", plugin_def.name));
-    }
-    Some(report)
 }
 
 fn program_from_command(command: &str) -> Option<String> {
@@ -693,51 +497,6 @@ async fn npm_latest_version(package: &str, source: &str) -> anyhow::Result<Optio
         .map(str::to_string))
 }
 
-async fn github_plugin_version(github_url: &str) -> anyhow::Result<Option<String>> {
-    let Some(package_url) = github_raw_file_url(github_url, "package.json") else {
-        return Ok(None);
-    };
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(8))
-        .build()
-        .context("build plugin metadata client")?;
-    if let Some(version) = github_json_version(&client, &package_url).await? {
-        return Ok(Some(version));
-    }
-
-    let Some(manifest_url) = github_raw_file_url(github_url, "plugin.json") else {
-        return Ok(None);
-    };
-    github_json_version(&client, &manifest_url).await
-}
-
-async fn github_json_version(
-    client: &reqwest::Client,
-    url: &str,
-) -> anyhow::Result<Option<String>> {
-    let response = client
-        .get(url)
-        .header("accept", "application/json")
-        .send()
-        .await
-        .with_context(|| format!("fetch plugin metadata {url}"))?;
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Ok(None);
-    }
-    let value: serde_json::Value = response
-        .error_for_status()
-        .with_context(|| format!("plugin metadata status {url}"))?
-        .json()
-        .await
-        .with_context(|| format!("parse plugin metadata {url}"))?;
-    Ok(value
-        .get("version")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|version| !version.is_empty())
-        .map(str::to_string))
-}
-
 fn npm_registry_for_source(source: &str) -> &'static str {
     match source {
         "cn" => "https://registry.npmmirror.com",
@@ -795,147 +554,13 @@ fn extract_semver(value: &str) -> Option<String> {
     None
 }
 
-fn github_raw_file_url(github_url: &str, file_name: &str) -> Option<String> {
-    let trimmed = github_url.trim().trim_end_matches(".git");
-    let marker = "github.com/";
-    let (_, rest) = trimmed.split_once(marker)?;
-    let mut segments = rest.split('/').filter(|segment| !segment.is_empty());
-    let owner = segments.next()?;
-    let repo = segments.next()?;
-    Some(format!(
-        "https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{file_name}"
-    ))
-}
-
-#[tauri::command]
-pub fn list_tunnels() -> Vec<TunnelSummary> {
-    common::resources::TUNNELS
-        .iter()
-        .map(|t| TunnelSummary {
-            id: t.id.clone(),
-            display_name: t.display_name.clone(),
-        })
-        .collect()
-}
-
-#[tauri::command]
-pub fn list_plugin_registry() -> Vec<PluginSummary> {
-    common::resources::PLUGINS
-        .iter()
-        .filter(|p| p.is_kind("channel"))
-        .map(|p| PluginSummary {
-            id: p.id.clone(),
-            kind: p.kind.clone(),
-            slug: p.install_dir_name().to_string(),
-            name: p.name.clone(),
-            description: p.description.clone(),
-            github: p.github.clone(),
-        })
-        .collect()
-}
-
 // ---------------------------------------------------------------------------
 // Tauri commands — onboarding flow
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginAuthStartRequest {
-    pub plugin_id: String,
-    pub config: Value,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginAuthWaitRequest {
-    pub plugin_id: String,
-    pub params: Value,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginAuthCancelRequest {
-    pub plugin_id: String,
-}
-
+/// Marks onboarding complete and signals the daemon gate.
 #[tauri::command]
-pub async fn plugin_auth_start(
-    state: State<'_, OnboardingSessions>,
-    request: PluginAuthStartRequest,
-) -> Result<Value, String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    if let Some(mut existing) = sessions.remove(&request.plugin_id) {
-        plugin_session::shutdown_plugin_session(&mut existing).await;
-    }
-
-    let mut session =
-        plugin_session::spawn_auth_session(&request.plugin_id, request.config.clone())
-            .await
-            .map_err(|e| e.to_string())?;
-
-    let result: Value =
-        plugin_session::plugin_request(&mut session, "login_qr_start", request.config)
-            .await
-            .map_err(|e| e.to_string())?;
-
-    sessions.insert(request.plugin_id, session);
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn plugin_auth_wait(
-    state: State<'_, OnboardingSessions>,
-    request: PluginAuthWaitRequest,
-) -> Result<Value, String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    let session = sessions
-        .get_mut(&request.plugin_id)
-        .ok_or_else(|| format!("auth session for '{}' not started", request.plugin_id))?;
-
-    let result: Value = plugin_session::plugin_request(session, "login_qr_wait", request.params)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Shutdown on success
-    if result
-        .get("connected")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        if let Some(mut session) = sessions.remove(&request.plugin_id) {
-            plugin_session::shutdown_plugin_session(&mut session).await;
-        }
-    }
-
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn plugin_auth_cancel(
-    state: State<'_, OnboardingSessions>,
-    request: PluginAuthCancelRequest,
-) -> Result<(), String> {
-    let mut sessions = state.plugin_sessions.lock().await;
-    if let Some(mut session) = sessions.remove(&request.plugin_id) {
-        plugin_session::shutdown_plugin_session(&mut session).await;
-    }
-    Ok(())
-}
-
-/// Marks onboarding complete, signals the daemon gate, and navigates the user
-/// to the dashboard.
-#[tauri::command]
-pub async fn finish_onboarding<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, OnboardingSessions>,
-) -> Result<(), String> {
-    // Clean up any remaining auth sessions
-    let mut sessions = state.plugin_sessions.lock().await;
-    for (_, mut session) in sessions.drain() {
-        plugin_session::shutdown_plugin_session(&mut session).await;
-    }
-    drop(sessions);
-
+pub async fn finish_onboarding<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let mut settings = read_settings_value();
     if let Some(obj) = settings.as_object_mut() {
         obj.insert("onboarded".into(), serde_json::json!(true));

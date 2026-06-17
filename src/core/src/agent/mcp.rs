@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context};
 
 use crate::{config, resources};
 
-/// Merge VibeAround MCP server entry into an agent's global settings.
+/// Merge VibeWbz MCP server entry into an agent's global settings.
 /// Supports JSON (default) and TOML formats. Also writes to legacy path
 /// if configured.
 #[allow(dead_code)]
@@ -44,7 +44,7 @@ pub(super) fn install_mcp_config(agent: &str, mcp_url: &str) -> anyhow::Result<(
     Ok(())
 }
 
-/// Merge VibeAround MCP server entry into an agent's project/workspace settings.
+/// Merge VibeWbz MCP server entry into an agent's project/workspace settings.
 pub(super) fn install_project_mcp_config(
     agent: &str,
     workspace: &Path,
@@ -63,7 +63,7 @@ pub(super) fn install_project_mcp_config(
     install_mcp_config_at_path(agent, global_config, &config_path, mcp_url)
 }
 
-/// Remove VibeAround MCP server entry from an agent's global settings.
+/// Remove VibeWbz MCP server entry from an agent's global settings.
 pub(super) fn uninstall_mcp_config(agent: &str) -> anyhow::Result<()> {
     let home = home_dir()?;
 
@@ -87,7 +87,7 @@ pub(super) fn uninstall_mcp_config(agent: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Remove VibeAround MCP server entry from an agent's project/workspace settings.
+/// Remove VibeWbz MCP server entry from an agent's project/workspace settings.
 pub(super) fn uninstall_project_mcp_config(agent: &str, workspace: &Path) -> anyhow::Result<()> {
     let agent_def = match resources::agent_by_id(agent) {
         Some(def) => def,
@@ -193,7 +193,7 @@ fn install_mcp_config_json(
     let servers_obj = servers
         .as_object_mut()
         .ok_or_else(|| anyhow!("{} is not an object in {:?}", mcp_key, config_path))?;
-    servers_obj.insert("vibearound".to_string(), mcp_value);
+    servers_obj.insert("vibewbz".to_string(), mcp_value);
 
     let pretty = serde_json::to_string_pretty(&root).context("JSON serialize")?;
     std::fs::write(config_path, pretty).with_context(|| format!("Write {:?}", config_path))?;
@@ -239,7 +239,7 @@ fn install_mcp_config_toml(
         doc[mcp_key] = Item::Table(Table::new());
     }
 
-    // Create the [mcp_key.vibearound] sub-table
+    // Create the [mcp_key.vibewbz] sub-table
     let servers = doc[mcp_key]
         .as_table_mut()
         .ok_or_else(|| anyhow!("{} is not a table in {:?}", mcp_key, config_path))?;
@@ -266,7 +266,7 @@ fn install_mcp_config_toml(
         }
     }
 
-    servers["vibearound"] = Item::Table(entry_table);
+    servers["vibewbz"] = Item::Table(entry_table);
 
     std::fs::write(config_path, doc.to_string())
         .with_context(|| format!("Write {:?}", config_path))?;
@@ -294,7 +294,7 @@ fn uninstall_mcp_config_toml(config_path: &Path, mcp_key: &str, agent: &str) -> 
 
     let mut changed = false;
     if let Some(servers) = doc.get_mut(mcp_key).and_then(|v| v.as_table_mut()) {
-        if servers.remove("vibearound").is_some() {
+        if servers.remove("vibewbz").is_some() {
             changed = true;
         }
     }
@@ -329,7 +329,7 @@ fn uninstall_mcp_config_json(config_path: &Path, mcp_key: &str, agent: &str) -> 
                 let managed_keys: Vec<String> = servers_obj
                     .iter()
                     .filter(|(key, value)| {
-                        key.as_str() == "vibearound" || is_legacy_vibearound_managed(value)
+                        key.as_str() == "vibewbz" || is_legacy_vibewbz_managed(value)
                     })
                     .map(|(key, _)| key.clone())
                     .collect();
@@ -354,10 +354,10 @@ fn uninstall_mcp_config_json(config_path: &Path, mcp_key: &str, agent: &str) -> 
     Ok(())
 }
 
-fn is_legacy_vibearound_managed(value: &serde_json::Value) -> bool {
-    value.get("metadata").and_then(|v| v.as_str()) == Some("vibearound")
+fn is_legacy_vibewbz_managed(value: &serde_json::Value) -> bool {
+    value.get("metadata").and_then(|v| v.as_str()) == Some("vibewbz")
         || value
-            .get("_vibearound")
+            .get("_vibewbz")
             .and_then(|m| m.get("managed"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
@@ -375,17 +375,14 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        std::env::temp_dir().join(format!(
-            "vibearound-mcp-{name}-{}-{nonce}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("vibewbz-mcp-{name}-{}-{nonce}", std::process::id()))
     }
 
     #[test]
     fn project_mcp_json_install_and_uninstall_preserves_other_servers() {
-        let dir = unique_test_dir("json");
-        fs::create_dir_all(dir.join(".gemini")).unwrap();
-        let path = dir.join(".gemini/settings.json");
+        let dir = unique_test_dir("claude-json");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".mcp.json");
         fs::write(
             &path,
             r#"{
@@ -396,19 +393,19 @@ mod tests {
         )
         .unwrap();
 
-        install_project_mcp_config("gemini", &dir, "http://127.0.0.1:12358/va/mcp").unwrap();
+        install_project_mcp_config("claude", &dir, "http://127.0.0.1:12358/va/mcp").unwrap();
         let installed: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            installed["mcpServers"]["vibearound"]["httpUrl"],
+            installed["mcpServers"]["vibewbz"]["url"],
             "http://127.0.0.1:12358/va/mcp"
         );
         assert!(installed["mcpServers"]["other"].is_object());
 
-        uninstall_project_mcp_config("gemini", &dir).unwrap();
+        uninstall_project_mcp_config("claude", &dir).unwrap();
         let removed: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(removed["mcpServers"]["vibearound"].is_null());
+        assert!(removed["mcpServers"]["vibewbz"].is_null());
         assert!(removed["mcpServers"]["other"].is_object());
 
         fs::remove_dir_all(&dir).unwrap();

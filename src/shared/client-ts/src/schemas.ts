@@ -1,5 +1,5 @@
 /**
- * zod schemas for everything the dashboard server returns over HTTP
+ * zod schemas for everything the desktop local daemon returns over HTTP
  * or WebSocket.
  *
  * The source of truth is Rust: look at the `#[derive(Serialize)]` types
@@ -23,13 +23,9 @@ import { z } from "zod";
  *  consumers (display-name maps) will force you to supply the rest. */
 export const AGENT_IDS = [
   "claude",
-  "gemini",
-  "opencode",
   "codex",
-  "pi",
-  "cursor",
-  "kiro",
-  "qwen-code",
+  "claude-desktop",
+  "codex-desktop",
 ] as const;
 
 export type AgentId = (typeof AGENT_IDS)[number];
@@ -85,12 +81,8 @@ export const PtyToolSchema = z.enum([
   "generic",
   "claude",
   "codex",
-  "pi",
-  "gemini",
-  "opencode",
-  "cursor",
-  "kiro",
-  "qwen-code",
+  "claude-desktop",
+  "codex-desktop",
 ]);
 export type PtyTool = z.infer<typeof PtyToolSchema>;
 

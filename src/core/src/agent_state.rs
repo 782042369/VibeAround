@@ -1,4 +1,4 @@
-//! Per-agent launch state stored in `~/.vibearound/agents.json`.
+//! Per-agent launch state stored in `~/.vibewbz/agents.json`.
 //!
 //! `settings.json` owns global app setup such as enabled agents. This file
 //! keeps mutable Launch-tab choices and the global quick-launch default out of
@@ -19,10 +19,10 @@ pub struct AgentsPrefsFile {
     /// Launch tab's currently visible agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_agent: Option<String>,
-    /// VibeAround-wide default agent used by tray quick launch and IM startup.
+    /// VibeWbz-wide default agent used by tray quick launch and IM startup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_agent: Option<String>,
-    /// Optional profile snapshot for the VibeAround-wide default.
+    /// Optional profile snapshot for the VibeWbz-wide default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_profile_id: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
