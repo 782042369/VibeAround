@@ -1,5 +1,4 @@
 import { AgentDecisionPanel } from "./AgentDecisionPanel";
-import { ConfigurePanel } from "./ConfigurePanel";
 import { InstallPanel } from "./InstallPanel";
 import type { AgentId } from "../constants";
 import type {
@@ -64,15 +63,9 @@ export function OnboardingStepContent({
           running={running}
           complete={complete}
           finalStatus={finalStatus}
-          error={startkitError}
+          error={startkitError ?? finishError}
           choices={choices}
           hasInstallChoices={hasInstallChoices}
-        />
-      )}
-
-      {activeStep === "configure" && (
-        <ConfigurePanel
-          finishError={finishError}
         />
       )}
     </section>

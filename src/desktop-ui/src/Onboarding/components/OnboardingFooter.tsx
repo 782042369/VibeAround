@@ -35,12 +35,9 @@ export function OnboardingFooter({
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const footerHint = t(
-    "Keep the defaults if you are not sure; everything can be changed later.",
-  );
 
   return (
-    <footer className="relative flex h-14 items-center gap-3 border-t border-border px-5">
+    <footer className="relative flex min-h-16 items-center gap-3 border-t border-border px-5 py-2">
       <div className="flex items-center gap-2">
         <Button
           type="button"
@@ -52,11 +49,14 @@ export function OnboardingFooter({
           {t("Back")}
         </Button>
       </div>
-      {footerHint && (
-        <div className="pointer-events-none absolute left-1/2 max-w-md -translate-x-1/2 px-4 text-center text-xs text-muted-foreground">
-          {footerHint}
+      <div className="pointer-events-none absolute left-1/2 max-w-md -translate-x-1/2 px-4 text-center text-xs leading-5 text-muted-foreground">
+        <div>
+          {t("Keep the defaults if you are not sure; everything can be changed later.")}
         </div>
-      )}
+        <div>
+          {t("仅供社区学习交流使用，所有安装源均来自官方来源。")}
+        </div>
+      </div>
       <div className="ml-auto flex items-center gap-2">
         {running && activeStep === "install" && (
           <Button type="button" variant="outline" onClick={onCancel}>

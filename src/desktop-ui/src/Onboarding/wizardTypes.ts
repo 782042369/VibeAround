@@ -1,4 +1,4 @@
-export type WizardStepId = "agents" | "install" | "configure";
+export type WizardStepId = "agents" | "install";
 
 export interface WizardStep {
   id: WizardStepId;
@@ -8,5 +8,4 @@ export interface WizardStep {
 export const WIZARD_STEPS: WizardStep[] = [
   { id: "agents", label: "Agents" },
   { id: "install", label: "Install" },
-  { id: "configure", label: "Config" },
 ];

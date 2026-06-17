@@ -10,7 +10,6 @@ import type {
   AgentSummary,
   Settings,
   StartkitManifestSummary,
-  ToolchainMode,
 } from "../types";
 
 const AGENT_DISPLAY_ORDER = [
@@ -26,7 +25,6 @@ export function useOnboardingInitialLoad({
   setManifest,
   setAgents,
   setDownloadSource,
-  setToolchainMode,
   setEnabledAgents,
 }: {
   setSettings: (value: Settings) => void;
@@ -34,7 +32,6 @@ export function useOnboardingInitialLoad({
   setManifest: (value: StartkitManifestSummary) => void;
   setAgents: (value: AgentSummary[]) => void;
   setDownloadSource: (value: string) => void;
-  setToolchainMode: (value: ToolchainMode) => void;
   setEnabledAgents: (value: Set<AgentId>) => void;
 }) {
   useEffect(() => {
@@ -56,7 +53,6 @@ export function useOnboardingInitialLoad({
 
           hydrateStartkitPrefs(loadedSettings, {
             setDownloadSource,
-            setToolchainMode,
           });
           hydrateAgents(loadedSettings, orderedAgents, setEnabledAgents);
 
@@ -70,7 +66,6 @@ export function useOnboardingInitialLoad({
   }, [
     setAgents,
     setDownloadSource,
-    setToolchainMode,
     setEnabledAgents,
     setLoaded,
     setManifest,

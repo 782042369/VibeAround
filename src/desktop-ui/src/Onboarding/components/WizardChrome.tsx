@@ -1,7 +1,6 @@
 import {
   Bot,
   CheckCircle2,
-  KeyRound,
   Wrench,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
@@ -116,12 +115,6 @@ function questionCopy(step: WizardStepId): {
         title: "Install Components.",
         body: "先帮你检查电脑里缺什么，需要的命令行工具会自动准备好。",
         icon: <Wrench className="h-5 w-5" />,
-      };
-    case "configure":
-      return {
-        title: "Add your gateway key.",
-        body: "默认使用 http://ai.939593.xyz。这里只需要填一次 key，之后点一下就能启动对应工具。",
-        icon: <KeyRound className="h-5 w-5" />,
       };
   }
 }

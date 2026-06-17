@@ -67,7 +67,7 @@ function desktopAgentReports(
       category: "agents",
       status: installed ? "ok" : "blocked",
       path: app?.entry?.path ?? (installed ? app?.launchCommand : undefined),
-      message: installed ? "Desktop app is ready" : undefined,
+      message: installed ? "桌面应用已准备好" : undefined,
       actions: [],
       manualUrl: installed ? undefined : agent.download_url ?? undefined,
       secret: false,
@@ -103,9 +103,8 @@ export default function Onboarding() {
   );
   const [agents, setAgents] = useState<AgentSummary[]>([]);
 
-  const [downloadSource, setDownloadSource] = useState("global");
-  const [toolchainMode, setToolchainMode] =
-    useState<ToolchainMode>(DEFAULT_TOOLCHAIN_MODE);
+  const [downloadSource, setDownloadSource] = useState("cn");
+  const toolchainMode = DEFAULT_TOOLCHAIN_MODE;
   const [enabledAgents, setEnabledAgents] = useState<Set<AgentId>>(new Set());
   const [finishError, setFinishError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
@@ -130,7 +129,6 @@ export default function Onboarding() {
     setManifest,
     setAgents,
     setDownloadSource,
-    setToolchainMode,
     setEnabledAgents,
   });
 
@@ -280,7 +278,8 @@ export default function Onboarding() {
   ]);
 
   useEffect(() => {
-    if (!loaded || activeStep !== "install" || selectedDesktopAgents.length === 0) {
+    if (!loaded || activeStep !== "install") return;
+    if (selectedDesktopAgents.length === 0) {
       setDesktopInstallReports([]);
       return;
     }
@@ -482,12 +481,10 @@ export default function Onboarding() {
 
   const goNext = useCallback(() => {
     if (activeStep === "agents") setActiveStep("install");
-    else if (activeStep === "install") setActiveStep("configure");
   }, [activeStep]);
 
   const goBack = useCallback(() => {
     if (activeStep === "install") setActiveStep("agents");
-    else if (activeStep === "configure") setActiveStep("install");
   }, [activeStep]);
 
   const rerunInstallScan = useCallback(() => {
@@ -524,10 +521,14 @@ export default function Onboarding() {
       }
       if (canContinueFromInstall) {
         return {
-          label: t("Continue"),
-          icon: <ArrowRight className="h-4 w-4" />,
-          disabled: false,
-          run: () => setActiveStep("configure"),
+          label: finishing ? t("Launching...") : t("Launch VibeWbz"),
+          icon: finishing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Rocket className="h-4 w-4" />
+          ),
+          disabled: finishing,
+          run: () => void finishOnboarding(),
         };
       }
       if (hasBlockingReport) {
@@ -562,19 +563,6 @@ export default function Onboarding() {
           run: rerunInstallScan,
         };
       }
-    }
-
-    if (activeStep === "configure") {
-      return {
-        label: finishing ? t("Launching...") : t("Launch VibeWbz"),
-        icon: finishing ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Rocket className="h-4 w-4" />
-        ),
-        disabled: finishing,
-        run: () => void finishOnboarding(),
-      };
     }
 
     return {
@@ -671,9 +659,7 @@ export default function Onboarding() {
           <StartkitAdvancedMenu
             sources={manifest?.sources ?? {}}
             downloadSource={downloadSource}
-            toolchainMode={toolchainMode}
             onDownloadSource={setDownloadSource}
-            onToolchainMode={setToolchainMode}
           />
           <LanguageMenu />
         </div>
