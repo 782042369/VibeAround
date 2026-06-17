@@ -22,22 +22,6 @@ macos = "bun add -g @openai/codex@latest"
 linux = "bun add -g @openai/codex@latest"
 windows = "bun add -g @openai/codex@latest"
 
-[agents.codex.sources.homebrew_cask]
-label = "Homebrew cask"
-[agents.codex.sources.homebrew_cask.upgrade]
-macos = "brew upgrade --cask codex"
-
-[agents.codex.sources.native]
-label = "Native installer"
-[agents.codex.sources.native.install]
-macos = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-linux = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-windows = "powershell -ExecutionPolicy ByPass -c \"irm https://chatgpt.com/codex/install.ps1 | iex\""
-[agents.codex.sources.native.upgrade]
-macos = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-linux = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-windows = "powershell -ExecutionPolicy ByPass -c \"irm https://chatgpt.com/codex/install.ps1 | iex\""
-
 [agents.claude]
 program = "claude"
 version_arg = "--version"
@@ -53,19 +37,3 @@ windows = "npm install -g @anthropic-ai/claude-code@latest"
 macos = "npm install -g @anthropic-ai/claude-code@latest"
 linux = "npm install -g @anthropic-ai/claude-code@latest"
 windows = "npm install -g @anthropic-ai/claude-code@latest"
-
-[agents.claude.sources.homebrew_cask]
-label = "Homebrew cask"
-[agents.claude.sources.homebrew_cask.upgrade]
-macos = "brew upgrade --cask claude-code"
-
-[agents.claude.sources.native]
-label = "Native installer"
-[agents.claude.sources.native.install]
-macos = "curl -fsSL https://claude.ai/install.sh | bash"
-linux = "curl -fsSL https://claude.ai/install.sh | bash"
-windows = "powershell -ExecutionPolicy ByPass -c \"irm https://claude.ai/install.ps1 | iex\""
-[agents.claude.sources.native.upgrade]
-macos = "curl -fsSL https://claude.ai/install.sh | bash"
-linux = "curl -fsSL https://claude.ai/install.sh | bash"
-windows = "powershell -ExecutionPolicy ByPass -c \"irm https://claude.ai/install.ps1 | iex\""

@@ -335,14 +335,7 @@ pub fn source_command_template(agent_id: &str, source: &str, action: &str) -> Op
 pub fn source_package(agent_id: &str, source: &str) -> Option<String> {
     let catalog = source_catalog().ok()?;
     let spec = catalog.agents.get(agent_id)?;
-    spec.sources
-        .get(source)
-        .and_then(|source_spec| source_spec.package.clone())
-        .or_else(|| {
-            spec.sources
-                .values()
-                .find_map(|source_spec| source_spec.package.clone())
-        })
+    spec.sources.get(source)?.package.clone()
 }
 
 pub async fn latest_version_for_candidate(
@@ -984,9 +977,6 @@ fn source_label(spec: &AgentCommandSpec, source: &str) -> String {
                 "npm_managed" => "VibeWbz npm",
                 "npm_global" => "npm global",
                 "bun_global" => "Bun global",
-                "homebrew_formula" => "Homebrew formula",
-                "homebrew_cask" => "Homebrew cask",
-                "native" => "Native installer",
                 "app_bundled" => "Bundled app",
                 _ => "PATH",
             }
@@ -1248,15 +1238,10 @@ mod tests {
     }
 
     #[test]
-    fn native_sources_can_reuse_agent_package_for_latest_checks() {
-        assert_eq!(
-            source_package("claude", "native").as_deref(),
-            Some("@anthropic-ai/claude-code")
-        );
-        assert_eq!(
-            source_package("codex", "app_bundled").as_deref(),
-            Some("@openai/codex")
-        );
+    fn removed_claude_native_source_has_no_latest_package() {
+        assert_eq!(source_package("claude", "native"), None);
+        assert_eq!(source_package("codex", "native"), None);
+        assert_eq!(source_package("codex", "homebrew_cask"), None);
     }
 
     #[test]
@@ -1512,12 +1497,12 @@ mod tests {
     #[test]
     fn homebrew_package_name_comes_from_upgrade_command() {
         assert_eq!(
-            homebrew_package_name_from_command("codex", "homebrew_cask").as_deref(),
-            Some("codex")
+            homebrew_package_name_from_command("codex", "homebrew_cask"),
+            None
         );
         assert_eq!(
-            homebrew_package_name_from_command("claude", "homebrew_cask").as_deref(),
-            Some("claude-code")
+            homebrew_package_name_from_command("claude", "homebrew_cask"),
+            None
         );
     }
 
