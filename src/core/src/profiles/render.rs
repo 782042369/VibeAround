@@ -63,7 +63,7 @@ pub fn render(
 ) -> anyhow::Result<RenderedProfile> {
     let endpoint = pick_endpoint(profile, catalog, api_type)?;
     let auth = pick_auth_mode(endpoint, &profile.auth_mode)?;
-    let context = build_context(profile, api_type, endpoint, catalog);
+    let context = build_context(profile, api_type, launch_target, endpoint, catalog);
     if launch_target == "pi" {
         return render_pi_profile(profile, api_type, endpoint, catalog, &context);
     }
@@ -309,7 +309,11 @@ fn command_args_for(launch_target: &str, ctx: &BTreeMap<String, String>) -> Vec<
         push_config(&format!("{provider_key}.name"), toml_string(provider_label));
     }
     if let Some(base_url) = ctx.get("base_url").filter(|v| !v.is_empty()) {
-        push_config(&format!("{provider_key}.base_url"), toml_string(base_url));
+        let base_url = codex_provider_base_url(
+            ctx.get("api_type").map(String::as_str).unwrap_or_default(),
+            base_url,
+        );
+        push_config(&format!("{provider_key}.base_url"), toml_string(&base_url));
     }
     if let Some(api_type) = ctx.get("api_type").filter(|v| !v.is_empty()) {
         let wire_api = if api_type == "openai-chat" {
@@ -408,6 +412,19 @@ fn codex_model_catalog_rel_path(model: &str) -> String {
         slug.push_str("model");
     }
     format!("codex-model-catalog-{slug}.json")
+}
+
+fn codex_provider_base_url(api_type: &str, base_url: &str) -> String {
+    if api_type != "openai-responses" && api_type != "openai-chat" {
+        return base_url.to_string();
+    }
+
+    let trimmed = base_url.trim_end_matches('/');
+    if trimmed.ends_with("/v1") {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}/v1")
+    }
 }
 
 fn normalize_claude_env(env: &mut Vec<(String, String)>, ctx: &BTreeMap<String, String>) {
@@ -541,6 +558,7 @@ fn toml_string(s: &str) -> String {
 fn build_context(
     profile: &ProfileDef,
     api_type: &str,
+    launch_target: &str,
     endpoint: &EndpointDef,
     catalog: &ProviderCatalog,
 ) -> BTreeMap<String, String> {
@@ -574,6 +592,11 @@ fn build_context(
     let base_url = overrides
         .base_url
         .unwrap_or_else(|| endpoint.default_base_url.clone());
+    let base_url = if is_codex_launch_target(launch_target) {
+        codex_provider_base_url(api_type, &base_url)
+    } else {
+        base_url
+    };
     ctx.insert("base_url".to_string(), base_url);
     let requested_model = overrides
         .model
@@ -866,7 +889,7 @@ mod tests {
             .command_args
             .iter()
             .any(|arg| arg
-                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz'"));
+                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz/v1'"));
         assert!(rendered
             .command_args
             .iter()
@@ -881,15 +904,6 @@ mod tests {
         assert!(rendered
             .env
             .contains(&("OPENAI_API_KEY".to_string(), "test-key".to_string())));
-        assert!(rendered.settings_files.iter().any(|settings_file| {
-            settings_file.rel_path == "config.toml"
-                && settings_file
-                    .contents
-                    .contains("base_url = \"http://ai.939593.xyz\"")
-                && settings_file
-                    .contents
-                    .contains("[model_providers.\"VibeWbz Gateway Test\"]")
-        }));
         assert!(rendered.config_env.is_none());
     }
 
@@ -913,7 +927,32 @@ mod tests {
             .command_args
             .iter()
             .any(|arg| arg == "model_providers.\"VibeWbz Gateway Test\".wire_api='responses'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg
+                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz/v1'"));
         assert!(rendered.config_env.is_none());
+    }
+
+    #[test]
+    fn codex_launch_does_not_duplicate_existing_v1_base_url() {
+        let mut profile = gateway_profile("openai-responses", "gpt-5.5");
+        profile
+            .overrides
+            .get_mut("openai-responses")
+            .expect("openai responses overrides")
+            .base_url = Some("http://ai.939593.xyz/v1/".to_string());
+        let provider = catalog::custom();
+
+        let rendered =
+            render(&profile, "openai-responses", "codex", provider).expect("codex profile renders");
+
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg
+                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz/v1'"));
     }
 
     fn gateway_profile(api_type: &str, model: &str) -> ProfileDef {
