@@ -19,7 +19,7 @@ jobs:
         include:
           - name: Windows x64
             runner: windows-latest
-            args: --bundles nsis,msi
+            args: --bundles nsis
           - name: macOS arm64
             runner: macos-15
             args: --bundles dmg
@@ -60,12 +60,6 @@ jobs:
             TAG="v${VERSION}"
           fi
           ARGS="${{ matrix.args }}"
-          if [ "${RUNNER_OS}" = "Windows" ] && [[ "${VERSION}" == *-* ]]; then
-            # MSI rejects textual prerelease identifiers such as x.y.z-beta.
-            # Keep beta Windows releases on NSIS + portable ZIP; stable releases
-            # still use the matrix default of NSIS + MSI.
-            ARGS="--bundles nsis"
-          fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "args=${ARGS}" >> "${GITHUB_OUTPUT}"
@@ -84,40 +78,38 @@ jobs:
 
             Assets built by GitHub Actions:
             - Windows x64 installer
-            - Windows x64 portable ZIP
             - macOS DMG for Apple Silicon and Intel
           releaseDraft: true
           prerelease: false
           args: ${{ steps.release.outputs.args }}
 
-      - name: Package Windows portable ZIP
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = "${{ steps.release.outputs.version }}"
-          $dist = "VibeWbz-win-$version-portable"
-          $zip = "$dist.zip"
-
-          Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
-          Remove-Item -Force $zip -ErrorAction SilentlyContinue
-
-          New-Item -ItemType Directory -Force $dist | Out-Null
-          Copy-Item "src/target/release/vibewbz-desktop.exe" "$dist/VibeWbz.exe"
-
-          New-Item -ItemType Directory -Force "$dist/_up_/desktop-ui" | Out-Null
-          Copy-Item -Recurse "src/desktop-ui/dist" "$dist/_up_/desktop-ui/dist"
-
-          New-Item -ItemType Directory -Force "$dist/icons" | Out-Null
-          Copy-Item "src/desktop/icons/32x32.png" "$dist/icons/32x32.png"
-
-          Compress-Archive -Path "$dist/*" -DestinationPath $zip -Force
-
-      - name: Upload Windows portable ZIP
-        if: runner.os == 'Windows'
+      - name: Normalize release asset names
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          gh release upload "${{ steps.release.outputs.tag }}" \
-            "VibeWbz-win-${{ steps.release.outputs.version }}-portable.zip" \
-            --clobber
+          set -euo pipefail
+          rename_asset() {
+            local from="$1"
+            local to="$2"
+            local id
+            id="$(gh release view "${TAG}" --json assets --jq ".assets[] | select(.name == \"${from}\") | .id" || true)"
+            if [ -z "${id}" ]; then
+              return 0
+            fi
+            gh api \
+              --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/releases/assets/${id}" \
+              -f "name=${to}" >/dev/null
+          }
+
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            rename_asset "VibeWbz_${VERSION}_x64-setup.exe" "VibeWbz_${VERSION}_windows-x64-installer-nsis.exe"
+          elif [ "${RUNNER_OS}" = "macOS" ] && [ "${RUNNER_ARCH}" = "ARM64" ]; then
+            rename_asset "VibeWbz_${VERSION}_aarch64.dmg" "VibeWbz_${VERSION}_macos-arm64.dmg"
+          elif [ "${RUNNER_OS}" = "macOS" ] && [ "${RUNNER_ARCH}" = "X64" ]; then
+            rename_asset "VibeWbz_${VERSION}_x64.dmg" "VibeWbz_${VERSION}_macos-x64.dmg"
+          fi
