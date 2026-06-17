@@ -94,15 +94,15 @@ jobs:
           rename_asset() {
             local from="$1"
             local to="$2"
-            local id
-            id="$(gh release view "${TAG}" --json assets --jq ".assets[] | select(.name == \"${from}\") | .id" || true)"
-            if [ -z "${id}" ]; then
+            local api_url
+            api_url="$(gh release view "${TAG}" --json assets --jq ".assets[] | select(.name == \"${from}\") | .apiUrl" || true)"
+            if [ -z "${api_url}" ]; then
               return 0
             fi
             gh api \
               --method PATCH \
               -H "Accept: application/vnd.github+json" \
-              "/repos/${GITHUB_REPOSITORY}/releases/assets/${id}" \
+              "${api_url}" \
               -f "name=${to}" >/dev/null
           }
 
