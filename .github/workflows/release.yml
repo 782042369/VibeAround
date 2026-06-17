@@ -17,24 +17,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu x64
-            runner: ubuntu-22.04
-            args: --bundles appimage,deb
           - name: Windows x64
             runner: windows-latest
             args: --bundles nsis,msi
+          - name: macOS arm64
+            runner: macos-15
+            args: --bundles dmg
+          - name: macOS x64
+            runner: macos-15-intel
+            args: --bundles dmg
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           submodules: recursive
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
@@ -88,9 +85,7 @@ jobs:
             Assets built by GitHub Actions:
             - Windows x64 installer
             - Windows x64 portable ZIP
-            - Ubuntu/Linux x64 packages
-
-            macOS DMG is built locally and attached separately.
+            - macOS DMG for Apple Silicon and Intel
           releaseDraft: true
           prerelease: false
           args: ${{ steps.release.outputs.args }}
