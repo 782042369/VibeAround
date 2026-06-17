@@ -109,8 +109,8 @@ jobs:
           New-Item -ItemType Directory -Force $dist | Out-Null
           Copy-Item "src/target/release/vibewbz-desktop.exe" "$dist/VibeWbz.exe"
 
-          New-Item -ItemType Directory -Force "$dist/_up_/web" | Out-Null
-          Copy-Item -Recurse "src/web/dist" "$dist/_up_/web/dist"
+          New-Item -ItemType Directory -Force "$dist/_up_/desktop-ui" | Out-Null
+          Copy-Item -Recurse "src/desktop-ui/dist" "$dist/_up_/desktop-ui/dist"
 
           New-Item -ItemType Directory -Force "$dist/icons" | Out-Null
           Copy-Item "src/desktop/icons/32x32.png" "$dist/icons/32x32.png"
