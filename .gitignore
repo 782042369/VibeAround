@@ -84,3 +84,4 @@ build.sh
 
 # ts-rs leftover (removed — fence against accidental resurrection)
 src/core/bindings/
+.omc
