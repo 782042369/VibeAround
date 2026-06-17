@@ -178,8 +178,13 @@ function DesktopApp() {
         </div>
       </header>
 
-      <div className="flex-1 min-h-0">
-        <Launch />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1">
+          <Launch />
+        </div>
+        <footer className="shrink-0 border-t border-border px-3 py-1.5 text-center text-[11px] leading-4 text-muted-foreground">
+          {t("仅供社区学习交流使用，所有安装源均来自官方来源。")}
+        </footer>
       </div>
     </div>
   );
