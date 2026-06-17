@@ -94,13 +94,20 @@ pub fn npm_registry_url() -> Option<String> {
     }
 
     let path = crate::config::data_dir().join("settings.json");
-    let contents = std::fs::read_to_string(path).ok()?;
-    let json = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
+    let Some(contents) = std::fs::read_to_string(path).ok() else {
+        return Some(NPM_REGISTRY_CN.to_string());
+    };
+    let Some(json) = serde_json::from_str::<serde_json::Value>(&contents).ok() else {
+        return Some(NPM_REGISTRY_CN.to_string());
+    };
     let source = json
         .get("startkit")
         .and_then(|value| value.get("source"))
-        .and_then(serde_json::Value::as_str)?;
-    npm_registry_for_source(source).map(str::to_string)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("cn");
+    npm_registry_for_source(source)
+        .or(Some(NPM_REGISTRY_CN))
+        .map(str::to_string)
 }
 
 fn npm_registry_for_source(source: &str) -> Option<&'static str> {

@@ -177,7 +177,7 @@ impl Default for StartkitChoices {
 }
 
 fn default_source() -> String {
-    "global".to_string()
+    "cn".to_string()
 }
 
 fn default_toolchain_mode() -> String {
