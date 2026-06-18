@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useI18n } from "@va/i18n";
 import {
   Monitor,
   Pencil,
   Rocket,
   Terminal,
 } from "lucide-react";
-import { useI18n } from "@va/i18n";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AgentRailButton, TooltipButton } from "./LaunchBuilderPrimitives";
+import { AgentExecutablePathDialog } from "./AgentExecutablePathDialog";
 import { ProfilePanel } from "./LaunchBuilderPanels";
+import { AgentRailButton, TooltipButton } from "./LaunchBuilderPrimitives";
 import {
   AgentSummaryHeader,
   ProfileInfoPanel,
@@ -19,46 +20,45 @@ import {
 import {
   createProfile,
   deleteProfile,
+  getAgentExecutableLatest,
+  getAgentExecutableResolution,
+  getDesktopAppEntries,
   getLauncherPreferences,
   getProfile,
   launchProfile,
   listAgents,
   listProfiles,
   reorderProfiles,
-  getDesktopAppEntries,
-  getAgentExecutableLatest,
-  getAgentExecutableResolution,
-  updateLauncherAgent,
-  setProfileConnection,
   setLauncherAgentExecutablePath,
   setLauncherAgentProfile,
   setLauncherDefault,
   setLauncherSelectedAgent,
-  type AgentSummary,
+  setProfileConnection,
+  updateLauncherAgent,
   type AgentExecutableLatest,
   type AgentExecutableResolution,
+  type AgentSummary,
   type DesktopAppDetectionFile,
   type LauncherPreferences,
 } from "./api";
-import { buildProfileCopyDraft } from "./profileClone";
 import {
-  connectionAgentId,
   agentProfileId,
+  connectionAgentId,
   isSelectionLaunchable,
   mergeOrderedSubset,
   moveItemBefore,
   profileById,
-  profileSupportsAgent,
   profileSummary,
+  profileSupportsAgent,
   selectionUnavailableReason,
   type ProfileChoice,
 } from "./launchModel";
+import { buildProfileCopyDraft } from "./profileClone";
 import type {
   ConnectionAgentId,
   ProfileConnectionPreference,
   ProfileSummary,
 } from "./types";
-import { AgentExecutablePathDialog } from "./AgentExecutablePathDialog";
 
 const AGENT_ORDER = [
   "codex",
@@ -543,7 +543,7 @@ export function AgentLaunchBuilder({
         bridge: false,
         route: selectedAgentIsDirectOnly
           ? t("Desktop app")
-          : t("Gateway"),
+          : t("CLI app"),
       };
   const selectedAgentPreference = viewPrefs.agentPreferences[agentId];
   const desktopAppEntryForAgent = (targetAgentId: string) =>

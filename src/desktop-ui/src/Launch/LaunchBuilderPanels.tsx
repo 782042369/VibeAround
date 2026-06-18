@@ -3,12 +3,15 @@ import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
 import {
   Check,
+  ExternalLink,
   FolderOpen,
   Plus,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
 import { BrandIcon } from "@/components/brand-icon";
+import { Button } from "@/components/ui/button";
+import { openExternalUrl } from "@/lib/api";
 import {
   Select,
   SelectContent,
@@ -49,6 +52,11 @@ import {
   WorkspaceActionsMenu,
 } from "./LaunchBuilderPrimitives";
 import type { ConnectionAgentId, ProfileSummary } from "./types";
+
+const CCSWITCH_URL = "https://ccswitch.io/zh";
+const GATEWAY_TOKEN_URL = "https://ai.939593.xyz/console/token";
+const CCSWITCH_TOKEN_GUIDE_IMAGE =
+  "https://lsky.939593.xyz:11111/Olmqcu.png";
 
 function SelectorPanelShell({
   title,
@@ -126,6 +134,55 @@ export function ProfilePanel({
 
   return (
     <section className="space-y-2">
+      <div className="grid gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 md:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="min-w-0 space-y-2">
+          <p className="text-[11px] leading-4 text-muted-foreground">
+            {t(
+              "VibeWbz setup launch is built for first-time users. If you have already installed the base environment, ccswitch is recommended.",
+            )}
+          </p>
+          <p className="text-[11px] leading-4 text-muted-foreground">
+            {t(
+              "If ccswitch is installed, create a gateway token, then use that token in ccswitch.",
+            )}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="h-7"
+              onClick={() => void openExternalUrl(CCSWITCH_URL)}
+            >
+              <ExternalLink className="h-3 w-3" />
+              {t("Open ccswitch")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="h-7"
+              onClick={() => void openExternalUrl(GATEWAY_TOKEN_URL)}
+            >
+              <ExternalLink className="h-3 w-3" />
+              {t("Create gateway token")}
+            </Button>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="overflow-hidden rounded border border-border bg-background text-left"
+          onClick={() => void openExternalUrl(CCSWITCH_TOKEN_GUIDE_IMAGE)}
+          title={t("Open guide image")}
+        >
+          <img
+            src={CCSWITCH_TOKEN_GUIDE_IMAGE}
+            alt={t("ccswitch gateway token guide")}
+            className="h-[96px] w-full object-cover object-top"
+            loading="lazy"
+          />
+        </button>
+      </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-2">
         <SelectableItemCard
           active={false}

@@ -47,6 +47,7 @@ export const zhCNLaunch: Record<string, string> = {
   "Configure gateway first": "请先配置中转站 key",
   "Open desktop app": "打开桌面应用",
   "Desktop app": "桌面应用",
+  "CLI app": "终端应用",
   "Workspace and sessions are selected inside the desktop app.":
     "工作区和会话在桌面应用里选择。",
   "For Anthropic profiles, Claude Desktop opens the local bridge automatically on launch.":
@@ -114,6 +115,14 @@ export const zhCNLaunch: Record<string, string> = {
     "只需保存一次服务商 API key，之后一键即可用该 key 启动 Claude 或 Codex。VibeWbz 会打开新的终端窗口，其余交给 CLI 自己运行。",
   "Add your first profile": "添加第一个配置",
   "Add a provider profile": "添加服务商配置",
+  "VibeWbz setup launch is built for first-time users. If you have already installed the base environment, ccswitch is recommended.":
+    "VibeWbz 的配置启动更适合首次使用用户。如果你已经安装了基础环境，推荐使用 ccswitch。",
+  "If ccswitch is installed, create a gateway token, then use that token in ccswitch.":
+    "如果已经安装了 ccswitch，请先到中转站创建令牌，再把令牌填到 ccswitch 里使用。",
+  "Open ccswitch": "打开 ccswitch",
+  "Create gateway token": "创建中转站令牌",
+  "Open guide image": "打开引导图片",
+  "ccswitch gateway token guide": "ccswitch 中转站令牌使用引导",
   "Configure VibeWbz Gateway": "配置中转站",
   "Configure the default gateway profile.": "配置默认中转站。",
   "Default gateway": "默认中转站",
