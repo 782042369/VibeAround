@@ -1,5 +1,5 @@
-import { Check, Copy } from "lucide-react";
 import { useI18n } from "@va/i18n";
+import { Check, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { API_BASE } from "@/lib/api";
+import { GATEWAY_PROFILE_LABEL } from "./gatewayProfile";
 import type { ConnectionAgentId, ProfileSummary } from "./types";
 
 export const PLACEHOLDER_API_KEY = "anything-non-empty";
@@ -72,7 +73,18 @@ export function buildManualSetting(
         "",
         `model = ${tomlString(model)}`,
         `model_provider = ${tomlString(providerName)}`,
-        `model_reasoning_effort = "medium"`,
+        `model_reasoning_effort = "high"`,
+        `model_context_window = 400000`,
+        `model_auto_compact_token_limit = 228000`,
+        "",
+        `[features]`,
+        `memories = true`,
+        "",
+        `[memories]`,
+        `consolidation_model = "gpt-5.5"`,
+        `extract_model = "gpt-5.5"`,
+        `max_raw_memories_for_consolidation = 320`,
+        `max_rollout_age_days = 60`,
         "",
         `[model_providers.${tomlKey(providerName)}]`,
         `name = ${tomlString(providerName)}`,
@@ -261,7 +273,7 @@ export function ManualValueRow({
 }
 
 function codexProviderName(label: string): string {
-  return label.trim() || "VibeWbz Gateway";
+  return label.replace(/\s/g, "") || GATEWAY_PROFILE_LABEL;
 }
 
 function tomlKey(value: string): string {

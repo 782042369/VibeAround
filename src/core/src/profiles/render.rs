@@ -20,6 +20,14 @@ use super::catalog::{
 use super::codex_metadata::{self, CodexModelCatalogSpec};
 use super::schema::{ApiTypeOverrides, AuthMode, ProfileDef};
 
+const CODEX_DEFAULT_REASONING_EFFORT: &str = "high";
+const CODEX_DEFAULT_CONTEXT_WINDOW: &str = "400000";
+const CODEX_DEFAULT_AUTO_COMPACT_TOKEN_LIMIT: &str = "228000";
+const CODEX_MEMORIES_CONSOLIDATION_MODEL: &str = "gpt-5.5";
+const CODEX_MEMORIES_EXTRACT_MODEL: &str = "gpt-5.5";
+const CODEX_MEMORIES_MAX_RAW_FOR_CONSOLIDATION: &str = "320";
+const CODEX_MEMORIES_MAX_ROLLOUT_AGE_DAYS: &str = "60";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -294,12 +302,44 @@ fn command_args_for(launch_target: &str, ctx: &BTreeMap<String, String>) -> Vec<
     if let Some(provider_id) = ctx.get("provider_id").filter(|v| !v.is_empty()) {
         push_config("model_provider", toml_string(provider_id));
     }
-    if let Some(reasoning_effort) = ctx.get("reasoning_effort").filter(|v| !v.is_empty()) {
-        push_config("model_reasoning_effort", toml_string(reasoning_effort));
-    }
-    if let Some(context_window) = ctx.get("model_context_window").filter(|v| !v.is_empty()) {
-        push_config("model_context_window", context_window.clone());
-    }
+    let reasoning_effort = ctx
+        .get("reasoning_effort")
+        .filter(|v| !v.is_empty())
+        .map(String::as_str)
+        .unwrap_or(CODEX_DEFAULT_REASONING_EFFORT);
+    push_config("model_reasoning_effort", toml_string(reasoning_effort));
+    let context_window = ctx
+        .get("model_context_window")
+        .filter(|v| !v.is_empty())
+        .map(String::as_str)
+        .unwrap_or(CODEX_DEFAULT_CONTEXT_WINDOW);
+    push_config("model_context_window", context_window.to_string());
+    let auto_compact_token_limit = ctx
+        .get("model_auto_compact_token_limit")
+        .filter(|v| !v.is_empty())
+        .map(String::as_str)
+        .unwrap_or(CODEX_DEFAULT_AUTO_COMPACT_TOKEN_LIMIT);
+    push_config(
+        "model_auto_compact_token_limit",
+        auto_compact_token_limit.to_string(),
+    );
+    push_config("features.memories", "true".to_string());
+    push_config(
+        "memories.consolidation_model",
+        toml_string(CODEX_MEMORIES_CONSOLIDATION_MODEL),
+    );
+    push_config(
+        "memories.extract_model",
+        toml_string(CODEX_MEMORIES_EXTRACT_MODEL),
+    );
+    push_config(
+        "memories.max_raw_memories_for_consolidation",
+        CODEX_MEMORIES_MAX_RAW_FOR_CONSOLIDATION.to_string(),
+    );
+    push_config(
+        "memories.max_rollout_age_days",
+        CODEX_MEMORIES_MAX_ROLLOUT_AGE_DAYS.to_string(),
+    );
 
     let Some(provider_id) = ctx.get("provider_id").filter(|v| !v.is_empty()) else {
         return args;
@@ -627,7 +667,7 @@ fn build_context(
         "reasoning_effort".to_string(),
         overrides
             .reasoning_effort
-            .unwrap_or_else(|| "medium".to_string()),
+            .unwrap_or_else(|| CODEX_DEFAULT_REASONING_EFFORT.to_string()),
     );
 
     // Credentials are flattened in last so a (hypothetical) catalog field
@@ -648,11 +688,11 @@ fn is_vibewbz_codex_profile(profile: &ProfileDef, api_type: &str) -> bool {
 }
 
 fn codex_provider_id_from_label(label: &str) -> String {
-    let label = label.trim();
+    let label: String = label.chars().filter(|c| !c.is_whitespace()).collect();
     if label.is_empty() {
-        "VibeWbz Gateway".to_string()
+        "VibeWbzGateway".to_string()
     } else {
-        label.to_string()
+        label
     }
 }
 
@@ -884,23 +924,52 @@ mod tests {
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_provider='VibeWbz Gateway Test'"));
+            .any(|arg| arg == "model_provider='VibeWbzGatewayTest'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_reasoning_effort='high'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_context_window=400000"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_auto_compact_token_limit=228000"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "features.memories=true"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.consolidation_model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.extract_model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.max_raw_memories_for_consolidation=320"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.max_rollout_age_days=60"));
         assert!(rendered
             .command_args
             .iter()
             .any(|arg| arg
-                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz/v1'"));
+                == "model_providers.VibeWbzGatewayTest.base_url='http://ai.939593.xyz/v1'"));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_providers.\"VibeWbz Gateway Test\".wire_api='responses'"));
-        assert!(
-            rendered
-                .command_args
-                .iter()
-                .any(|arg| arg
-                    == "model_providers.\"VibeWbz Gateway Test\".requires_openai_auth=true")
-        );
+            .any(|arg| arg == "model_providers.VibeWbzGatewayTest.wire_api='responses'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_providers.VibeWbzGatewayTest.requires_openai_auth=true"));
         assert!(rendered
             .env
             .contains(&("OPENAI_API_KEY".to_string(), "test-key".to_string())));
@@ -922,16 +991,48 @@ mod tests {
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_provider='VibeWbz Gateway Test'"));
+            .any(|arg| arg == "model_provider='VibeWbzGatewayTest'"));
         assert!(rendered
             .command_args
             .iter()
-            .any(|arg| arg == "model_providers.\"VibeWbz Gateway Test\".wire_api='responses'"));
+            .any(|arg| arg == "model_reasoning_effort='high'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_context_window=400000"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_auto_compact_token_limit=228000"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "features.memories=true"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.consolidation_model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.extract_model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.max_raw_memories_for_consolidation=320"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.max_rollout_age_days=60"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_providers.VibeWbzGatewayTest.wire_api='responses'"));
         assert!(rendered
             .command_args
             .iter()
             .any(|arg| arg
-                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz/v1'"));
+                == "model_providers.VibeWbzGatewayTest.base_url='http://ai.939593.xyz/v1'"));
         assert!(rendered.config_env.is_none());
     }
 
@@ -952,7 +1053,7 @@ mod tests {
             .command_args
             .iter()
             .any(|arg| arg
-                == "model_providers.\"VibeWbz Gateway Test\".base_url='http://ai.939593.xyz/v1'"));
+                == "model_providers.VibeWbzGatewayTest.base_url='http://ai.939593.xyz/v1'"));
     }
 
     fn gateway_profile(api_type: &str, model: &str) -> ProfileDef {
@@ -966,7 +1067,7 @@ mod tests {
                 endpoint_id: None,
                 base_url: Some("http://ai.939593.xyz".to_string()),
                 model: Some(model.to_string()),
-                reasoning_effort: Some("medium".to_string()),
+                reasoning_effort: None,
                 ..Default::default()
             },
         );

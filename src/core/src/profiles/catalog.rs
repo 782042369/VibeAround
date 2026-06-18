@@ -342,7 +342,7 @@ pub fn custom() -> &'static ProviderCatalog {
     static CUSTOM: LazyLock<ProviderCatalog> = LazyLock::new(|| {
         ProviderCatalog {
         id: "custom".to_string(),
-        label: "VibeWbz Gateway".to_string(),
+        label: "VibeWbzGateway".to_string(),
         icon: Some("✨".to_string()),
         homepage: None,
         hidden_from_picker: false,
@@ -1163,7 +1163,7 @@ mod gateway_tests {
             .collect();
 
         assert_eq!(provider.id, "custom");
-        assert_eq!(provider.label, "VibeWbz Gateway");
+        assert_eq!(provider.label, "VibeWbzGateway");
         assert!(api_types.contains(&"anthropic"));
         assert!(api_types.contains(&"openai-responses"));
     }

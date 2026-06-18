@@ -19,8 +19,23 @@ const ROOT_KEYS: &[&str] = &[
     "model_provider",
     "model_reasoning_effort",
     "model_context_window",
+    "model_auto_compact_token_limit",
     "model_catalog_json",
     "disable_response_storage",
+];
+const MANAGED_TABLE_KEYS: &[&str] = &[
+    "features.memories",
+    "memories.consolidation_model",
+    "memories.extract_model",
+    "memories.max_raw_memories_for_consolidation",
+    "memories.max_rollout_age_days",
+];
+const FEATURE_KEYS: &[&str] = &["memories"];
+const MEMORY_KEYS: &[&str] = &[
+    "consolidation_model",
+    "extract_model",
+    "max_raw_memories_for_consolidation",
+    "max_rollout_age_days",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,15 +184,38 @@ fn remove_conflicting_root_keys(input: &str) -> (String, Vec<String>) {
     let mut body = Vec::new();
     let mut restore = Vec::new();
     let mut in_root = true;
+    let mut section: Option<String> = None;
+    let mut restore_features_header = false;
+    let mut restore_memories_header = false;
 
     for line in input.lines() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with('[') {
+        if let Some(next_section) = section_name(trimmed) {
             in_root = false;
+            section = Some(next_section.to_string());
         }
         if in_root {
             if let Some(key) = root_key_for_line(trimmed) {
                 if ROOT_KEYS.contains(&key) {
+                    restore.push(line.to_string());
+                    continue;
+                }
+            }
+        } else if let Some(section) = section.as_deref() {
+            if let Some(key) = root_key_for_line(trimmed) {
+                if section == "features" && FEATURE_KEYS.contains(&key) {
+                    if !restore_features_header {
+                        restore.push("[features]".to_string());
+                        restore_features_header = true;
+                    }
+                    restore.push(line.to_string());
+                    continue;
+                }
+                if section == "memories" && MEMORY_KEYS.contains(&key) {
+                    if !restore_memories_header {
+                        restore.push("[memories]".to_string());
+                        restore_memories_header = true;
+                    }
                     restore.push(line.to_string());
                     continue;
                 }
@@ -210,7 +248,7 @@ impl CodexDesktopOverlay {
 
         let mut root_entries = Vec::new();
         for (key, value) in &entries {
-            if ROOT_KEYS.contains(&key.as_str()) {
+            if ROOT_KEYS.contains(&key.as_str()) || MANAGED_TABLE_KEYS.contains(&key.as_str()) {
                 if key == "model_provider" {
                     root_entries.push((key.clone(), codex::toml_string(&provider_id)));
                 } else {
@@ -281,12 +319,35 @@ fn render_restore_block(overlay: &CodexDesktopOverlay, restore_lines: &[String])
 
 fn render_active_block(overlay: &CodexDesktopOverlay) -> String {
     let mut lines = vec![begin_marker(OverlayBlock::Active, overlay)];
-    lines.extend(
-        overlay
-            .root_entries
-            .iter()
-            .map(|(key, value)| format!("{key} = {value}")),
-    );
+    let mut features = Vec::new();
+    let mut memories = Vec::new();
+    for (key, value) in &overlay.root_entries {
+        if let Some(field) = key.strip_prefix("features.") {
+            features.push((field, value));
+        } else if let Some(field) = key.strip_prefix("memories.") {
+            memories.push((field, value));
+        } else {
+            lines.push(format!("{key} = {value}"));
+        }
+    }
+    if !features.is_empty() {
+        lines.push(String::new());
+        lines.push("[features]".to_string());
+        lines.extend(
+            features
+                .into_iter()
+                .map(|(key, value)| format!("{key} = {value}")),
+        );
+    }
+    if !memories.is_empty() {
+        lines.push(String::new());
+        lines.push("[memories]".to_string());
+        lines.extend(
+            memories
+                .into_iter()
+                .map(|(key, value)| format!("{key} = {value}")),
+        );
+    }
     lines.push(end_marker(OverlayBlock::Active));
     lines.join("\n")
 }
@@ -370,6 +431,11 @@ fn root_key_for_line(trimmed: &str) -> Option<&str> {
     Some(key)
 }
 
+fn section_name(trimmed: &str) -> Option<&str> {
+    let name = trimmed.strip_prefix('[')?.strip_suffix(']')?.trim();
+    (!name.is_empty()).then_some(name)
+}
+
 fn parse_toml_string(value: &str) -> Option<String> {
     let doc = format!("value = {value}");
     let parsed: toml::Value = toml::from_str(&doc).ok()?;
@@ -427,6 +493,16 @@ mod tests {
                 "-c".to_string(),
                 "model_provider='deepseek'".to_string(),
                 "-c".to_string(),
+                "features.memories=true".to_string(),
+                "-c".to_string(),
+                "memories.consolidation_model='gpt-5.5'".to_string(),
+                "-c".to_string(),
+                "memories.extract_model='gpt-5.5'".to_string(),
+                "-c".to_string(),
+                "memories.max_raw_memories_for_consolidation=320".to_string(),
+                "-c".to_string(),
+                "memories.max_rollout_age_days=60".to_string(),
+                "-c".to_string(),
                 "model_providers.deepseek.name='DeepSeek'".to_string(),
                 "-c".to_string(),
                 "model_providers.deepseek.base_url='https://api.deepseek.com/v1'".to_string(),
@@ -454,6 +530,12 @@ url = "http://127.0.0.1:12358/mcp"
         assert!(next.contains("# VIBEWBZ-CODEX-DESKTOP BEGIN RESTORE"));
         assert!(next.contains("# model = \"gpt-5-codex\""));
         assert!(next.contains("model_provider = 'vibewbz_deepseek-main'"));
+        assert!(next.contains("[features]\nmemories = true"));
+        assert!(
+            next.contains("[memories]\nconsolidation_model = 'gpt-5.5'\nextract_model = 'gpt-5.5'")
+        );
+        assert!(next.contains("max_raw_memories_for_consolidation = 320"));
+        assert!(next.contains("max_rollout_age_days = 60"));
         assert!(next.contains("[model_providers.vibewbz_deepseek-main]"));
         assert!(next.contains("requires_openai_auth = true"));
         assert!(!next.contains("env_key = 'OPENAI_API_KEY'"));
@@ -468,6 +550,28 @@ url = "http://127.0.0.1:12358/mcp"
         assert!(cleaned.contains("model = \"gpt-5-codex\""));
         assert!(!cleaned.contains(MARKER));
         assert!(!cleaned.contains("[model_providers.vibewbz_deepseek-main]"));
+    }
+
+    #[test]
+    fn cleanup_restores_previous_memory_settings() {
+        let current = r#"[features]
+memories = false
+
+[memories]
+consolidation_model = "gpt-5"
+extract_model = "gpt-5"
+max_raw_memories_for_consolidation = 100
+max_rollout_age_days = 30
+"#;
+        let with_overlay = apply_overlay_to_string(current, &overlay());
+        let cleaned = cleanup_vibewbz_blocks(&with_overlay);
+
+        assert!(cleaned.contains("[features]\nmemories = false"));
+        assert!(cleaned
+            .contains("[memories]\nconsolidation_model = \"gpt-5\"\nextract_model = \"gpt-5\""));
+        assert!(cleaned.contains("max_raw_memories_for_consolidation = 100"));
+        assert!(cleaned.contains("max_rollout_age_days = 30"));
+        assert!(!cleaned.contains(MARKER));
     }
 
     #[test]

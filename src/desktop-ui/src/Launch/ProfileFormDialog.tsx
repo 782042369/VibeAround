@@ -153,7 +153,7 @@ export function ProfileFormDialog({
 
   const dialogTitle = editing
     ? t("Edit profile · {{label}}", { label: initial!.label })
-    : t("Configure VibeWbz Gateway");
+    : t("Configure {{label}}", { label: GATEWAY_PROFILE_LABEL });
 
   return (
     <Dialog
@@ -183,7 +183,7 @@ export function ProfileFormDialog({
             claudeSonnetModel={claudeSonnetModel}
             claudeOpusModel={claudeOpusModel}
             fetchingModels={fetchingModels}
-            onLabel={setGatewayLabel}
+            onLabel={(value) => setGatewayLabel(value.replace(/\s/g, ""))}
             onBaseUrl={setGatewayBaseUrl}
             onApiKey={setGatewayKey}
             onReveal={setGatewayKeyVisible}

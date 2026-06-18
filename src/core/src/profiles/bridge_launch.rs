@@ -10,6 +10,14 @@ use super::render::{ConfigEnvTarget, RenderedProfile, RenderedSettingsFile};
 use super::schema::{AuthMode, ProfileDef};
 use crate::config;
 
+const CODEX_DEFAULT_REASONING_EFFORT: &str = "high";
+const CODEX_DEFAULT_CONTEXT_WINDOW: u64 = 400_000;
+const CODEX_DEFAULT_AUTO_COMPACT_TOKEN_LIMIT: u64 = 228_000;
+const CODEX_MEMORIES_CONSOLIDATION_MODEL: &str = "gpt-5.5";
+const CODEX_MEMORIES_EXTRACT_MODEL: &str = "gpt-5.5";
+const CODEX_MEMORIES_MAX_RAW_FOR_CONSOLIDATION: u64 = 320;
+const CODEX_MEMORIES_MAX_ROLLOUT_AGE_DAYS: u64 = 60;
+
 pub(super) fn render_bridge_launch(
     profile: &ProfileDef,
     launch_target: &str,
@@ -170,7 +178,7 @@ fn resolve_bridge_settings(
         .overrides
         .get(target_api_type)
         .and_then(|overrides| overrides.reasoning_effort.clone())
-        .unwrap_or_else(|| "medium".to_string());
+        .unwrap_or_else(|| CODEX_DEFAULT_REASONING_EFFORT.to_string());
 
     Ok(BridgeLaunchSettings {
         target_api_type: target_api_type.to_string(),
@@ -305,13 +313,40 @@ fn render_codex_bridge_profile(
         &toml_string(&settings.reasoning_effort),
     );
     let mut settings_files = Vec::new();
-    if let Some(context_window) = default_model.model_context_window {
-        push_config_arg(
-            &mut command_args,
-            "model_context_window",
-            &context_window.to_string(),
-        );
-    }
+    let context_window = default_model
+        .model_context_window
+        .unwrap_or(CODEX_DEFAULT_CONTEXT_WINDOW);
+    push_config_arg(
+        &mut command_args,
+        "model_context_window",
+        &context_window.to_string(),
+    );
+    push_config_arg(
+        &mut command_args,
+        "model_auto_compact_token_limit",
+        &CODEX_DEFAULT_AUTO_COMPACT_TOKEN_LIMIT.to_string(),
+    );
+    push_config_arg(&mut command_args, "features.memories", "true");
+    push_config_arg(
+        &mut command_args,
+        "memories.consolidation_model",
+        &toml_string(CODEX_MEMORIES_CONSOLIDATION_MODEL),
+    );
+    push_config_arg(
+        &mut command_args,
+        "memories.extract_model",
+        &toml_string(CODEX_MEMORIES_EXTRACT_MODEL),
+    );
+    push_config_arg(
+        &mut command_args,
+        "memories.max_raw_memories_for_consolidation",
+        &CODEX_MEMORIES_MAX_RAW_FOR_CONSOLIDATION.to_string(),
+    );
+    push_config_arg(
+        &mut command_args,
+        "memories.max_rollout_age_days",
+        &CODEX_MEMORIES_MAX_ROLLOUT_AGE_DAYS.to_string(),
+    );
     let specs: Vec<_> = settings
         .models
         .iter()
@@ -583,6 +618,38 @@ mod tests {
             .command_args
             .iter()
             .any(|arg| arg == "model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_reasoning_effort='high'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_context_window=400000"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "model_auto_compact_token_limit=228000"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "features.memories=true"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.consolidation_model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.extract_model='gpt-5.5'"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.max_raw_memories_for_consolidation=320"));
+        assert!(rendered
+            .command_args
+            .iter()
+            .any(|arg| arg == "memories.max_rollout_age_days=60"));
         assert!(rendered.command_args.iter().any(|arg| {
             arg == "model_providers.custom.base_url='http://127.0.0.1:12358/va/local-api/gateway-test/codex-openai-responses/openai-responses/v1'"
         }));
@@ -724,7 +791,7 @@ mod tests {
                 endpoint_id: None,
                 base_url: Some("http://ai.939593.xyz".to_string()),
                 model: Some(model.to_string()),
-                reasoning_effort: Some("medium".to_string()),
+                reasoning_effort: None,
                 ..Default::default()
             },
         );

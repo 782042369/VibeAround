@@ -1,6 +1,6 @@
 import type { CatalogEntry, ProfileDraft } from "./types";
 
-export const GATEWAY_PROFILE_LABEL = "VibeWbz Gateway";
+export const GATEWAY_PROFILE_LABEL = "VibeWbzGateway";
 export const GATEWAY_BASE_URL = "https://ai.939593.xyz";
 
 export type GatewayProfileMode = "claude" | "codex";
@@ -13,7 +13,7 @@ const GATEWAY_MODELS = {
 export function gatewayProvider(): CatalogEntry {
   return {
     id: "custom",
-    label: "VibeWbz Gateway",
+    label: GATEWAY_PROFILE_LABEL,
     icon: null,
     homepage: GATEWAY_BASE_URL,
     endpoints: [],
@@ -37,7 +37,7 @@ export function gatewayProfileDraft(
   const claudeModel = models.claudeModel?.trim() || GATEWAY_MODELS.anthropic;
   const gptModel = models.gptModel?.trim() || GATEWAY_MODELS["openai-responses"];
   return {
-    label: label.trim() || GATEWAY_PROFILE_LABEL,
+    label: label.replace(/\s/g, "") || GATEWAY_PROFILE_LABEL,
     provider: "custom",
     auth_mode: "api_key",
     api_types: [mode === "claude" ? "anthropic" : "openai-responses"],
