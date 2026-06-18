@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 
 const RELEASE_API_URL =
-  "https://api.github.com/repos/jazzenchen/VibeAround/releases/latest";
-const RELEASES_URL = "https://github.com/jazzenchen/VibeAround/releases/latest";
+  "https://api.github.com/repos/782042369/VibeAround/releases/latest";
+const RELEASES_URL = "https://github.com/782042369/VibeAround/releases/latest";
 
 export interface UpdateReleaseInfo {
   currentVersion: string;
