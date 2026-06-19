@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
@@ -33,22 +32,6 @@ pub struct DesktopAppEntry {
     pub path: String,
     pub source: String,
     pub source_label: String,
-}
-
-pub fn detected_desktop_apps_path() -> PathBuf {
-    common::config::data_dir().join("desktop-apps.detected.json")
-}
-
-pub fn read_detected_desktop_apps() -> Option<DesktopAppDetectionFile> {
-    let path = detected_desktop_apps_path();
-    let contents = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&contents).ok()
-}
-
-pub async fn scan_and_persist() -> anyhow::Result<DesktopAppDetectionFile> {
-    let detected = scan_desktop_apps().await;
-    write_detected_desktop_apps(&detected)?;
-    Ok(detected)
 }
 
 pub async fn scan_desktop_apps() -> DesktopAppDetectionFile {
@@ -274,17 +257,6 @@ async fn command_stdout_line(command: &str, args: &[&str]) -> Option<String> {
         .map(str::trim)
         .find(|line| !line.is_empty())
         .map(str::to_string)
-}
-
-fn write_detected_desktop_apps(detected: &DesktopAppDetectionFile) -> anyhow::Result<()> {
-    let path = detected_desktop_apps_path();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("create detected desktop apps dir {:?}", parent))?;
-    }
-    let json = serde_json::to_string_pretty(detected).context("serialize desktop app detection")?;
-    std::fs::write(&path, json).with_context(|| format!("write {:?}", path))?;
-    Ok(())
 }
 
 fn powershell_string(value: &str) -> String {

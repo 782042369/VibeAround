@@ -4,17 +4,11 @@
 mod agent_detection;
 mod desktop_detection;
 mod onboarding;
-mod profiles;
 mod startkit;
 mod tray;
 
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use tauri::{AppHandle, Manager, Runtime};
-use tokio::sync::{Mutex, Notify};
 
-use onboarding::OnboardingGate;
 use startkit::StartkitRunState;
 
 #[derive(serde::Serialize)]
@@ -25,87 +19,8 @@ struct AppInfo {
     arch: &'static str,
 }
 
-/// Shared `TunnelManager` handle kept for the local daemon state.
-pub struct AppTunnels(pub Arc<common::tunnels::TunnelManager>);
-
-/// Whether the app is currently in onboarding mode (tray reads this).
+/// Whether the app is currently in onboarding mode.
 pub struct OnboardingActive(pub std::sync::atomic::AtomicBool);
-
-pub struct DaemonController {
-    daemon: Arc<server::ServerDaemon>,
-    dist_path: PathBuf,
-    running: Mutex<Option<server::RunningDaemon>>,
-}
-
-impl DaemonController {
-    pub fn new(daemon: Arc<server::ServerDaemon>, dist_path: PathBuf) -> Self {
-        Self {
-            daemon,
-            dist_path,
-            running: Mutex::new(None),
-        }
-    }
-
-    pub async fn start(&self) -> Result<(), String> {
-        let mut running = self.running.lock().await;
-        if running.is_some() {
-            return Ok(());
-        }
-
-        let daemon = self
-            .daemon
-            .start_background(self.dist_path.clone())
-            .await
-            .map_err(|e| e.to_string())?;
-        *running = Some(daemon);
-        Ok(())
-    }
-
-    pub async fn stop(&self) {
-        let mut running = self.running.lock().await;
-        if let Some(daemon) = running.take() {
-            daemon.stop().await;
-        }
-    }
-
-    pub async fn restart(&self) -> Result<(), String> {
-        self.stop().await;
-        self.start().await
-    }
-}
-
-pub async fn start_daemon<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let controller = app
-        .try_state::<DaemonController>()
-        .ok_or_else(|| "daemon controller state is missing".to_string())?;
-    controller.start().await
-}
-
-pub async fn stop_daemon<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let controller = app
-        .try_state::<DaemonController>()
-        .ok_or_else(|| "daemon controller state is missing".to_string())?;
-    controller.stop().await;
-    Ok(())
-}
-
-pub async fn restart_daemon<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let controller = app
-        .try_state::<DaemonController>()
-        .ok_or_else(|| "daemon controller state is missing".to_string())?;
-    controller.restart().await
-}
-
-/// Return the current local API auth token + port so the desktop-ui (a
-/// cross-origin Tauri webview) can authenticate against the daemon.
-///
-/// Reads directly from `~/.vibewbz/auth.json`, which `ServerDaemon` writes
-/// on every start. Returns `None` before the daemon has started for the
-/// first time.
-#[tauri::command]
-fn get_auth_token() -> Option<common::auth::AuthFile> {
-    common::auth::read_token_file()
-}
 
 #[tauri::command]
 fn get_app_info() -> AppInfo {
@@ -118,7 +33,8 @@ fn get_app_info() -> AppInfo {
 
 #[tauri::command]
 async fn rescan_agent_entries() -> Result<agent_detection::AgentDetectionFile, String> {
-    agent_detection::scan_and_persist()
+    let catalog = agent_detection::source_catalog().map_err(|error| error.to_string())?;
+    agent_detection::scan_agents(&catalog)
         .await
         .map_err(|error| error.to_string())
 }
@@ -126,14 +42,12 @@ async fn rescan_agent_entries() -> Result<agent_detection::AgentDetectionFile, S
 #[tauri::command]
 async fn rescan_desktop_app_entries() -> Result<desktop_detection::DesktopAppDetectionFile, String>
 {
-    desktop_detection::scan_and_persist()
-        .await
-        .map_err(|error| error.to_string())
+    Ok(desktop_detection::scan_desktop_apps().await)
 }
 
 #[tauri::command]
 fn get_desktop_app_entries() -> Option<desktop_detection::DesktopAppDetectionFile> {
-    desktop_detection::read_detected_desktop_apps()
+    None
 }
 
 /// Open a trusted HTTP URL in the user's default external browser.
@@ -150,11 +64,6 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn restart_services<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    restart_daemon(&app).await
-}
-
-#[tauri::command]
 fn set_ui_locale<R: Runtime>(app: AppHandle<R>, locale: String) -> Result<(), String> {
     tray::set_ui_locale(&app, &locale)
 }
@@ -162,20 +71,7 @@ fn set_ui_locale<R: Runtime>(app: AppHandle<R>, locale: String) -> Result<(), St
 fn main() {
     common::logging::init();
 
-    let port = common::config::DEFAULT_PORT;
-    let daemon = Arc::new(server::ServerDaemon::new(port));
-    let tunnels = daemon.tunnels();
-
-    // Persist the auth token immediately so the desktop-ui (which runs in
-    // a Tauri webview that starts rendering before the daemon has fully
-    // booted) can read `~/.vibewbz/auth.json` from its first render.
-    if let Err(e) = daemon.persist_auth_token() {
-        tracing::info!("[VibeWbz] Failed to persist auth token: {}", e);
-    }
-
-    let onboarding_needed = onboarding::needs_onboarding();
-
-    let gate = Arc::new(Notify::new());
+    let onboarding_needed = false;
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -190,25 +86,18 @@ fn main() {
                 let _ = w.set_focus();
             }
         }))
-        .manage(AppTunnels(tunnels))
-        .manage(OnboardingGate {
-            notify: Arc::clone(&gate),
-        })
         .manage(OnboardingActive(std::sync::atomic::AtomicBool::new(
             onboarding_needed,
         )))
         .manage(StartkitRunState::default())
         .invoke_handler(tauri::generate_handler![
-            get_auth_token,
             get_app_info,
             rescan_agent_entries,
             rescan_desktop_app_entries,
             get_desktop_app_entries,
             open_external_url,
-            restart_services,
             set_ui_locale,
             onboarding::get_settings,
-            onboarding::save_settings,
             onboarding::finish_onboarding,
             onboarding::list_agents,
             onboarding::scan_agent_install_status,
@@ -218,89 +107,17 @@ fn main() {
             startkit::startkit_scan,
             startkit::start_startkit_install,
             startkit::cancel_startkit_install,
-            profiles::profiles_list,
-            profiles::profiles_get,
-            profiles::profiles_create,
-            profiles::profiles_upsert,
-            profiles::profiles_delete,
-            profiles::profiles_reorder,
-            profiles::profiles_launch,
-            profiles::profiles_launch_default,
-            profiles::profiles_launch_direct,
-            profiles::profiles_catalog,
-            profiles::profiles_fetch_models,
-            profiles::profiles_google_oauth_status,
-            profiles::profiles_google_oauth_login,
-            profiles::launcher_list_workspaces,
-            profiles::launcher_get_preferences,
-            profiles::launcher_agent_executable_resolution,
-            profiles::launcher_agent_executable_latest,
-            profiles::launcher_update_agent,
-            profiles::launcher_set_default,
-            profiles::launcher_set_agent_profile,
-            profiles::launcher_set_agent_executable_path,
-            profiles::launcher_set_selected_agent,
-            profiles::launcher_set_workspace,
-            profiles::launcher_remove_workspace,
-            profiles::launcher_reorder_workspaces,
-            profiles::launcher_set_profile_connection,
         ])
-        .setup({
-            let daemon = Arc::clone(&daemon);
-            move |app| {
-                // Desktop-only builds use the Tauri webview. The local daemon
-                // keeps this optional dist path only for dev-time static assets.
-                let dist_path: PathBuf = {
-                    #[cfg(debug_assertions)]
-                    {
-                        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../desktop-ui/dist")
-                    }
-                    #[cfg(not(debug_assertions))]
-                    {
-                        app.path()
-                            .resource_dir()
-                            .map_err(|e| format!("failed to resolve resource_dir: {e}"))?
-                            .join("_up_")
-                            .join("desktop-ui")
-                            .join("dist")
-                    }
-                };
-                app.manage(DaemonController::new(Arc::clone(&daemon), dist_path));
-
+        .setup(move |app| {
                 tray::setup(app)?;
 
-                // Show the window immediately — the splash screen in index.html
-                // is visible while React loads and the daemon starts.
+                // Show the window immediately; this build is a local setup UI.
                 if let Some(w) = app.get_webview_window("main") {
-                    if onboarding_needed {
-                        let _ = w.eval("window.location.replace('/onboarding')");
-                    }
                     let _ = w.show();
                     let _ = w.set_focus();
                 }
 
-                // Start the daemon — immediately if no onboarding needed,
-                // otherwise wait for the onboarding gate signal.
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    if onboarding_needed {
-                        tracing::info!("[VibeWbz] Waiting for onboarding to complete…");
-                        gate.notified().await;
-                        tracing::info!("[VibeWbz] Onboarding complete, starting daemon…");
-
-                        // Mark onboarding as done for tray
-                        if let Some(state) = app_handle.try_state::<OnboardingActive>() {
-                            state.0.store(false, std::sync::atomic::Ordering::Relaxed);
-                        }
-                    }
-
-                    if let Err(e) = start_daemon(&app_handle).await {
-                        tracing::info!("[VibeWbz] Daemon error: {}", e);
-                    }
-                });
-
                 Ok(())
-            }
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

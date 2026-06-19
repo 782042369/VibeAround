@@ -1,84 +1,32 @@
-//! Onboarding: first-run setup wizard.
-//! Checks whether settings.json has `"onboarded": true`; exposes Tauri IPC
-//! commands so the desktop-ui frontend can read/write settings and signal completion.
+//! Onboarding: local environment setup wizard.
+//! The desktop UI owns completion state in localStorage; these commands only
+//! query install state and run setup tasks.
 
 mod agent_integrations;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::process::{Output, Stdio};
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
-use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use serde_json::{json, Value};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::io::AsyncReadExt;
-use tokio::sync::Notify;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 
-use crate::{agent_detection, restart_daemon, OnboardingActive};
-use common::config;
+use crate::{agent_detection, OnboardingActive};
 
 use crate::startkit::{StartkitChoices, StartkitItemReport, StartkitItemStatus};
 
 const AGENT_UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(30);
-
-// ---------------------------------------------------------------------------
-// Shared state types
-// ---------------------------------------------------------------------------
-
-pub struct OnboardingGate {
-    pub notify: Arc<Notify>,
-}
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUpdateCheckRequest {
     pub agent_ids: Vec<String>,
     pub choices: StartkitChoices,
-}
-
-// ---------------------------------------------------------------------------
-// Settings helpers
-// ---------------------------------------------------------------------------
-
-fn settings_path() -> PathBuf {
-    config::data_dir().join("settings.json")
-}
-
-fn read_settings_value() -> Value {
-    let path = settings_path();
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_else(|| serde_json::json!({}))
-}
-
-fn write_settings_value(val: &Value) -> Result<(), String> {
-    // settings.json holds bot tokens, webhook secrets, and tunnel credentials
-    // in plain text (by design — the user edits this file directly). Ensure
-    // other local users cannot read it. No-op on Windows.
-    config::write_settings_json(val)
-}
-
-// ---------------------------------------------------------------------------
-// Onboarding gate
-// ---------------------------------------------------------------------------
-
-/// Read current settings (exposed for startup integration sync).
-#[allow(dead_code)]
-pub fn get_settings_value() -> serde_json::Value {
-    read_settings_value()
-}
-
-pub fn needs_onboarding() -> bool {
-    let val = read_settings_value();
-    !val.get("onboarded")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -102,14 +50,7 @@ pub struct AgentSummary {
 
 #[tauri::command]
 pub fn get_settings() -> Result<Value, String> {
-    Ok(read_settings_value())
-}
-
-#[tauri::command]
-pub fn save_settings<R: Runtime>(app: AppHandle<R>, settings: Value) -> Result<(), String> {
-    write_settings_value(&settings)?;
-    let _ = app.emit(crate::tray::LAUNCH_CONFIG_CHANGED_EVENT, ());
-    Ok(())
+    Ok(json!({}))
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +163,7 @@ async fn agent_install_report(agent: common::resources::AgentDef) -> StartkitIte
     {
         Some(candidate)
     } else {
-        agent_detection::scan_agent_and_persist(&agent_id)
+        agent_detection::scan_agent_by_id(&agent_id)
             .await
             .ok()
             .and_then(|detection| detection.system_selected_candidate())
@@ -279,7 +220,7 @@ async fn agent_update_report(
     {
         candidate
     } else {
-        agent_detection::scan_agent_and_persist(&agent_id)
+        agent_detection::scan_agent_by_id(&agent_id)
             .await
             .ok()
             .and_then(|detection| {
@@ -558,26 +499,11 @@ fn extract_semver(value: &str) -> Option<String> {
 // Tauri commands — onboarding flow
 // ---------------------------------------------------------------------------
 
-/// Marks onboarding complete and signals the daemon gate.
+/// Marks local environment setup complete without starting launch services.
 #[tauri::command]
 pub async fn finish_onboarding<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    let mut settings = read_settings_value();
-    if let Some(obj) = settings.as_object_mut() {
-        obj.insert("onboarded".into(), serde_json::json!(true));
-    }
-    write_settings_value(&settings)?;
-
-    let _ = app.emit("onboarding-complete", ());
-
     if let Some(active) = app.try_state::<OnboardingActive>() {
-        let was_onboarding = active.0.swap(false, Ordering::Relaxed);
-        if was_onboarding {
-            if let Some(gate) = app.try_state::<OnboardingGate>() {
-                gate.notify.notify_one();
-            }
-        } else {
-            restart_daemon(&app).await?;
-        }
+        active.0.store(false, Ordering::Relaxed);
     }
 
     Ok(())

@@ -398,6 +398,12 @@ pub async fn scan_agent_and_persist(agent_id: &str) -> anyhow::Result<AgentDetec
     Ok(detection)
 }
 
+pub async fn scan_agent_by_id(agent_id: &str) -> anyhow::Result<AgentDetection> {
+    let catalog = source_catalog()?;
+    let spec = agent_command_spec(&catalog, agent_id)?;
+    Ok(scan_agent(agent_id, &spec).await)
+}
+
 pub async fn scan_agents(catalog: &AgentSourceCatalog) -> anyhow::Result<AgentDetectionFile> {
     let mut tasks = JoinSet::new();
     for agent in crate::resources::AGENTS.iter() {

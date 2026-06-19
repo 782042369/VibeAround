@@ -331,13 +331,20 @@ pub struct StartkitPaths {
 
 impl StartkitPaths {
     pub fn new(root: PathBuf) -> Self {
-        let home = common::config::data_dir();
+        let home = std::env::temp_dir().join("vibewbz-startkit");
         Self {
             root,
             cache_dir: home.join("cache").join("startkit"),
             home,
         }
     }
+}
+
+fn startkit_managed_dependencies_dir() -> PathBuf {
+    std::env::temp_dir()
+        .join("vibewbz-startkit")
+        .join("managed")
+        .join("plugins")
 }
 
 pub fn load_manifest() -> anyhow::Result<Manifest> {
@@ -373,7 +380,6 @@ pub async fn start_startkit_install<R: Runtime>(
     choices: StartkitChoices,
 ) -> Result<(), String> {
     state.cancelled.store(false, Ordering::Relaxed);
-    common::config::write_settings_json(&settings).map_err(|e| e.to_string())?;
 
     let cancelled = Arc::clone(&state.cancelled);
     tauri::async_runtime::spawn(async move {
@@ -716,7 +722,7 @@ async fn execute_agent_cli_item(
     };
 
     let result = if choices.toolchain_mode == "managed" {
-        let install_dir = common::process::env::acp_agents_dir();
+        let install_dir = startkit_managed_dependencies_dir();
         common::agent::auto_install_npm_package_in_dir_with_progress_and_cancel(
             &package,
             &install_dir,
@@ -958,7 +964,7 @@ fn managed_item_dependency_dir(item: &StartkitItem) -> anyhow::Result<PathBuf> {
         .plugin_dependency
         .as_deref()
         .ok_or_else(|| anyhow!("managed item '{}' has no dependency id", item.id))?;
-    Ok(common::plugins::user_plugin_dependency_dir(dependency_id))
+    Ok(startkit_managed_dependencies_dir().join(dependency_id))
 }
 
 fn agent_cli_npm_install_package(agent_id: &str) -> Option<String> {
@@ -978,7 +984,7 @@ async fn scan_agent_cli_item(
     {
         Some(candidate)
     } else {
-        agent_detection::scan_agent_and_persist(agent_id)
+        agent_detection::scan_agent_by_id(agent_id)
             .await
             .ok()
             .and_then(|detection| {
@@ -1329,7 +1335,7 @@ fn apply_startkit_env(
         command.env("STARTKIT_NPM_PACKAGE", value);
     }
     if let Some(value) = &item.plugin_dependency {
-        let plugin_dir = common::plugins::user_plugin_dependency_dir(value);
+        let plugin_dir = startkit_managed_dependencies_dir().join(value);
         let plugin_bin_dir = plugin_dir.join("bin");
         std::fs::create_dir_all(&plugin_bin_dir).ok();
         command.env("STARTKIT_PLUGIN_DIR", plugin_dir);
