@@ -194,13 +194,36 @@ export const zhCNOnboarding: Record<string, string> = {
   "Checking...": "检测中...",
   "Install selected": "开始安装",
   "Install anyway": "仍然安装",
-  "Launching...": "启动中...",
-  "Launch VibeWbz": "启动 VibeWbz",
-  "Add your gateway key.": "填写你的中转站 key。",
-  "VibeWbz uses http://ai.939593.xyz by default. Enter the gateway key once, then launch the target tool.":
-    "默认使用 http://ai.939593.xyz。这里只需要填一次 key，之后点一下就能启动对应工具。",
-  "默认使用 http://ai.939593.xyz。这里只需要填一次 key，之后点一下就能启动对应工具。":
-    "默认使用 http://ai.939593.xyz。这里只需要填一次 key，之后点一下就能启动对应工具。",
+  "Saving...": "保存中...",
+  "Opening...": "正在打开...",
+  "AI model guide": "打开 AI 模型配置",
+  "Open AI model setup": "打开 AI 模型配置",
+  "Base environment ready": "基础环境已就绪",
+  "Next, configure your AI model and create a gateway token.":
+    "下一步配置 AI 模型，并在中转站创建令牌。",
+  "VibeWbz now only prepares the local coding environment. Follow the AI model guide, then create a gateway token.":
+    "VibeWbz 现在只负责准备本机 Claude / Codex 环境。按 AI 模型引导配置后，再到中转站创建令牌。",
+  "Configure environment": "配置环境",
+  "Re-run the basic environment check when you change computers or tools.":
+    "换电脑或工具变更后，可重新检测并安装缺失环境。",
+  "Check environment": "检查环境",
+  "Configure AI model": "配置 AI 模型",
+  "Open the guide and follow it to configure the AI model for Claude Code or Codex.":
+    "打开引导，并按说明为 Claude Code 或 Codex 配置 AI 模型。",
+  "Configuration guide": "打开配置文档",
+  "Create gateway token": "创建中转令牌",
+  "Go to the gateway, create a token, then paste that token into CCS.":
+    "进入中转站创建令牌，然后把令牌填到 CCS。",
+  "Create token": "创建令牌",
+  "Join the group for $5 trial credit": "入群赠送 5 美元试用",
+  "Scan the QR code to join the community group and claim the trial credit.":
+    "扫码加入交流群，领取试用额度。",
+  "Community group QR code": "交流群二维码",
+  "Only environment installation is handled here; Claude and Codex configs stay untouched.":
+    "这里仅处理环境安装，不改 Claude 和 Codex 的配置。",
+  "Prepare Claude Code, Codex CLI, Claude Desktop, and Codex Desktop without changing their configs.":
+    "准备 Claude Code、Codex CLI、Claude Desktop 和 Codex Desktop，不改它们的配置。",
+  "一键安装 Claude / Codex 环境": "一键安装 Claude / Codex 环境",
   Continue: "继续",
   "Loading...": "加载中...",
 };
