@@ -48,7 +48,7 @@ export function Splash({ visible }: { visible: boolean }) {
           textTransform: "uppercase" as const,
         }}
       >
-        {t("一键配置和启动 Claude / Codex")}
+        {t("一键安装 Claude / Codex 环境")}
       </div>
       <div
         style={{

@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ArrowRight,
+  CheckCircle2,
   Download,
   Loader2,
   RefreshCw,
-  Rocket,
 } from "lucide-react";
 import { useI18n } from "@va/i18n";
 
 import { LanguageMenu } from "@/components/LanguageMenu";
+import { openExternalUrl } from "@/lib/api";
+import { AI_MODEL_GUIDE_URL } from "@/lib/guides";
 import { cn } from "@/lib/utils";
 
 import {
@@ -90,7 +92,7 @@ function desktopAgentCheckingReports(
   }));
 }
 
-export default function Onboarding() {
+export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   const { t } = useI18n();
   const isMacTitlebar =
     typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
@@ -387,13 +389,15 @@ export default function Onboarding() {
     setFinishing(true);
     setFinishError(null);
     try {
-      await invoke("save_settings", { settings: finalSettings });
       await startkit.finish();
+      onComplete();
+      await openExternalUrl(AI_MODEL_GUIDE_URL);
+      setFinishing(false);
     } catch (error) {
       setFinishError(String(error));
       setFinishing(false);
     }
-  }, [finalSettings, startkit.finish]);
+  }, [onComplete, startkit.finish]);
 
   const cachedInstallReports = useMemo(() => {
     const selectedAgents = new Set(choices.agents);
@@ -467,16 +471,16 @@ export default function Onboarding() {
   const hasRunnableInstallWork = installReports.some((report) =>
     report.actions.includes("install"),
   );
-  const hasBlockingReport = installReports.some((report) =>
-    ["blocked", "error"].includes(report.status),
+  const hasHardBlockingReport = installReports.some((report) =>
+    ["blocked", "error"].includes(report.status) && !report.manualUrl,
   );
   const installCompletedSuccessfully =
     startkit.complete &&
     (startkit.finalStatus === "complete" || startkit.finalStatus === "needs_input");
   const canContinueFromInstall =
     !hasInstallChoices ||
-    (installCompletedSuccessfully && !hasBlockingReport) ||
-    (hasScanned && !installReportsRunning && !hasRunnableInstallWork && !hasBlockingReport);
+    (installCompletedSuccessfully && !hasHardBlockingReport) ||
+    (hasScanned && !installReportsRunning && !hasRunnableInstallWork && !hasHardBlockingReport);
   const activeIndex = WIZARD_STEPS.findIndex((step) => step.id === activeStep);
 
   const goNext = useCallback(() => {
@@ -521,17 +525,17 @@ export default function Onboarding() {
       }
       if (canContinueFromInstall) {
         return {
-          label: finishing ? t("Launching...") : t("Launch VibeWbz"),
+          label: finishing ? t("Opening...") : t("Open AI model setup"),
           icon: finishing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Rocket className="h-4 w-4" />
+            <CheckCircle2 className="h-4 w-4" />
           ),
           disabled: finishing,
           run: () => void finishOnboarding(),
         };
       }
-      if (hasBlockingReport) {
+      if (hasHardBlockingReport) {
         if (hasRunnableInstallWork) {
           return {
             label: t("Install anyway"),
@@ -581,7 +585,7 @@ export default function Onboarding() {
     goNext,
     hasRunnableInstallWork,
     hasScanned,
-    hasBlockingReport,
+    hasHardBlockingReport,
     hasInstallChoices,
     installCompletedSuccessfully,
     installReports,
@@ -598,7 +602,7 @@ export default function Onboarding() {
       startkit.running ||
       installReportsRunning ||
       canContinueFromInstall ||
-      !hasBlockingReport ||
+      !hasHardBlockingReport ||
       !hasRunnableInstallWork
     ) {
       return null;
@@ -612,7 +616,7 @@ export default function Onboarding() {
   }, [
     activeStep,
     canContinueFromInstall,
-    hasBlockingReport,
+    hasHardBlockingReport,
     hasRunnableInstallWork,
     hasScanned,
     installReportsRunning,

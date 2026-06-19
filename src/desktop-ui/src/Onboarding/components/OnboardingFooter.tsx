@@ -54,7 +54,7 @@ export function OnboardingFooter({
           {t("Keep the defaults if you are not sure; everything can be changed later.")}
         </div>
         <div>
-          {t("仅供社区学习交流使用，所有安装源均来自官方来源。")}
+          {t("Only environment installation is handled here; Claude and Codex configs stay untouched.")}
         </div>
       </div>
       <div className="ml-auto flex items-center gap-2">

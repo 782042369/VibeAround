@@ -283,7 +283,7 @@ export function useStartkitFlow(): UseStartkitFlowResult {
     for (const unlisten of unlistenRefs.current) unlisten();
     unlistenRefs.current = [];
     await invoke("finish_onboarding");
-    window.location.replace("/");
+    window.localStorage.setItem("vibewbz.environmentConfigured", "1");
   }, []);
 
   return {

@@ -107,7 +107,7 @@ function questionCopy(step: WizardStepId): {
     case "agents":
       return {
         title: "Start with your coding agents.",
-        body: "Prepare Claude Code, Codex CLI, Claude Desktop, and Codex Desktop for this computer.",
+        body: "Prepare Claude Code, Codex CLI, Claude Desktop, and Codex Desktop without changing their configs.",
         icon: <Bot className="h-5 w-5" />,
       };
     case "install":
