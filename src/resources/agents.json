@@ -72,8 +72,8 @@
     "platforms": ["macos", "windows"],
     "direct_only": true,
     "download_urls": {
-      "windows_x64": "https://codexapp.agentsmirror.com/latest/win",
-      "windows_arm64": "https://codexapp.agentsmirror.com/latest/win",
+      "windows_x64": "https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe",
+      "windows_arm64": "https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe",
       "macos_x64": "https://codexapp.agentsmirror.com/latest/mac-intel",
       "macos_aarch64": "https://codexapp.agentsmirror.com/latest/mac-arm64"
     },

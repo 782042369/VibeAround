@@ -54,7 +54,8 @@ const DESKTOP_DOWNLOAD_URLS = {
   "codex-desktop": {
     macos: "https://codexapp.agentsmirror.com/latest/mac-arm64",
     macosIntel: "https://codexapp.agentsmirror.com/latest/mac-intel",
-    windowsX64: "https://codexapp.agentsmirror.com/latest/win",
+    windowsX64:
+      "https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe",
   },
 } as const;
 
