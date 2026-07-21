@@ -42,7 +42,7 @@ VibeWbz 现在只保留 macOS / Windows 桌面端基础环境检测与安装能�
 
 VibeWbz 不会写入 Claude / Codex 配置，也不会启动 CLI 或桌面应用。
 
-Codex Desktop 会按当前 macOS / Windows 架构打开 `https://codexapp.agentsmirror.com/latest/` 下的安装包下载地址。
+macOS 上会按当前架构打开 `https://codexapp.agentsmirror.com/latest/` 下的 Codex Desktop 安装包；Windows 上会打开 Codex App Manager 安装程序，因为镜像的 Codex MSIX 包无法通过 Windows“应用安装程序”直接安装。
 
 ## 开发
 

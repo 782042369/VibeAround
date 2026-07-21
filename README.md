@@ -42,7 +42,7 @@ This build intentionally keeps only environment setup and follow-up guidance.
 
 VibeWbz does not write Claude/Codex config and does not launch the CLI or desktop apps.
 
-Codex Desktop downloads are opened from `https://codexapp.agentsmirror.com/latest/` for the current macOS or Windows architecture.
+On macOS, Codex Desktop downloads are opened from `https://codexapp.agentsmirror.com/latest/` for the current architecture. On Windows, VibeWbz opens the Codex App Manager setup executable because the mirrored Codex MSIX package cannot be installed directly with Windows App Installer.
 
 ## Development
 
