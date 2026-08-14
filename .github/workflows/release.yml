@@ -20,12 +20,9 @@ jobs:
           - name: Windows x64
             runner: windows-latest
             args: --bundles nsis
-          - name: macOS arm64
+          - name: macOS universal
             runner: macos-15
-            args: --bundles dmg
-          - name: macOS x64
-            runner: macos-15-intel
-            args: --bundles dmg
+            args: --target universal-apple-darwin --bundles dmg
 
     steps:
       - name: Checkout
@@ -40,6 +37,10 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install macOS universal Rust targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
@@ -78,7 +79,7 @@ jobs:
 
             Assets built by GitHub Actions:
             - Windows x64 installer
-            - macOS DMG for Apple Silicon and Intel
+            - One universal macOS DMG for Apple Silicon and Intel
           releaseDraft: true
           prerelease: false
           args: ${{ steps.release.outputs.args }}
@@ -107,9 +108,7 @@ jobs:
           }
 
           if [ "${RUNNER_OS}" = "Windows" ]; then
-            rename_asset "VibeWbz_${VERSION}_x64-setup.exe" "VibeWbz_${VERSION}_windows-x64-installer-nsis.exe"
-          elif [ "${RUNNER_OS}" = "macOS" ] && [ "${RUNNER_ARCH}" = "ARM64" ]; then
-            rename_asset "VibeWbz_${VERSION}_aarch64.dmg" "VibeWbz_${VERSION}_macos-arm64.dmg"
-          elif [ "${RUNNER_OS}" = "macOS" ] && [ "${RUNNER_ARCH}" = "X64" ]; then
-            rename_asset "VibeWbz_${VERSION}_x64.dmg" "VibeWbz_${VERSION}_macos-x64.dmg"
+            rename_asset "VibeWbz_${VERSION}_x64-setup.exe" "VibeWbz_windows-x64-installer-nsis.exe"
+          elif [ "${RUNNER_OS}" = "macOS" ]; then
+            rename_asset "VibeWbz_${VERSION}_universal.dmg" "VibeWbz_macos-universal.dmg"
           fi
