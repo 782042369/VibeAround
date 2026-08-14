@@ -92,7 +92,13 @@ function desktopAgentCheckingReports(
   }));
 }
 
-export default function Onboarding({ onComplete }: { onComplete: () => void }) {
+export default function Onboarding({
+  onComplete,
+  onExit,
+}: {
+  onComplete: () => void;
+  onExit: () => void;
+}) {
   const { t } = useI18n();
   const isMacTitlebar =
     typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
@@ -488,8 +494,12 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   }, [activeStep]);
 
   const goBack = useCallback(() => {
-    if (activeStep === "install") setActiveStep("agents");
-  }, [activeStep]);
+    if (activeStep === "install") {
+      setActiveStep("agents");
+      return;
+    }
+    onExit();
+  }, [activeStep, onExit]);
 
   const rerunInstallScan = useCallback(() => {
     checkedInstallScanSignaturesRef.current.clear();
@@ -695,7 +705,6 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
 
       <OnboardingFooter
         activeStep={activeStep}
-        activeIndex={activeIndex}
         running={startkit.running}
         finishing={finishing}
         primaryAction={primaryAction}
