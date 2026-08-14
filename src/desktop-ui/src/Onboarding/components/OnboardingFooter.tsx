@@ -17,7 +17,6 @@ export type FooterAction = PrimaryAction;
 
 export function OnboardingFooter({
   activeStep,
-  activeIndex,
   running,
   finishing,
   primaryAction,
@@ -26,7 +25,6 @@ export function OnboardingFooter({
   onCancel,
 }: {
   activeStep: WizardStepId;
-  activeIndex: number;
   running: boolean;
   finishing: boolean;
   primaryAction: PrimaryAction;
@@ -43,7 +41,7 @@ export function OnboardingFooter({
           type="button"
           variant="outline"
           onClick={onBack}
-          disabled={activeIndex === 0 || running || finishing}
+          disabled={running || finishing}
         >
           <ArrowLeft className="h-4 w-4" />
           {t("Back")}
