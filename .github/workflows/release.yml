@@ -96,9 +96,14 @@ jobs:
             local from="$1"
             local to="$2"
             local api_url
+            local existing_api_url
             api_url="$(gh release view "${TAG}" --json assets --jq ".assets[] | select(.name == \"${from}\") | .apiUrl" || true)"
             if [ -z "${api_url}" ]; then
               return 0
+            fi
+            existing_api_url="$(gh release view "${TAG}" --json assets --jq ".assets[] | select(.name == \"${to}\") | .apiUrl" || true)"
+            if [ -n "${existing_api_url}" ] && [ "${existing_api_url}" != "${api_url}" ]; then
+              gh api --method DELETE "${existing_api_url}"
             fi
             gh api \
               --method PATCH \
