@@ -224,6 +224,62 @@ export const zhCNOnboarding: Record<string, string> = {
   "Prepare Claude Code, Codex CLI, Claude Desktop, and Codex Desktop without changing their configs.":
     "准备 Claude Code、Codex CLI、Claude Desktop 和 Codex Desktop，不改它们的配置。",
   "一键安装 Claude / Codex 环境": "一键安装 Claude / Codex 环境",
+  "Advanced setup": "高级设置",
+  "Get Codex ready for this computer": "为你的电脑准备好 Codex",
+  "One-click install": "一键安装",
+  "Start AI coding in three steps": "三步开始 AI 编程",
+  "Automatically match the official version for your system without changing existing Codex settings.":
+    "自动匹配当前系统的官方版本，不修改已有 Codex 配置。",
+  "天才第一步-歪歪纸尿裤": "天才第一步-歪歪纸尿裤",
+  "We don't produce Tokens. We just move Tokens.":
+    "我们不生产 Token，我们只是 Token 的搬运工",
+  "Native models · Transparent usage · No dilution":
+    "原生模型 · 用量透明 · 保证不掺水",
+  "First use bonus": "首次使用赠送",
+  "relay credit": "中转站额度",
+  "Claim now": "立即领取",
+  "Use it on the relay": "额度可直接用于中转站模型调用",
+  "Join for free": "进群免费领取",
+  "$5": "5 美元",
+  credit: "福利",
+  "Scan to join the YY community · Setup support":
+    "扫码加入歪歪社区 · 安装配置答疑",
+  "From installation to first use": "从安装到开始使用",
+  "Complete in order in just a few minutes": "按顺序完成，只需几分钟",
+  "Install Codex Desktop": "安装 Codex Desktop",
+  "Current step": "当前步骤",
+  "One-click download": "一键完成下载",
+  "Automatically match and download the official Codex Desktop build for this computer.":
+    "自动匹配并下载适合这台电脑的 Codex Desktop 官方版本。",
+  "Correct version selected automatically": "自动选择正确版本",
+  "Official source": "官方来源",
+  "Existing settings stay untouched": "不修改已有配置",
+  "Download and install Codex Desktop": "下载并安装 Codex Desktop",
+  "Download the installer, then follow the prompts": "下载完成后按提示安装",
+  "View configuration guide": "查看配置指南",
+  "After installation": "安装后",
+  "Understand setup first": "先了解接入步骤",
+  "See where to create and enter your Token before configuring Codex Desktop.":
+    "先看 Codex 配置指南，了解 Token 的创建和填写位置。",
+  "Clear step-by-step instructions": "步骤清晰，跟着操作即可",
+  "Know what to prepare": "确认需要准备的内容",
+  "Community support available": "遇到问题可进群咨询",
+  "Open Codex configuration guide": "打开 Codex 配置指南",
+  "Continue after reading the guide": "看完指南后进入下一步",
+  "Get a Token and use it": "获取 Token 并使用",
+  "Final step": "最后一步",
+  "Go to YY Relay": "前往歪歪中转站",
+  "Create a Token, claim your first-use $5 credit, enter it in Codex Desktop as shown in the guide, and start coding.":
+    "创建 Token，首次使用可领取 $5 额度，再按指南填入 Codex Desktop 开始 AI 编程。",
+  "Native model capabilities": "原生模型能力",
+  "Transparent usage records": "用量明细透明可查",
+  "New-user trial credit": "新用户可领取体验福利",
+  "Create a Token and finish setup using the guide":
+    "创建 Token 并按指南完成接入",
+  "VibeWbz provides download assistance; installers come from the official distribution channel.":
+    "VibeWbz 提供下载辅助，安装包来自官方分发渠道。",
+  "天才第一步-歪歪纸尿裤 · 原生模型，用量透明":
+    "天才第一步-歪歪纸尿裤 · 原生模型，用量透明",
   Continue: "继续",
   "Loading...": "加载中...",
 };

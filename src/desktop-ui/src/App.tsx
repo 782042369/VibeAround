@@ -10,11 +10,6 @@ import { SetupGuide } from "./SetupGuide";
 function App() {
   const [route, setRoute] = useState(() => window.location.pathname);
   const [ready, setReady] = useState(false);
-  const [environmentConfigured, setEnvironmentConfigured] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.localStorage.getItem("vibewbz.environmentConfigured") === "1",
-  );
 
   useEffect(() => {
     const onPop = () => setRoute(window.location.pathname);
@@ -24,14 +19,8 @@ function App() {
 
   useEffect(() => setReady(true), []);
 
-  const openOnboarding = useCallback(() => {
-    window.history.pushState(null, "", "/onboarding");
-    setRoute("/onboarding");
-  }, []);
-
-  const completeEnvironmentSetup = useCallback(() => {
-    setEnvironmentConfigured(true);
-    window.history.pushState(null, "", "/");
+  const returnHome = useCallback(() => {
+    window.history.replaceState(null, "", "/");
     setRoute("/");
   }, []);
 
@@ -39,11 +28,11 @@ function App() {
     return <Splash visible />;
   }
 
-  if (route === "/onboarding" || !environmentConfigured) {
-    return <Onboarding onComplete={completeEnvironmentSetup} />;
+  if (route === "/onboarding") {
+    return <Onboarding onComplete={returnHome} onExit={returnHome} />;
   }
 
-  return <SetupGuide onConfigureEnvironment={openOnboarding} />;
+  return <SetupGuide />;
 }
 
 export default App;
